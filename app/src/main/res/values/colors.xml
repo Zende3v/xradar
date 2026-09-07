@@ -1,0 +1,6 @@
+<resources>
+    <!-- Pre-Compose window background to avoid a light flash on cold start (dark-first). -->
+    <color name="xr_window_background">#06070A</color>
+    <!-- Adaptive launcher icon background. -->
+    <color name="ic_launcher_background">#0B0D12</color>
+</resources>

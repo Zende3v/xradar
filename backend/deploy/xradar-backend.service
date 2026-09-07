@@ -1,0 +1,33 @@
+[Unit]
+Description=x_radar backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/xradar-backend
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=5
+User=xradar
+Group=xradar
+Environment=NODE_ENV=production
+# Port local (change-le s'il est déjà pris — ex. 8080 souvent occupé).
+Environment=PORT=8090
+Environment=HOST=127.0.0.1
+# Persisted data (reports + accounts). The dir must be writable — see ReadWritePaths.
+Environment=REPORTS_FILE=/opt/xradar-backend/data/reports.json
+Environment=ACCOUNTS_FILE=/opt/xradar-backend/data/accounts.json
+# Admin API token — CHANGE THIS to a long random string; the CLI must use the same.
+Environment=ADMIN_TOKEN=change-me-to-a-long-random-secret
+
+# Lightweight hardening. The app only writes under data/, which we open up below.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Allow writing the JSON stores (create the dir first: mkdir -p /opt/xradar-backend/data && chown xradar:xradar it).
+ReadWritePaths=/opt/xradar-backend/data
+
+[Install]
+WantedBy=multi-user.target

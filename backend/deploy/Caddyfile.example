@@ -1,0 +1,7 @@
+# Option "reverse proxy classique" : Caddy fait le HTTPS automatiquement
+# (certificat Let's Encrypt géré tout seul). Remplace le domaine.
+# Fichier cible sur le VPS : /etc/caddy/Caddyfile
+
+api.VOTRE-DOMAINE.fr {
+    reverse_proxy 127.0.0.1:8090
+}
