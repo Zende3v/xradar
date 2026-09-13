@@ -128,8 +128,7 @@ private fun Player(
                 ),
                 contentDescription = if (isPlaying) "Pause" else "Lecture",
                 onClick = { onAction(MusicAction.PlayPause) },
-                tint = colors.onAccent,
-                background = colors.accent,
+                tint = colors.textPrimary,
                 size = CONTROL_SIZE,
             )
             XRadarIconButton(
