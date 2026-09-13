@@ -10,11 +10,23 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Music apps the mini-player can open (package visibility, Android 11+). -->
+    <!-- Package visibility (Android 11+): music apps the mini-player can open, and any other
+         player's name (players declare a media button receiver or a media browser service,
+         local files players open audio files). -->
     <queries>
         <package android:name="com.spotify.music" />
         <package android:name="com.apple.android.music" />
         <package android:name="deezer.android.app" />
+        <intent>
+            <action android:name="android.intent.action.MEDIA_BUTTON" />
+        </intent>
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="audio/*" />
+        </intent>
     </queries>
 
     <application

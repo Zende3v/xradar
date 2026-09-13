@@ -39,8 +39,8 @@ import com.xradar.app.media.MediaPlaybackState
 import com.xradar.app.media.MusicApp
 
 /**
- * Compact mini-player under the HUD's search bar: what plays in Spotify, Apple Music or
- * Deezer with previous / play-pause / next. With nothing playing the player is still there,
+ * Compact mini-player under the HUD's search bar: what plays in any player (Spotify, Apple
+ * Music, Deezer, local files...) with previous / play-pause / next. With nothing playing the player is still there,
  * and play starts the last music player. Every control is at least 48 dp, for a thumb
  * while driving.
  */
@@ -59,8 +59,8 @@ fun MusicBanner(
     ) {
         when (state) {
             is MediaPlaybackState.Active -> Player(
-                title = state.title ?: state.app.label,
-                subtitle = state.artist ?: state.app.label,
+                title = state.title ?: state.appLabel ?: "Lecture en cours",
+                subtitle = state.artist ?: state.appLabel.orEmpty(),
                 art = state.art,
                 isPlaying = state.isPlaying,
                 onAction = onAction,
@@ -230,7 +230,7 @@ private fun MusicBannerPreview() {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             MusicBanner(
-                state = MediaPlaybackState.Active(MusicApp.Spotify, "Titre très long d'un morceau", "Artiste", null, true),
+                state = MediaPlaybackState.Active("Spotify", "Titre très long d'un morceau", "Artiste", null, true),
                 onAction = {},
             )
             MusicBanner(state = MediaPlaybackState.Idle(listOf(MusicApp.Spotify, MusicApp.Deezer)), onAction = {})

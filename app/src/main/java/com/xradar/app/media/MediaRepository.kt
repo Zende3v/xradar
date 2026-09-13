@@ -3,6 +3,7 @@ package com.xradar.app.media
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.AudioManager
@@ -12,6 +13,7 @@ import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -38,8 +40,8 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 /**
- * Music already playing in Spotify, Apple Music or Deezer, through the Android media APIs
- * only (no SDK, no account). [state] watches the sessions only while someone collects it:
+ * Music already playing in any player (Spotify, Apple Music, Deezer, a local files player...),
+ * through the Android media APIs only (no SDK, no account). [state] watches the sessions only while someone collects it:
  * the listener and every controller callback are registered on the first collector and
  * removed when the last one leaves. App-scoped; init once from a Context.
  */
@@ -73,10 +75,14 @@ object MediaRepository {
         rechecks.tryEmit(Unit)
     }
 
-    /** Play or pause the session shown; with none, start the last player like a headset would. */
+    /**
+     * Play or pause the session shown. With none shown: pause when audio still plays (a player
+     * whose session cannot be read), else start the last player like a headset would.
+     */
     fun playPause() {
         if (controller == null) {
-            resumeLastPlayer()
+            val audio = appContext?.getSystemService(AudioManager::class.java)
+            if (audio?.isMusicActive == true) dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE) else resumeLastPlayer()
             return
         }
         control { c ->
@@ -115,7 +121,7 @@ object MediaRepository {
 
     /**
      * Nothing to control: send PLAY the way a Bluetooth headset does, so Android restarts
-     * the last media player in the background. If none of the three apps shows a session and
+     * the last media player in the background. If no player shows a session and
      * no audio plays after [RESUME_FALLBACK_MS], open the last one used (or the first
      * installed) so the driver can start it there.
      */
@@ -260,9 +266,9 @@ private class SessionWatcher(
         publishState(MediaPlaybackState.PermissionMissing)
     }
 
-    /** Follow exactly the sessions of the three apps, in the order the system gives them. */
+    /** Follow the sessions of every player but XRadar itself, in the order the system gives them. */
     private fun watch(controllers: List<MediaController>?) {
-        val wanted = controllers.orEmpty().filter { MusicApp.of(it.packageName) != null }
+        val wanted = controllers.orEmpty().filter { it.packageName != context.packageName }
         val tokens = wanted.mapTo(HashSet()) { it.sessionToken }
         watched.entries.filter { it.key !in tokens }.forEach { (token, entry) ->
             entry.first.unregisterCallback(entry.second)
@@ -298,13 +304,16 @@ private class SessionWatcher(
         val controllers = watched.values.map { it.first }
         val chosen = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
             ?: controllers.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: Long.MIN_VALUE }
-        val app = chosen?.let { MusicApp.of(it.packageName) }
         val metadata = chosen?.metadata
-        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
-        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)?.takeIf { it.isNotBlank() }
+        val description = metadata?.description
+        // Local players often fill only the display fields, and name the track after its file.
+        val title = (metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).nonBlank()
+            ?: description?.title?.toString().nonBlank())?.let(::withoutAudioExtension)
+        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).nonBlank()
+            ?: description?.subtitle?.toString().nonBlank()
         val playing = chosen?.playbackState?.state == PlaybackState.STATE_PLAYING
 
-        if (chosen == null || app == null || (title == null && !playing)) {
+        if (chosen == null || (title == null && !playing)) {
             artJob?.cancel()
             artKey = null
             art = null
@@ -318,7 +327,7 @@ private class SessionWatcher(
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
         val uri = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)?.takeIf { it.isNotBlank() }
         // Apps often send the track first and its art a moment later: that is a new key.
-        val key = listOf(app.packageName, title, artist, uri, bitmap != null).joinToString("|")
+        val key = listOf(chosen.packageName, title, artist, uri, bitmap != null).joinToString("|")
         if (key != artKey) {
             artKey = key
             art = null
@@ -337,9 +346,36 @@ private class SessionWatcher(
                 }
             }
         }
-        publishState(MediaPlaybackState.Active(app, title, artist, art, playing))
+        publishState(MediaPlaybackState.Active(labelOf(chosen.packageName), title, artist, art, playing))
+    }
+
+    /** Player names already looked up, null included (an app Android keeps hidden). */
+    private val labels = HashMap<String, String?>()
+
+    /** Our name for the three apps, else Android's name for the player when it is visible. */
+    private fun labelOf(packageName: String): String? {
+        if (packageName in labels) return labels[packageName]
+        val label = MusicApp.of(packageName)?.label ?: runCatching {
+            val pm = context.packageManager
+            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getApplicationInfo(packageName, 0)
+            }
+            pm.getApplicationLabel(info).toString()
+        }.getOrNull().nonBlank()
+        labels[packageName] = label
+        return label
     }
 }
+
+private fun String?.nonBlank(): String? = this?.takeIf { it.isNotBlank() }
+
+/** A track named after its file ("Artiste - Titre.mp3") is shown without the extension. */
+private fun withoutAudioExtension(title: String): String = AUDIO_EXTENSION.replace(title, "").ifBlank { title }
+
+private val AUDIO_EXTENSION = Regex("""\.(mp3|m4a|aac|flac|ogg|oga|opus|wav|wma|amr|mid|midi)$""", RegexOption.IGNORE_CASE)
 
 /** Longest side of the album art kept in memory, in pixels. */
 private const val ART_PX = 144
