@@ -57,6 +57,7 @@ import com.xradar.app.feature.drive.component.key
 import com.xradar.app.feature.drive.component.DriveDock
 import com.xradar.app.feature.drive.component.DriveMap
 import com.xradar.app.feature.drive.component.GuidanceBanner
+import com.xradar.app.feature.drive.component.MusicBanner
 
 /** Entry point wired to the Phase-1 simulation. Swap the source in Phase 2. */
 @Composable
@@ -85,6 +86,7 @@ fun DriveRoute(
         onDeleteReport = viewModel::deleteReport,
         dismissedAlerts = dismissedAlerts,
         onDismissAlert = viewModel::dismissAlert,
+        onMusic = viewModel::onMusic,
         modifier = modifier,
     )
 }
@@ -107,6 +109,8 @@ fun DriveScreen(
     /** Keys of the alerts the driver swiped away; kept off the HUD for now. */
     dismissedAlerts: Set<String> = emptySet(),
     onDismissAlert: (String) -> Unit = {},
+    /** The music button and the mini-player's controls. */
+    onMusic: (MusicAction) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = XRadarTheme.colors
@@ -138,38 +142,53 @@ fun DriveScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        Row(
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(horizontal = spacing.lg, vertical = spacing.md),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
         ) {
-            Crossfade(
-                targetState = topMode,
-                modifier = Modifier.weight(1f),
-                label = "hudTop",
-            ) { mode ->
-                when (mode) {
-                    TopMode.Guidance -> state.guidance?.let {
-                        GuidanceBanner(instruction = it, modifier = Modifier.fillMaxWidth())
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            ) {
+                Crossfade(
+                    targetState = topMode,
+                    modifier = Modifier.weight(1f),
+                    label = "hudTop",
+                ) { mode ->
+                    when (mode) {
+                        TopMode.Guidance -> state.guidance?.let {
+                            GuidanceBanner(instruction = it, modifier = Modifier.fillMaxWidth())
+                        }
+                        TopMode.Search -> HudSearchBar(
+                            onClick = { if (restricted) paywall = true else onOpenSearch() },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        TopMode.None -> Unit
                     }
-                    TopMode.Search -> HudSearchBar(
-                        onClick = { if (restricted) paywall = true else onOpenSearch() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    TopMode.None -> Unit
                 }
-            }
 
-            // While navigating, offer a one-tap stop.
-            AnimatedVisibility(visible = state.trip != null) {
+                // While navigating, offer a one-tap stop.
+                AnimatedVisibility(visible = state.trip != null) {
+                    XRadarIconButton(
+                        icon = XRadarIcons.Close,
+                        contentDescription = "Arrêter la navigation",
+                        onClick = onStopNavigation,
+                        tint = colors.textPrimary,
+                        background = colors.surface.copy(alpha = 0.62f),
+                        border = BorderStroke(1.dp, colors.border),
+                        size = 48.dp,
+                    )
+                }
+
+                // The menu lives at the top-right, beside the search bar.
                 XRadarIconButton(
-                    icon = XRadarIcons.Close,
-                    contentDescription = "Arrêter la navigation",
-                    onClick = onStopNavigation,
+                    icon = ImageVector.vectorResource(R.drawable.ic_menu),
+                    contentDescription = "Menu",
+                    onClick = onOpenSettings,
                     tint = colors.textPrimary,
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),
@@ -177,16 +196,19 @@ fun DriveScreen(
                 )
             }
 
-            // The menu lives at the top-right, beside the search bar.
-            XRadarIconButton(
-                icon = ImageVector.vectorResource(R.drawable.ic_menu),
-                contentDescription = "Menu",
-                onClick = onOpenSettings,
-                tint = colors.textPrimary,
-                background = colors.surface.copy(alpha = 0.62f),
-                border = BorderStroke(1.dp, colors.border),
-                size = 48.dp,
-            )
+            // The music banner opens under the search bar (or the guidance): in the flow, so
+            // it never covers either; the alerts stay at the bottom of the screen.
+            AnimatedVisibility(
+                visible = state.musicOpen,
+                enter = slideInVertically { -it / 2 } + fadeIn(),
+                exit = slideOutVertically { -it / 2 } + fadeOut(),
+            ) {
+                MusicBanner(
+                    state = state.media,
+                    onAction = onMusic,
+                    modifier = Modifier.padding(top = spacing.sm),
+                )
+            }
         }
 
         Column(
@@ -280,6 +302,16 @@ fun DriveScreen(
                         size = 48.dp,
                     )
                 }
+                // Music: opens the mini-player under the search bar; a second tap closes it.
+                XRadarIconButton(
+                    icon = ImageVector.vectorResource(R.drawable.ic_music),
+                    contentDescription = if (state.musicOpen) "Fermer la musique" else "Musique",
+                    onClick = { onMusic(MusicAction.ToggleBanner) },
+                    tint = if (state.musicOpen) colors.accent else colors.textPrimary,
+                    background = colors.surface.copy(alpha = 0.62f),
+                    border = BorderStroke(1.dp, colors.border),
+                    size = 48.dp,
+                )
                 // Primary crowdsourcing action: signal something on the road.
                 XRadarIconButton(
                     icon = ImageVector.vectorResource(R.drawable.ic_report),
