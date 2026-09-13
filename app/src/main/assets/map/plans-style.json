@@ -11,9 +11,14 @@
     },
     "terrain": {
       "type": "raster-dem",
-      "url": "https://tiles.stadiamaps.com/data/terrarium.json?api_key={{STADIA_API_KEY}}",
+      "tiles": [
+        "https://tiles.stadiamaps.com/data/terrarium/{z}/{x}/{y}.png?api_key={{STADIA_API_KEY}}"
+      ],
       "encoding": "terrarium",
-      "tileSize": 512
+      "tileSize": 512,
+      "minzoom": 0,
+      "maxzoom": 10,
+      "attribution": ""
     }
   },
   "glyphs": "https://tiles.stadiamaps.com/fonts/{fontstack}/{range}.pbf",
@@ -119,6 +124,7 @@
       "type": "fill",
       "source": "openmaptiles",
       "source-layer": "landcover",
+      "minzoom": 4,
       "filter": [
         "match",
         [
@@ -297,6 +303,7 @@
       "type": "fill",
       "source": "openmaptiles",
       "source-layer": "park",
+      "minzoom": 5,
       "paint": {
         "fill-color": "@park",
         "fill-opacity": [
@@ -414,7 +421,7 @@
       "id": "hillshade",
       "type": "hillshade",
       "source": "terrain",
-      "maxzoom": 15,
+      "maxzoom": 13,
       "paint": {
         "hillshade-exaggeration": [
           "interpolate",
@@ -428,9 +435,9 @@
           0.5,
           10,
           0.35,
+          12,
+          0.25,
           13,
-          0.2,
-          15,
           0
         ],
         "hillshade-shadow-color": "@hillshade_shadow",
@@ -575,7 +582,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "water",
-      "minzoom": 6,
+      "minzoom": 12,
       "layout": {
         "line-join": "round"
       },
@@ -590,10 +597,8 @@
           [
             "zoom"
           ],
-          6,
-          2,
-          10,
-          4.5,
+          12,
+          5,
           14,
           6,
           18,
@@ -608,10 +613,8 @@
           [
             "zoom"
           ],
-          6,
-          2,
-          10,
-          4.5,
+          12,
+          5,
           14,
           6,
           18,
@@ -625,9 +628,9 @@
           [
             "zoom"
           ],
-          6,
-          0.5,
-          10,
+          12,
+          0,
+          13,
           0.85
         ]
       }
@@ -1292,20 +1295,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -1389,20 +1384,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -1487,20 +1474,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -1582,7 +1561,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 8,
+      "minzoom": 11,
       "filter": [
         "all",
         [
@@ -1598,20 +1577,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -1685,7 +1656,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 5,
+      "minzoom": 10,
       "filter": [
         "all",
         [
@@ -1701,20 +1672,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -1790,7 +1753,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 4,
+      "minzoom": 9,
       "filter": [
         "all",
         [
@@ -1806,20 +1769,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -1912,20 +1867,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -1994,20 +1941,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -2078,20 +2017,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -2163,20 +2094,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -2245,7 +2168,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 8,
+      "minzoom": 9,
       "filter": [
         "all",
         [
@@ -2261,20 +2184,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -2336,8 +2251,8 @@
           [
             "zoom"
           ],
-          8,
-          0,
+          9,
+          0.35,
           10,
           1
         ]
@@ -2364,20 +2279,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -2469,20 +2376,12 @@
           false
         ],
         [
-          "!",
+          "!=",
           [
-            "match",
-            [
-              "get",
-              "brunnel"
-            ],
-            [
-              "bridge",
-              "tunnel"
-            ],
-            true,
-            false
-          ]
+            "get",
+            "brunnel"
+          ],
+          "tunnel"
         ],
         [
           "match",
@@ -2752,7 +2651,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 12,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -2842,7 +2741,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 12,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -2945,7 +2844,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 8,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -3040,7 +2939,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 5,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -3137,7 +3036,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 4,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -3385,7 +3284,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 12,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -3462,7 +3361,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 12,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -3552,7 +3451,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 8,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -3635,8 +3534,8 @@
           [
             "zoom"
           ],
-          8,
-          0,
+          9,
+          0.35,
           10,
           1
         ]
@@ -3647,7 +3546,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 5,
+      "minzoom": 13,
       "filter": [
         "all",
         [
@@ -3744,7 +3643,7 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "transportation",
-      "minzoom": 4,
+      "minzoom": 13,
       "filter": [
         "all",
         [
