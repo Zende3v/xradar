@@ -8,6 +8,7 @@ import com.xradar.app.core.model.LocationSample
 import com.xradar.app.core.model.Radar
 import com.xradar.app.core.model.RadarZone
 import com.xradar.app.core.model.RoadAlert
+import com.xradar.app.core.model.SpeedLimitSource
 import com.xradar.app.core.model.SpeedStatus
 import com.xradar.app.core.model.TripInfo
 import com.xradar.app.core.model.UserReport
@@ -46,6 +47,8 @@ data class DriveUiState(
     val media: MediaPlaybackState = MediaPlaybackState.PermissionMissing,
     /** The music banner is open. HUD state only, never persisted. */
     val musicOpen: Boolean = false,
+    /** Where [speedLimitKmh] comes from: the road's own limit or a radar's VMA. */
+    val speedLimitSource: SpeedLimitSource? = null,
 ) {
     val speedStatus: SpeedStatus?
         get() = SpeedStatus.of(speedKmh, speedLimitKmh)

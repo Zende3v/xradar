@@ -82,6 +82,8 @@ fun DriveDock(
     redLightSeconds: Int? = null,
     /** True as soon as the dock is pulled open, so the HUD can clear the way. */
     onOpenChange: (Boolean) -> Unit = {},
+    /** Tap on the limit sign: propose a new limit (null = the sign is not tappable). */
+    onLimitClick: (() -> Unit)? = null,
 ) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
@@ -158,6 +160,7 @@ fun DriveDock(
                         limitKmh = limitKmh,
                         status = status,
                         searching = searching,
+                        onLimitClick = onLimitClick,
                         modifier = Modifier.weight(1.45f),
                     )
                     RedLightCard(secondsLeft = redLightSeconds, modifier = Modifier.weight(1f))
@@ -225,9 +228,11 @@ private fun SpeedCard(
     limitKmh: Int?,
     status: SpeedStatus?,
     searching: Boolean,
+    onLimitClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val colors = XRadarTheme.colors
+    val limitInteraction = remember { MutableInteractionSource() }
     val target = when {
         searching -> colors.textSecondary
         status == SpeedStatus.Over -> colors.speedOver
@@ -270,10 +275,23 @@ private fun SpeedCard(
                     maxLines = 1,
                 )
             }
-            if (limitKmh != null) {
-                SpeedLimitSign(limitKmh = limitKmh, size = 50.dp)
+            // The sign is also the way to propose a new limit when the road's has changed.
+            val signModifier = if (onLimitClick == null) {
+                Modifier
             } else {
-                UnknownLimitSign(size = 50.dp)
+                Modifier
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = limitInteraction,
+                        indication = null,
+                        onClickLabel = "Signaler une nouvelle limitation",
+                        onClick = onLimitClick,
+                    )
+            }
+            if (limitKmh != null) {
+                SpeedLimitSign(limitKmh = limitKmh, modifier = signModifier, size = 50.dp)
+            } else {
+                UnknownLimitSign(size = 50.dp, modifier = signModifier)
             }
         }
     }
@@ -281,9 +299,9 @@ private fun SpeedCard(
 
 /** The limit slot always holds its place — an empty sign reads better than a jump. */
 @Composable
-private fun UnknownLimitSign(size: Dp) {
+internal fun UnknownLimitSign(size: Dp, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
             .clip(CircleShape)
             .background(XRadarTheme.colors.surfaceHigh)

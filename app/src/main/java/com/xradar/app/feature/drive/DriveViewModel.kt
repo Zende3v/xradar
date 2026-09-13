@@ -17,6 +17,8 @@ import com.xradar.app.core.model.RadarZone
 import com.xradar.app.core.model.ReportType
 import com.xradar.app.core.model.RoadAlert
 import com.xradar.app.core.model.Route
+import com.xradar.app.core.model.SpeedLimitChange
+import com.xradar.app.core.model.SpeedLimitSource
 import com.xradar.app.core.model.TripInfo
 import com.xradar.app.core.model.TripRecord
 import com.xradar.app.core.model.UserReport
@@ -28,6 +30,8 @@ import com.xradar.app.data.reports.NewReport
 import com.xradar.app.data.reports.ReportsRepository
 import com.xradar.app.data.routing.ActiveTripRepository
 import com.xradar.app.data.routing.RoutingRepository
+import com.xradar.app.data.speedlimits.NewSpeedLimitReport
+import com.xradar.app.data.speedlimits.SpeedLimitRepository
 import com.xradar.app.data.stats.TripHistoryRepository
 import com.xradar.app.location.LocationRepository
 import com.xradar.app.media.MediaRepository
@@ -58,6 +62,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val radarRepository = RadarRepository()
     private val routingRepository = RoutingRepository()
     private val reportsRepository = ReportsRepository()
+    private val speedLimitRepository = SpeedLimitRepository()
     private val liveApi = com.xradar.app.data.live.LiveApi()
     private val tripHistory = TripHistoryRepository(application)
     private val radars = MutableStateFlow<List<Radar>>(emptyList())
@@ -160,6 +165,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         DriveUiState(
             speedKmh = speedKmh,
             speedLimitKmh = limit,
+            speedLimitSource = if (limit != null) SpeedLimitSource.Radar else null,
             trip = tripFrom(route),
             alert = alerts.firstOrNull(),
             gpsSignal = signal,
@@ -180,7 +186,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         state.copy(routeError = failed)
     }.combine(osmLimit) { state, live ->
         // The road's own limit beats the radar VMA: it is true everywhere, all the time.
-        if (live != null) state.copy(speedLimitKmh = live) else state
+        if (live != null) state.copy(speedLimitKmh = live, speedLimitSource = SpeedLimitSource.Road) else state
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -287,7 +293,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 if (fix != null && moved) {
                     lastLat = fix.latitude
                     lastLon = fix.longitude
-                    val v = signApi.limit(fix.latitude, fix.longitude)
+                    val v = signApi.limit(fix.latitude, fix.longitude, fix.bearingDeg?.toDouble())
                     val now = System.currentTimeMillis()
                     if (v != null) {
                         osmLimit.value = v
@@ -731,6 +737,36 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             reportsRepository.vote(reportId, confirm)
             if (!confirm) reports.value = reports.value.filterNot { it.id == reportId }
             LocationRepository.location.value?.let { fix -> refreshReports(fix.latitude, fix.longitude) }
+        }
+    }
+
+    /**
+     * Propose [newKmh] as the limit where the driver is: sign maintenance, not a road event.
+     * The HUD keeps its limit until the backend validates the change; when this proposal is
+     * the one that tips it, the new limit shows at once, on the route's signs too.
+     */
+    fun reportSpeedLimit(newKmh: Int) {
+        val fix = LocationRepository.location.value ?: return
+        val shown = driveState.value
+        viewModelScope.launch {
+            val change = speedLimitRepository.report(
+                NewSpeedLimitReport(
+                    lat = fix.latitude,
+                    lon = fix.longitude,
+                    bearingDeg = fix.bearingDeg?.toDouble(),
+                    displayedKmh = shown.speedLimitKmh,
+                    displayedSource = shown.speedLimitSource,
+                    newKmh = newKmh,
+                ),
+                AccountRepository.token,
+                AccountRepository.deviceId,
+            ) ?: return@launch
+            if (change.status == SpeedLimitChange.Status.Validated && change.newKmh != null) {
+                osmLimit.value = change.newKmh
+                ActiveTripRepository.route.value?.takeIf { it.points.size >= 2 }?.let { route ->
+                    signs.value = signApi.route(route.points)
+                }
+            }
         }
     }
 

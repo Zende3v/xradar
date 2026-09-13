@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -75,16 +76,62 @@ data class ReportDraft(
  * shown, six per page. Picking one asks which way it is — and files it in the
  * driver's own direction on its own after a few seconds, hands-free.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportSheet(onReport: OnReport, onDismiss: () -> Unit) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
-    val sheetState = rememberModalBottomSheetState()
     val account by AccountRepository.account.collectAsStateWithLifecycle()
     val role = account?.role ?: Role.Guest
     val available = ReportType.PICKER.filter { it.allowedFor(role) }
     var selected by remember { mutableStateOf<ReportType?>(null) }
+
+    DriveSheet(onDismiss = onDismiss) {
+        val current = selected
+        if (current == null) {
+            XRadarText("Signaler", style = XRadarTheme.typography.title, color = colors.textPrimary)
+            val pages = available.chunked(PER_PAGE)
+            val pagerState = rememberPagerState(pageCount = { pages.size })
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.md)) {
+                    // Always the full grid, empty slots included, so a half-filled
+                    // page keeps the height of a full one.
+                    repeat(PER_PAGE / PER_ROW) { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(spacing.md)) {
+                            repeat(PER_ROW) { column ->
+                                val type = pages[page].getOrNull(row * PER_ROW + column)
+                                if (type == null) {
+                                    Spacer(Modifier.weight(1f).height(TILE_SLOT_HEIGHT))
+                                } else {
+                                    ReportTile(
+                                        type = type,
+                                        onClick = { selected = type },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (pages.size > 1) {
+                PageDots(count = pages.size, current = pagerState.currentPage)
+            }
+        } else {
+            DirectionStep(type = current, onBack = { selected = null }, onReport = onReport)
+        }
+    }
+}
+
+/**
+ * The bottom sheet the HUD's pickers open in — the report sheet and the speed-limit sheet:
+ * rounded top, drag handle, scrolling column above the navigation bar.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DriveSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
+    val sheetState = rememberModalBottomSheetState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -109,41 +156,8 @@ fun ReportSheet(onReport: OnReport, onDismiss: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = spacing.lg, vertical = spacing.md),
             verticalArrangement = Arrangement.spacedBy(spacing.lg),
-        ) {
-            val current = selected
-            if (current == null) {
-                XRadarText("Signaler", style = XRadarTheme.typography.title, color = colors.textPrimary)
-                val pages = available.chunked(PER_PAGE)
-                val pagerState = rememberPagerState(pageCount = { pages.size })
-                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
-                    Column(verticalArrangement = Arrangement.spacedBy(spacing.md)) {
-                        // Always the full grid, empty slots included, so a half-filled
-                        // page keeps the height of a full one.
-                        repeat(PER_PAGE / PER_ROW) { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(spacing.md)) {
-                                repeat(PER_ROW) { column ->
-                                    val type = pages[page].getOrNull(row * PER_ROW + column)
-                                    if (type == null) {
-                                        Spacer(Modifier.weight(1f).height(TILE_SLOT_HEIGHT))
-                                    } else {
-                                        ReportTile(
-                                            type = type,
-                                            onClick = { selected = type },
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if (pages.size > 1) {
-                    PageDots(count = pages.size, current = pagerState.currentPage)
-                }
-            } else {
-                DirectionStep(type = current, onBack = { selected = null }, onReport = onReport)
-            }
-        }
+            content = content,
+        )
     }
 }
 
@@ -172,17 +186,7 @@ private fun DirectionStep(type: ReportType, onBack: () -> Unit, onReport: OnRepo
         send(DIRECTION_SAME)
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
-        Box(
-            modifier = Modifier
-                .clip(XRadarTheme.shapes.pill)
-                .clickable { auto = false; onBack() }
-                .padding(4.dp),
-        ) {
-            XRadarIcon(XRadarIcons.ChevronLeft, contentDescription = "Retour", tint = colors.textSecondary, size = 22.dp)
-        }
-        XRadarText(type.label, style = XRadarTheme.typography.title, color = colors.textPrimary)
-    }
+    SheetBackTitle(type.label, onBack = { auto = false; onBack() })
 
     if (type.needsPlate) {
         SheetField(
@@ -203,31 +207,35 @@ private fun DirectionStep(type: ReportType, onBack: () -> Unit, onReport: OnRepo
 
     XRadarText("Dans quel sens ?", style = XRadarTheme.typography.subhead, color = colors.textSecondary)
     Row(horizontalArrangement = Arrangement.spacedBy(spacing.md)) {
-        DirectionPill("Mon sens", highlighted = true, onClick = { send(DIRECTION_SAME) }, modifier = Modifier.weight(1f))
-        DirectionPill("Sens opposé", highlighted = false, onClick = { send(DIRECTION_OPPOSITE) }, modifier = Modifier.weight(1f))
+        SheetPill("Mon sens", highlighted = true, onClick = { send(DIRECTION_SAME) }, modifier = Modifier.weight(1f))
+        SheetPill("Sens opposé", highlighted = false, onClick = { send(DIRECTION_OPPOSITE) }, modifier = Modifier.weight(1f))
     }
     if (auto) {
         // Runs down to nothing, then files the report in the driver's own direction.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(5.dp)
-                .clip(XRadarTheme.shapes.pill)
-                .background(colors.surfaceHigh),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(countdown.value)
-                    .height(5.dp)
-                    .clip(XRadarTheme.shapes.pill)
-                    .background(colors.accent),
-            )
-        }
+        AutoSendBar(progress = countdown.value)
     }
 }
 
+/** A sheet step's title, with the way back to the previous step. */
 @Composable
-private fun DirectionPill(label: String, highlighted: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SheetBackTitle(title: String, onBack: () -> Unit) {
+    val colors = XRadarTheme.colors
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.sm)) {
+        Box(
+            modifier = Modifier
+                .clip(XRadarTheme.shapes.pill)
+                .clickable(onClick = onBack)
+                .padding(4.dp),
+        ) {
+            XRadarIcon(XRadarIcons.ChevronLeft, contentDescription = "Retour", tint = colors.textSecondary, size = 22.dp)
+        }
+        XRadarText(title, style = XRadarTheme.typography.title, color = colors.textPrimary)
+    }
+}
+
+/** A big answer button of a sheet step; the highlighted one is what the countdown sends. */
+@Composable
+internal fun SheetPill(label: String, highlighted: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = XRadarTheme.colors
     Box(
         modifier = modifier
@@ -242,6 +250,27 @@ private fun DirectionPill(label: String, highlighted: Boolean, onClick: () -> Un
             label,
             style = XRadarTheme.typography.bodyStrong,
             color = if (highlighted) colors.onAccent else colors.textPrimary,
+        )
+    }
+}
+
+/** The hands-free countdown: full at [progress] 1, and the step sends itself at 0. */
+@Composable
+internal fun AutoSendBar(progress: Float) {
+    val colors = XRadarTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(5.dp)
+            .clip(XRadarTheme.shapes.pill)
+            .background(colors.surfaceHigh),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(progress)
+                .height(5.dp)
+                .clip(XRadarTheme.shapes.pill)
+                .background(colors.accent),
         )
     }
 }

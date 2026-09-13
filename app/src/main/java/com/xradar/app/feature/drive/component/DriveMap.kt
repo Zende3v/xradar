@@ -922,7 +922,7 @@ private fun arrowHead(x: Float, y: Float, dirDeg: Float, size: Float): Path = Pa
     close()
 }
 
-private val SPEED_VALUES = intArrayOf(20, 30, 50, 70, 80, 90, 100, 110, 130)
+private val SPEED_VALUES = com.xradar.app.core.model.SpeedLimits.VALUES
 private fun snapSpeed(v: Int?): Int {
     val s = v ?: 50
     return SPEED_VALUES.minByOrNull { kotlin.math.abs(it - s) } ?: 50

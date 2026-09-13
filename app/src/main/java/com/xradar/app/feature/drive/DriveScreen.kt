@@ -87,6 +87,7 @@ fun DriveRoute(
         dismissedAlerts = dismissedAlerts,
         onDismissAlert = viewModel::dismissAlert,
         onMusic = viewModel::onMusic,
+        onReportSpeedLimit = viewModel::reportSpeedLimit,
         modifier = modifier,
     )
 }
@@ -111,12 +112,15 @@ fun DriveScreen(
     onDismissAlert: (String) -> Unit = {},
     /** The music button and the mini-player's controls. */
     onMusic: (MusicAction) -> Unit = {},
+    /** A new speed limit the driver proposes where they are (see [SpeedLimitSheet]). */
+    onReportSpeedLimit: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
     var following by remember { mutableStateOf(true) }
     var reportOpen by remember { mutableStateOf(false) }
+    var limitReportOpen by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     var paywall by remember { mutableStateOf(false) }
     var dockOpen by remember { mutableStateOf(false) }
@@ -270,6 +274,8 @@ fun DriveScreen(
 
             // "E3": the drop-up dock — speed + live limit, red-light timer, and the
             // options one drag away. Replaces the old ETA pill / speed / Options row.
+            // Its limit sign opens the speed-limit sheet (a position is needed to report).
+            val openLimitReport: () -> Unit = { if (restricted) paywall = true else limitReportOpen = true }
             DriveDock(
                 speedKmh = state.speedKmh,
                 limitKmh = state.speedLimitKmh,
@@ -277,6 +283,7 @@ fun DriveScreen(
                 searching = state.isSearchingGps,
                 trip = state.trip,
                 onOpenChange = { dockOpen = it },
+                onLimitClick = openLimitReport.takeUnless { state.isSearchingGps },
             )
         }
 
@@ -332,6 +339,17 @@ fun DriveScreen(
                     reportOpen = false
                 },
                 onDismiss = { reportOpen = false },
+            )
+        }
+
+        if (limitReportOpen) {
+            SpeedLimitSheet(
+                currentKmh = state.speedLimitKmh,
+                onReport = { kmh ->
+                    onReportSpeedLimit(kmh)
+                    limitReportOpen = false
+                },
+                onDismiss = { limitReportOpen = false },
             )
         }
 

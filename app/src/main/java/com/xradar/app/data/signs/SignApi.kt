@@ -43,10 +43,13 @@ class SignApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }.getOrDefault(emptyList())
     }
 
-    /** Speed limit (km/h) at a position, from the preloaded OSM dataset. */
-    suspend fun limit(lat: Double, lon: Double): Int? = withContext(Dispatchers.IO) {
+    /**
+     * Speed limit (km/h) at a position, from the preloaded OSM dataset and the changes drivers
+     * validated; [bearingDeg] (the driver's course) picks the ones made for that way.
+     */
+    suspend fun limit(lat: Double, lon: Double, bearingDeg: Double? = null): Int? = withContext(Dispatchers.IO) {
         runCatching {
-            val u = url("/api/signs/limit?lat=$lat&lon=$lon")
+            val u = url("/api/signs/limit?lat=$lat&lon=$lon" + (bearingDeg?.let { "&bearing=$it" } ?: ""))
             client.newCall(Request.Builder().url(u).build()).execute().use { r ->
                 val o = JSONObject(r.body?.string() ?: "")
                 if (o.isNull("v")) null else o.optInt("v").takeIf { it in 5..130 }
