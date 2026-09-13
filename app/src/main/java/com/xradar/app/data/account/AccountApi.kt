@@ -5,6 +5,7 @@ import com.xradar.app.core.model.Access
 import com.xradar.app.core.model.Account
 import com.xradar.app.core.model.Role
 import com.xradar.app.core.model.TripRecord
+import com.xradar.app.data.network.FallbackDns
 import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -48,6 +49,7 @@ sealed interface AuthOutcome {
 class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
+        .dns(FallbackDns)
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()

@@ -17,6 +17,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.KeyEvent
 import androidx.core.app.NotificationManagerCompat
+import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -192,6 +193,7 @@ object MediaRepository {
 
     internal val artClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .dns(FallbackDns)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .build()

@@ -2,6 +2,7 @@ package com.xradar.app.data.geocoding
 
 import com.xradar.app.core.model.Place
 import com.xradar.app.core.model.PlaceKind
+import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit
 class GeocodingApi {
 
     private val client = OkHttpClient.Builder()
+        .dns(FallbackDns)
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
         .build()

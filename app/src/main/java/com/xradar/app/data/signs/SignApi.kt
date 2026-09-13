@@ -4,6 +4,7 @@ import com.xradar.app.BuildConfig
 import com.xradar.app.core.model.GeoPoint
 import com.xradar.app.core.model.RoadSign
 import com.xradar.app.core.model.SignType
+import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit
 class SignApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
+        .dns(FallbackDns)
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(25, TimeUnit.SECONDS)
         .build()
