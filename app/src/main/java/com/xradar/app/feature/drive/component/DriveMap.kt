@@ -49,6 +49,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.offline.OfflineManager
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
@@ -118,6 +119,9 @@ fun DriveMap(
     val context = LocalContext.current
     val mapView = remember {
         MapLibre.getInstance(context)
+        // Tiles from earlier drives stay on the phone (MapLibre keeps only 50 MB by default),
+        // so a familiar area comes back at once instead of being downloaded again.
+        OfflineManager.getInstance(context).setMaximumAmbientCacheSize(AMBIENT_CACHE_BYTES, IgnoreResult)
         MapView(context).apply { onCreate(null) }
     }
 
@@ -604,6 +608,12 @@ fun DriveMap(
     }
 }
 
+/** Resizing the tile cache is best effort: the map works the same if it fails. */
+private object IgnoreResult : OfflineManager.FileSourceCallback {
+    override fun onSuccess() = Unit
+    override fun onError(message: String) = Unit
+}
+
 /** Clustering shared by the radar and report sources (alerts only, never road signs). */
 private fun clusterOptions(): GeoJsonOptions = GeoJsonOptions()
     .withCluster(true)
@@ -1050,6 +1060,7 @@ private const val FRAME_MS = 16L
 // Daylight check for the "Auto" basemap: cheap, so a coarse tick is plenty. Before
 // the first fix we assume Paris — only the first few seconds of a launch use it.
 private const val SUN_CHECK_MS = 5 * 60 * 1000L
+private const val AMBIENT_CACHE_BYTES = 200L * 1024 * 1024
 private const val FALLBACK_LAT = 48.8566
 private const val FALLBACK_LON = 2.3522
 // Alert clustering: group below this zoom, within this many screen pixels.
