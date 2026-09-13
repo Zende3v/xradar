@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
 import { haversine } from '../radars/geo.js';
+import { crowdScore, expiryFor as expiryAfter } from './score.js';
 
 const VALID_TYPES = new Set(Object.keys(config.reportScore));
 
@@ -221,42 +222,14 @@ function scoreModel(type) {
   return config.reportScore[type] ?? config.reportScore.hazard;
 }
 
-/** min(1 + 0.10 × √confirmations, 1.40). */
-function confirmationBonus(confirmations) {
-  return Math.min(1 + config.reportConfirmStep * Math.sqrt(confirmations || 0), config.reportConfirmCap);
-}
-
-/** 1 / (1 + 0.25 × √contradictions). */
-function contradictionPenalty(contradictions) {
-  return 1 / (1 + config.reportContradictionStep * Math.sqrt(contradictions || 0));
-}
-
-/**
- * factors × exp(-(k × age) / baseDuration) with k = ln(factors / minimum), so the
- * score is exactly the minimum when age reaches the base duration.
- */
-function timeScore(type, ageMs) {
-  const model = scoreModel(type);
-  if (model.persistent || model.baseDurationMs == null) return model.factors;
-  const k = Math.log(model.factors / config.reportScoreMinimum);
-  return model.factors * Math.exp(-(k * Math.max(0, ageMs)) / model.baseDurationMs);
-}
-
-/** What the report is worth in itself: time, confirmations, contradictions. */
+/** What the report is worth in itself: time, confirmations, contradictions (see score.js). */
 function intrinsicScore(r, now) {
-  const age = now - (r.createdAt ?? now);
-  return timeScore(r.type, age) * confirmationBonus(r.confirmations) * contradictionPenalty(r.contradictions);
+  return crowdScore(scoreModel(r.type), now - (r.createdAt ?? now), r.confirmations, r.contradictions);
 }
 
 /** When the intrinsic score will cross the minimum — that is the report's death. */
 function expiryFor(type, createdAt, confirmations, contradictions) {
-  const model = scoreModel(type);
-  if (model.persistent || model.baseDurationMs == null) return createdAt + config.reportPermanentMs;
-  const crowd = confirmationBonus(confirmations) * contradictionPenalty(contradictions);
-  const ratio = (model.factors * crowd) / config.reportScoreMinimum;
-  if (!(ratio > 1)) return createdAt; // already worthless
-  const k = Math.log(model.factors / config.reportScoreMinimum);
-  return createdAt + (model.baseDurationMs * Math.log(ratio)) / k;
+  return expiryAfter(scoreModel(type), createdAt, confirmations, contradictions);
 }
 
 /** Opaque, stable id for a plate — the plate itself never leaves the server. */

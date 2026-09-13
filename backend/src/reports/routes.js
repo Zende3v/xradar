@@ -1,17 +1,14 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { accountStore } from '../accounts/store.js';
-import { authAccount } from '../accounts/auth.js';
+import { authAccount, isAdminRequest } from '../accounts/auth.js';
 import { reportStore } from './store.js';
 
 export const reportRouter = Router();
 
 /** DELETE /api/reports/:id — moderation, admins only (account or ADMIN_TOKEN). */
 reportRouter.delete('/:id', (req, res) => {
-  const account = authAccount(req);
-  const m = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '');
-  const withAdminToken = config.adminToken && (m?.[1] === config.adminToken || req.get('x-admin-token') === config.adminToken);
-  if (account?.role !== 'admin' && !withAdminToken) {
+  if (!isAdminRequest(req)) {
     return res.status(403).json({ error: 'admin only' });
   }
   const removed = reportStore.removeById(req.params.id);
