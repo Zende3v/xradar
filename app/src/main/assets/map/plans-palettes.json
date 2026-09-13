@@ -4,6 +4,10 @@
     "sprite": "https://tiles.stadiamaps.com/styles/osm-bright/sprite",
 
     "land": "#F0EEE8",
+    "farmland": "#EDEADB",
+    "orchard": "#E5EAD3",
+    "farmland_edge": "#DFDBCB",
+    "rock": "#E4E2DB",
     "urban": "#E9E7E1",
     "building": "#DDDAD3",
     "building_outline": "#D1CEC6",
@@ -74,6 +78,10 @@
     "sprite": "https://tiles.stadiamaps.com/styles/alidade-smooth-dark/sprite",
 
     "land": "#255e4e",
+    "farmland": "#33664B",
+    "orchard": "#3B6E4D",
+    "farmland_edge": "#1F5242",
+    "rock": "#4B5E57",
     "urban": "#394e68",
     "building": "#506d8f",
     "building_outline": "#3d546f",
