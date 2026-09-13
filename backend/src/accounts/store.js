@@ -72,9 +72,11 @@ class AccountStore {
 
   async start() {
     await this.load();
-    this.purgeGuests();
-    // Purge stale guest accounts (no launch for >10 days) daily.
-    const timer = setInterval(() => this.purgeGuests(), 24 * 60 * 60 * 1000);
+    await this.purge();
+    // Daily: guests without a password, and guests past their days, go.
+    const timer = setInterval(() => {
+      this.purge().catch((e) => console.error('[accounts] purge failed:', e.message));
+    }, 24 * 60 * 60 * 1000);
     if (timer.unref) timer.unref();
   }
 
@@ -367,11 +369,22 @@ class AccountStore {
     return { ok: true };
   }
 
-  /** Guest identity: (device + chosen unique username). No password. */
-  claimGuest(deviceId, username, meta = {}) {
+  /**
+   * Guest identity ("Continuer en invité"): the device, a unique username and a password —
+   * the password is what brings the guest back after reinstalling the app. The account is
+   * deleted guestLifetimeMs after it became a guest (see purge).
+   */
+  claimGuest(deviceId, username, password, meta = {}) {
     if (!deviceId) return { error: 'deviceId required' };
+    if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
+    let existing = this.byDevice.get(deviceId);
+    // A phone signed in to a member account starts a separate guest.
+    if (existing?.emailLower) {
+      this.byDevice.delete(deviceId);
+      existing.deviceId = null;
+      existing = null;
+    }
     const check = this.usernameAvailable(username);
-    const existing = this.byDevice.get(deviceId);
     // Allow keeping one's own username on re-auth.
     if (!check.ok && !(existing && existing.usernameLower === String(username).toLowerCase())) {
       return { error: check.error };
@@ -381,6 +394,12 @@ class AccountStore {
       this.unindex(existing);
       existing.username = username;
       existing.usernameLower = String(username).toLowerCase();
+      existing.passwordHash = hashPassword(password);
+      // Becoming a guest starts its days: the bare device account only waited for onboarding.
+      if (!existing.guestSince) {
+        existing.guestSince = now;
+        existing.trialEndsAt = trialEndsAt(now);
+      }
       existing.lastSeenAt = now;
       if (meta.platform) existing.platform = meta.platform;
       this.index(existing);
@@ -396,7 +415,8 @@ class AccountStore {
       displayName: username,
       email: null,
       emailLower: null,
-      passwordHash: null,
+      passwordHash: hashPassword(password),
+      guestSince: now,
       avatarUrl: null,
       platform: meta.platform ?? null,
       banned: false,
@@ -494,14 +514,38 @@ class AccountStore {
     return { account: a };
   }
 
-  login(email, password) {
-    const account = this.byEmail.get(String(email || '').trim().toLowerCase());
+  /**
+   * Email (members) or username (guests) + password. [deviceId], when given, attaches the
+   * account to the phone signing in, so it comes back by itself on that phone.
+   */
+  login(identifier, password, deviceId = null) {
+    const key = String(identifier || '').trim().toLowerCase();
+    const account = key.includes('@') ? this.byEmail.get(key) : this.byUsername.get(key);
     if (!account || !account.passwordHash) return { error: 'invalid credentials' };
     if (!verifyPassword(password, account.passwordHash)) return { error: 'invalid credentials' };
     if (account.banned) return { error: 'banned' };
+    this.bindDevice(account, deviceId);
     account.lastSeenAt = new Date().toISOString();
     this.scheduleSave();
     return { account };
+  }
+
+  /** Attach [account] to a phone. The bare account that phone had without a password goes. */
+  bindDevice(account, deviceId) {
+    const id = String(deviceId || '').trim();
+    if (!id || id.length > 128 || account.deviceId === id) return;
+    const other = this.byDevice.get(id);
+    if (other && other !== account) {
+      if (!other.passwordHash && other.role === 'guest') {
+        this.unindex(other);
+      } else {
+        this.byDevice.delete(id);
+        other.deviceId = null;
+      }
+    }
+    if (account.deviceId) this.byDevice.delete(account.deviceId);
+    account.deviceId = id;
+    this.byDevice.set(id, account);
   }
 
   setProfile(id, { username, avatarUrl, displayName }) {
@@ -544,23 +588,38 @@ class AccountStore {
     this.sessions.delete(token);
   }
 
-  /** Delete guest accounts not seen for > guestMaxAgeMs (default 10 days). */
-  purgeGuests() {
-    const cutoff = Date.now() - config.guestMaxAgeMs;
-    let dropped = 0;
-    for (const account of [...this.byId.values()]) {
-      if (account.role !== 'guest') continue;
-      const seen = Date.parse(account.lastSeenAt || account.createdAt || 0);
-      if (Number.isFinite(seen) && seen < cutoff) {
-        this.unindex(account);
-        dropped++;
-      }
-    }
-    if (dropped > 0) {
-      console.log(`[accounts] purged ${dropped} stale guest(s)`);
-      this.scheduleSave();
-    }
-    return dropped;
+  /**
+   * Delete the guest accounts with no way back: every guest without a password (a phone
+   * that never finished onboarding, a guest from before passwords were asked) and every
+   * "Continuer en invité" account (no email) guestLifetimeMs after it became a guest.
+   * Members (email), clients and admins are never touched. Before the first deletion of
+   * the day, a copy of all accounts is written next to the accounts file.
+   */
+  async purge(now = Date.now()) {
+    const doomed = [...this.byId.values()].filter((account) => this.isExpiredGuest(account, now));
+    if (doomed.length === 0) return 0;
+    await this.backup(now);
+    for (const account of doomed) this.unindex(account);
+    console.log(`[accounts] purged ${doomed.length} guest account(s)`);
+    this.scheduleSave();
+    return doomed.length;
+  }
+
+  isExpiredGuest(account, now) {
+    if (account.role !== 'guest') return false;
+    if (!account.passwordHash) return true;
+    if (account.emailLower) return false;
+    const since = Date.parse(account.guestSince || account.createdAt || 0);
+    return Number.isFinite(since) && now - since > config.guestLifetimeMs;
+  }
+
+  async backup(now) {
+    const day = new Date(now).toISOString().slice(0, 10);
+    if (this.backupDay === day) return;
+    const dir = dirname(config.accountsFile);
+    await mkdir(dir, { recursive: true });
+    await writeFile(`${dir}/accounts.backup-${day}.json`, JSON.stringify([...this.byId.values()], null, 2), 'utf8');
+    this.backupDay = day;
   }
 
   get meta() {

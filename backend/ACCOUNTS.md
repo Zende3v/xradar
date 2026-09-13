@@ -15,6 +15,16 @@ contact et renvoie son rôle.
 
 Les rôles `client`/`admin` s'attribuent avec le CLI (ci-dessous). `guest` est le défaut.
 
+### Invités (« Continuer en invité »)
+
+- Pseudo unique + mot de passe (8 min.) : `POST /api/accounts/guest { deviceId, username, password }`.
+- Après réinstallation : `POST /api/accounts/login { identifier: pseudo ou email, password, deviceId }`
+  (le compte se rattache au nouveau téléphone).
+- Suppression automatique (au démarrage puis chaque jour) : tout compte `guest` **sans mot de
+  passe**, et tout invité sans email **7 jours** après être devenu invité (`GUEST_LIFETIME_MS`).
+  Les comptes email, `client` et `admin` ne sont jamais supprimés. Avant la première suppression
+  du jour, copie complète dans `data/accounts.backup-<date>.json`.
+
 ## API
 
 Publique :

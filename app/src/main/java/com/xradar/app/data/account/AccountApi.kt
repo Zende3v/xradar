@@ -70,8 +70,11 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             .let { (ok, body) -> if (ok) parseAuth(body) else null }
     }
 
-    suspend fun claimGuest(deviceId: String, username: String): AuthOutcome = withContext(Dispatchers.IO) {
-        outcome("/api/accounts/guest", JSONObject().put("deviceId", deviceId).put("username", username).put("platform", "android"))
+    suspend fun claimGuest(deviceId: String, username: String, password: String): AuthOutcome = withContext(Dispatchers.IO) {
+        outcome(
+            "/api/accounts/guest",
+            JSONObject().put("deviceId", deviceId).put("username", username).put("password", password).put("platform", "android"),
+        )
     }
 
     suspend fun register(email: String, password: String, username: String, referralCode: String?): AuthOutcome =
@@ -178,8 +181,11 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         redemptions = o.optInt("redemptions"),
     )
 
-    suspend fun login(email: String, password: String): AuthOutcome = withContext(Dispatchers.IO) {
-        outcome("/api/accounts/login", JSONObject().put("email", email).put("password", password))
+    /** [identifier]: an email (member) or a username (guest); [deviceId] attaches the account to this phone. */
+    suspend fun login(identifier: String, password: String, deviceId: String?): AuthOutcome = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("identifier", identifier).put("password", password)
+        if (!deviceId.isNullOrBlank()) payload.put("deviceId", deviceId)
+        outcome("/api/accounts/login", payload)
     }
 
     /** Refresh the account from a session token; null if the token is invalid. */
@@ -298,7 +304,7 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         err.contains("email already") -> "Cet email est déjà utilisé."
         err.contains("invalid email") -> "Email invalide."
         err.contains("password too short") -> "Mot de passe trop court (8 caractères min)."
-        err.contains("invalid credentials") -> "Email ou mot de passe incorrect."
+        err.contains("invalid credentials") -> "Identifiant ou mot de passe incorrect."
         err.contains("banned") -> "Ce compte est banni."
         err.contains("invalid referral") -> "Code de parrainage invalide."
         err.contains("subscription required") -> "Abonnement requis."

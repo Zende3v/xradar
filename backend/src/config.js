@@ -239,8 +239,9 @@ export const config = {
     from: process.env.SMTP_FROM || 'x_radar',
   },
   resetCodeTtlMs: 30 * 60 * 1000, // 30 min
-  // Guests are deleted after this long without launching the app.
-  guestMaxAgeMs: 10 * 24 * 60 * 60 * 1000, // 10 days
+  // A guest ("Continuer en invité": username + password, no email) is deleted this long
+  // after it became a guest. Guests without a password are deleted right away.
+  guestLifetimeMs: Number(process.env.GUEST_LIFETIME_MS) || 7 * D,
   // Profile pictures: stored on the VPS filesystem, served statically at /avatars.
   avatarsDir: process.env.AVATARS_DIR || './data/avatars',
   avatarMaxBytes: 2 * 1024 * 1024, // 2 MB

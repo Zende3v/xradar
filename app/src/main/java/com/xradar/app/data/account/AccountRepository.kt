@@ -67,8 +67,8 @@ object AccountRepository {
 
     suspend fun usernameAvailable(username: String): Boolean = api.usernameAvailable(username)
 
-    suspend fun claimGuest(username: String): AuthOutcome =
-        api.claimGuest(ensureDeviceIdOrEmpty(), username).also(::applyOutcome)
+    suspend fun claimGuest(username: String, password: String): AuthOutcome =
+        api.claimGuest(ensureDeviceIdOrEmpty(), username, password).also(::applyOutcome)
 
     suspend fun register(email: String, password: String, username: String, referralCode: String? = null): AuthOutcome =
         api.register(email, password, username, referralCode).also(::applyOutcome)
@@ -91,8 +91,9 @@ object AccountRepository {
         api.me(t)?.let { store(it, t) }
     }
 
-    suspend fun login(email: String, password: String): AuthOutcome =
-        api.login(email, password).also(::applyOutcome)
+    /** Email (member) or username (guest), and the password; the account then sticks to this phone. */
+    suspend fun login(identifier: String, password: String): AuthOutcome =
+        api.login(identifier, password, deviceId).also(::applyOutcome)
 
     suspend fun updateProfile(username: String? = null, avatarUrl: String? = null): AuthOutcome {
         val t = token ?: return AuthOutcome.Failure("Non connecté")

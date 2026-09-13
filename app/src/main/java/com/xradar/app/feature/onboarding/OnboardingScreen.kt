@@ -85,19 +85,22 @@ fun OnboardingScreen() {
             verticalArrangement = Arrangement.spacedBy(spacing.md),
         ) {
             XRadarText("x_radar", style = XRadarTheme.typography.displayHero, color = colors.accent)
-            XRadarText(
-                when (mode) {
-                    Mode.Choose -> "Ta route, tes radars, tes alertes."
-                    Mode.Guest -> "Choisis un pseudo unique."
-                    Mode.Login -> "Content de te revoir."
-                    Mode.Register -> "7 jours d'essai gratuit — ou un code de parrainage."
-                    Mode.Forgot -> "Reçois un code par email."
-                    Mode.Reset -> "Entre le code reçu et ton nouveau mot de passe."
-                },
-                style = XRadarTheme.typography.subhead,
-                color = colors.textSecondary,
-                textAlign = TextAlign.Center,
-            )
+            val subtitle = when (mode) {
+                Mode.Choose -> null
+                Mode.Guest -> "Choisis un pseudo et un mot de passe."
+                Mode.Login -> "Content de te revoir."
+                Mode.Register -> "7 jours d'essai gratuit — ou un code de parrainage."
+                Mode.Forgot -> "Reçois un code par email."
+                Mode.Reset -> "Entre le code reçu et ton nouveau mot de passe."
+            }
+            subtitle?.let {
+                XRadarText(
+                    it,
+                    style = XRadarTheme.typography.subhead,
+                    color = colors.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
+            }
 
             Column(Modifier.padding(top = spacing.lg), verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
                 when (mode) {
@@ -108,11 +111,19 @@ fun OnboardingScreen() {
                     }
                     Mode.Guest -> {
                         Field(pseudo, { pseudo = it.trim() }, "Pseudo", KeyboardCapitalization.None)
-                        Primary("Continuer", loading) { submit { AccountRepository.claimGuest(pseudo) } }
+                        Field(password, { password = it }, "Mot de passe (8 min.)", KeyboardCapitalization.None, KeyboardType.Password, password = true)
+                        XRadarText(
+                            "Il sert à retrouver ton compte si tu réinstalles l'app. Un compte invité est supprimé au bout de 7 jours.",
+                            style = XRadarTheme.typography.footnote,
+                            color = colors.textTertiary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Primary("Continuer", loading) { submit { AccountRepository.claimGuest(pseudo, password) } }
                         Back { mode = Mode.Choose; error = null }
                     }
                     Mode.Login -> {
-                        Field(email, { email = it.trim() }, "Email", KeyboardCapitalization.None, KeyboardType.Email)
+                        Field(email, { email = it.trim() }, "Email ou pseudo", KeyboardCapitalization.None, KeyboardType.Email)
                         Field(password, { password = it }, "Mot de passe", KeyboardCapitalization.None, KeyboardType.Password, password = true)
                         Primary("Se connecter", loading) { submit { AccountRepository.login(email, password) } }
                         Back(label = "Mot de passe oublié ?") { mode = Mode.Forgot; error = null; info = null }

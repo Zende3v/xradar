@@ -57,12 +57,13 @@ accountRouter.get('/username-available', (req, res) => {
 });
 
 /**
- * POST /api/accounts/guest  { deviceId, username, platform? }
- * Guest identity: a unique username tied to the device. No password.
+ * POST /api/accounts/guest  { deviceId, username, password, platform? }
+ * Guest identity: a unique username and a password (8 min.) tied to the device. The guest
+ * signs back in with them after a reinstall; the account is deleted after its 7 days.
  */
 accountRouter.post('/guest', (req, res) => {
   const deviceId = String(req.body?.deviceId || '').trim();
-  const result = accountStore.claimGuest(deviceId, String(req.body?.username || '').trim(), {
+  const result = accountStore.claimGuest(deviceId, String(req.body?.username || '').trim(), req.body?.password, {
     platform: req.body?.platform,
   });
   if (result.error) return res.status(400).json({ error: result.error });
@@ -118,9 +119,13 @@ accountRouter.post('/reset', (req, res) => {
   res.json({ ok: true });
 });
 
-/** POST /api/accounts/login  { email, password } → { account, token }. */
+/**
+ * POST /api/accounts/login  { email | identifier, password, deviceId? } → { account, token }.
+ * The identifier is an email (member) or a username (guest); deviceId attaches the account
+ * to that phone.
+ */
 accountRouter.post('/login', (req, res) => {
-  const result = accountStore.login(req.body?.email, req.body?.password);
+  const result = accountStore.login(req.body?.identifier ?? req.body?.email, req.body?.password, req.body?.deviceId);
   if (result.error) return res.status(401).json({ error: result.error });
   const token = accountStore.issueToken(result.account.id);
   res.json({ account: selfView(result.account), token });
