@@ -19,7 +19,7 @@ sealed interface MediaPlaybackState {
     /** Notification access is not granted (or was revoked): no session can be read. */
     data object PermissionMissing : MediaPlaybackState
 
-    /** Access is granted but none of the apps plays anything; [installedApps] can be opened. */
+    /** Access is granted but none of the apps has a session; [installedApps] are the ones play can wake up. */
     data class Idle(val installedApps: List<MusicApp>) : MediaPlaybackState
 
     /** A session of one of the apps, playing or paused. */

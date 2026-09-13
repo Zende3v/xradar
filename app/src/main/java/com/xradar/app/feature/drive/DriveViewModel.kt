@@ -763,7 +763,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             MusicAction.Next -> MediaRepository.next()
             MusicAction.Previous -> MediaRepository.previous()
             MusicAction.OpenAccessSettings -> MediaRepository.openAccessSettings()
-            is MusicAction.Launch -> MediaRepository.launch(action.app)
         }
     }
 

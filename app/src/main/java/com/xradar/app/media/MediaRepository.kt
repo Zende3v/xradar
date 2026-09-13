@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -14,12 +15,14 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.KeyEvent
 import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -54,6 +57,12 @@ object MediaRepository {
     @Volatile
     private var controller: MediaController? = null
 
+    /** The last of the three apps seen with a session, in memory only. */
+    private var lastActiveApp: MusicApp? = null
+
+    /** Opens a music app if a play with no session started nothing. */
+    private var resumeFallback: Job? = null
+
     val state: StateFlow<MediaPlaybackState> by lazy {
         sessions().stateIn(scope, SharingStarted.WhileSubscribed(), initialState())
     }
@@ -63,17 +72,28 @@ object MediaRepository {
         rechecks.tryEmit(Unit)
     }
 
-    fun playPause() = control { c ->
-        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) {
-            c.transportControls.pause()
-        } else {
-            c.transportControls.play()
+    /** Play or pause the session shown; with none, start the last player like a headset would. */
+    fun playPause() {
+        if (controller == null) {
+            resumeLastPlayer()
+            return
+        }
+        control { c ->
+            if (c.playbackState?.state == PlaybackState.STATE_PLAYING) {
+                c.transportControls.pause()
+            } else {
+                c.transportControls.play()
+            }
         }
     }
 
-    fun next() = control { it.transportControls.skipToNext() }
+    fun next() {
+        if (controller == null) dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT) else control { it.transportControls.skipToNext() }
+    }
 
-    fun previous() = control { it.transportControls.skipToPrevious() }
+    fun previous() {
+        if (controller == null) dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS) else control { it.transportControls.skipToPrevious() }
+    }
 
     /** Open a music app; silently nothing when it is not installed. */
     fun launch(app: MusicApp) {
@@ -89,6 +109,34 @@ object MediaRepository {
             context.startActivity(
                 Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
+        }
+    }
+
+    /**
+     * Nothing to control: send PLAY the way a Bluetooth headset does, so Android restarts
+     * the last media player in the background. If none of the three apps shows a session and
+     * no audio plays after [RESUME_FALLBACK_MS], open the last one used (or the first
+     * installed) so the driver can start it there.
+     */
+    private fun resumeLastPlayer() {
+        val context = appContext ?: return
+        dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
+        resumeFallback?.cancel()
+        resumeFallback = scope.launch {
+            delay(RESUME_FALLBACK_MS)
+            val audio = context.getSystemService(AudioManager::class.java)
+            if (controller != null || audio?.isMusicActive == true) return@launch
+            val installed = installedApps(context)
+            val app = lastActiveApp?.takeIf { it in installed } ?: installed.firstOrNull()
+            app?.let(::launch)
+        }
+    }
+
+    private fun dispatchMediaKey(keyCode: Int) {
+        val audio = appContext?.getSystemService(AudioManager::class.java) ?: return
+        runCatching {
+            audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
         }
     }
 
@@ -119,7 +167,13 @@ object MediaRepository {
                 manager = manager,
                 scope = this,
                 publishState = { trySend(it) },
-                onController = { controller = it },
+                onController = { shown ->
+                    controller = shown
+                    if (shown != null) {
+                        lastActiveApp = MusicApp.of(shown.packageName) ?: lastActiveApp
+                        resumeFallback?.cancel()
+                    }
+                },
             )
             watcher.connect()
             val recheckJob = launch { rechecks.collect { watcher.connect() } }
@@ -142,6 +196,9 @@ object MediaRepository {
             .readTimeout(5, TimeUnit.SECONDS)
             .build()
     }
+
+    /** How long a play with no session waits for a player before opening a music app. */
+    private const val RESUME_FALLBACK_MS = 3_000L
 }
 
 /**
