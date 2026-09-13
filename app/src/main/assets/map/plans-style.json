@@ -289,6 +289,106 @@
       }
     },
     {
+      "id": "place-builtup",
+      "type": "circle",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 10,
+      "maxzoom": 15,
+      "filter": [
+        "all",
+        [
+          "match",
+          [
+            "geometry-type"
+          ],
+          [
+            "Point",
+            "MultiPoint"
+          ],
+          true,
+          false
+        ],
+        [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          [
+            "town",
+            "village",
+            "hamlet"
+          ],
+          true,
+          false
+        ]
+      ],
+      "paint": {
+        "circle-color": "@urban",
+        "circle-radius": [
+          "interpolate",
+          [
+            "exponential",
+            2
+          ],
+          [
+            "zoom"
+          ],
+          10,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "town",
+            12,
+            "village",
+            6,
+            2.4
+          ],
+          15,
+          [
+            "*",
+            [
+              "match",
+              [
+                "get",
+                "class"
+              ],
+              "town",
+              12,
+              "village",
+              6,
+              2.4
+            ],
+            32
+          ]
+        ],
+        "circle-blur": 1,
+        "circle-opacity": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          10,
+          0.6,
+          12,
+          0.85,
+          14,
+          0.85,
+          15,
+          0
+        ],
+        "circle-pitch-alignment": "map",
+        "circle-pitch-scale": "map"
+      }
+    },
+    {
       "id": "building-halo",
       "type": "line",
       "source": "openmaptiles",
@@ -309,9 +409,9 @@
             "zoom"
           ],
           13,
-          4,
+          6,
           18,
-          128
+          192
         ],
         "line-blur": [
           "interpolate",
@@ -323,9 +423,9 @@
             "zoom"
           ],
           13,
-          2,
+          1.5,
           18,
-          64
+          48
         ],
         "line-opacity": [
           "interpolate",
