@@ -869,6 +869,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 ) <= AHEAD_CONE_DEG
             }
             .sortedBy { it.second }
+            // Never shown before the alert distance, whatever the category's impact zone.
+            .filter { (_, distance) -> distance <= ALERT_DISTANCE_M }
             // Each category has its own impact zone: an accident is worth knowing 2 km
             // ahead, a camera only at 300 m.
             // Worth an alert when the full score — time, crowd, road, direction and
@@ -979,7 +981,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val DRIVE_MIN_SPEED_MS = 1.5f
         const val DRIVE_MAX_GAP_S = 10.0
         const val DRIVE_FLUSH_MS = 60_000L
-        const val ALERT_DISTANCE_M = 1500.0
+        /** How far ahead a radar or a report shows as an alert. */
+        const val ALERT_DISTANCE_M = 700.0
         // The VMA sign shows while a speed radar is the active alert ahead. (Road-wide
         // limits everywhere need an OSM maxspeed source — planned separately.)
         const val LIMIT_DISTANCE_M = 1000.0

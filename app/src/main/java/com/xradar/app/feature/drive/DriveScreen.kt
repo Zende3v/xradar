@@ -306,7 +306,7 @@ fun DriveScreen(
                         tint = Color.Unspecified, // the asset carries its own colours
                         background = colors.surface.copy(alpha = 0.62f),
                         border = BorderStroke(1.dp, colors.border),
-                        size = 48.dp,
+                        size = MAP_CONTROL_SIZE,
                     )
                 }
                 // Music: opens the mini-player under the search bar; a second tap closes it.
@@ -314,10 +314,10 @@ fun DriveScreen(
                     icon = ImageVector.vectorResource(R.drawable.ic_music),
                     contentDescription = if (state.musicOpen) "Fermer la musique" else "Musique",
                     onClick = { onMusic(MusicAction.ToggleBanner) },
-                    tint = if (state.musicOpen) colors.accent else colors.textPrimary,
+                    tint = colors.textPrimary,
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),
-                    size = 48.dp,
+                    size = MAP_CONTROL_SIZE,
                 )
                 // Primary crowdsourcing action: signal something on the road.
                 XRadarIconButton(
@@ -327,7 +327,7 @@ fun DriveScreen(
                     tint = colors.hazard,
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),
-                    size = 56.dp,
+                    size = MAP_CONTROL_SIZE,
                 )
             }
         }
@@ -494,6 +494,9 @@ private fun DeleteConfirm(onCancel: () -> Unit, onConfirm: () -> Unit) {
 }
 
 private enum class TopMode { Search, Guidance, None }
+
+/** Recenter, music and report share one size: the report button's. */
+private val MAP_CONTROL_SIZE = 56.dp
 
 @Composable
 private fun HudSearchBar(onClick: () -> Unit, modifier: Modifier = Modifier) {

@@ -378,7 +378,7 @@ private fun OptionsCard(open: Float, onClick: () -> Unit) {
                 size = 16.dp,
             )
             Spacer(Modifier.height(2.dp))
-            XRadarIcon(XRadarIcons.Settings, contentDescription = null, tint = colors.accent, size = 20.dp)
+            XRadarIcon(XRadarIcons.Settings, contentDescription = null, tint = colors.textSecondary, size = 20.dp)
             XRadarText(
                 "Options",
                 style = XRadarTheme.typography.caption,
