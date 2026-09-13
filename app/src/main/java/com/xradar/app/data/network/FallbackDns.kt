@@ -114,8 +114,10 @@ object FallbackDns : Dns {
     private const val MIN_TTL_S = 60L
     private const val MAX_TTL_S = 3_600L
 
-    private val ANSWER_SECTION = Regex(""""Answer"\s*:\s*\[(.*?)]""", RegexOption.DOT_MATCHES_ALL)
-    private val RECORD = Regex("""\{[^{}]*}""")
+    // Every brace and bracket is escaped: Android's ICU regex engine rejects a bare `}` or `]`
+    // that the desktop JVM accepts.
+    private val ANSWER_SECTION = Regex(""""Answer"\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
+    private val RECORD = Regex("""\{[^\{\}]*\}""")
     private val TYPE = Regex(""""type"\s*:\s*(\d+)""")
     private val TTL = Regex(""""TTL"\s*:\s*(\d+)""")
     private val DATA = Regex(""""data"\s*:\s*"([^"]+)""")
