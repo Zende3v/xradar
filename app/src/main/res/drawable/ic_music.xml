@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- music.svg. Stroke icon: the component tint colours it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group>
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M 12.5 8.89001 V 18.5 M 12.5 8.89001 V 5.57656 C 12.5 5.36922 12.5 5.26554 12.5347 5.17733 C 12.5653 5.09943 12.615 5.03047 12.6792 4.97678 C 12.752 4.91597 12.8503 4.88318 13.047 4.81761 L 17.447 3.35095 C 17.8025 3.23245 17.9803 3.17319 18.1218 3.20872 C 18.2456 3.23982 18.3529 3.31713 18.4216 3.42479 C 18.5 3.54779 18.5 3.73516 18.5 4.10989 V 7.42335 C 18.5 7.63069 18.5 7.73436 18.4653 7.82258 C 18.4347 7.90048 18.385 7.96943 18.3208 8.02313 C 18.248 8.08394 18.1497 8.11672 17.953 8.18229 L 13.553 9.64896 C 13.1975 9.76746 13.0197 9.82671 12.8782 9.79119 C 12.7544 9.76009 12.6471 9.68278 12.5784 9.57512 C 12.5 9.45212 12.5 9.26475 12.5 8.89001 Z M 12.5 18.5 C 12.5 19.8807 10.933 21 9 21 C 7.067 21 5.5 19.8807 5.5 18.5 C 5.5 17.1192 7.067 16 9 16 C 10.933 16 12.5 17.1192 12.5 18.5 Z" />
+    </group>
+</vector>
