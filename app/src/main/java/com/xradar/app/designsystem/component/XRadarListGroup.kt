@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.xradar.app.designsystem.theme.XRadarTheme
@@ -19,6 +21,10 @@ import com.xradar.app.designsystem.theme.XRadarTheme
 fun XRadarListGroup(
     modifier: Modifier = Modifier,
     title: String? = null,
+    /** Override on a translucent parent, where an opaque card reads as a grey slab. */
+    color: Color = XRadarTheme.colors.surfaceElevated,
+    /** Drop to zero on a see-through parent: a shadow under it leaves a pale block. */
+    shadowElevation: Dp = XRadarTheme.elevation.level1,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val spacing = XRadarTheme.spacing
@@ -35,7 +41,8 @@ fun XRadarListGroup(
             )
         }
         XRadarCard(
-            shadowElevation = XRadarTheme.elevation.level1,
+            color = color,
+            shadowElevation = shadowElevation,
             contentPadding = PaddingValues(0.dp),
             content = content,
         )

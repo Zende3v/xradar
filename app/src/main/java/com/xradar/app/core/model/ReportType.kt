@@ -13,20 +13,46 @@ enum class ReportType(
     val needsStreet: Boolean = false,
     val needsPlate: Boolean = false,
 ) {
-    // Admin only: a radar car, reported by plate → aggregated into a probable zone.
-    VoitureRadar("voiture_radar", "Voiture-radar", AlertType.RadarCar, Role.Admin, needsPlate = true),
-    // Members + admins: a camera, with the precise street and side.
-    Camera("camera", "Caméra", AlertType.Camera, Role.Client, needsStreet = true),
-    // Everyone:
+    VoitureRadar("voiture_radar", "Voiture radar", AlertType.RadarCar, Role.Client, needsPlate = true),
+    Camera("camera", "Caméra", AlertType.Camera, Role.Admin),
+    Hazard("hazard", "Danger", AlertType.Hazard, Role.Guest),
+
     RadarMobile("radar_mobile", "Radar mobile", AlertType.RadarMobile, Role.Guest),
     ControlZone("control_zone", "Zone de contrôle", AlertType.ControlZone, Role.Guest),
+    StoppedVehicle("stopped_vehicle", "Véhicule arrêté", AlertType.Hazard, Role.Guest),
     Accident("accident", "Accident", AlertType.Accident, Role.Guest),
-    Hazard("hazard", "Danger", AlertType.Hazard, Role.Guest);
+    ObjectOnRoad("object_on_road", "Objet sur la voie", AlertType.Hazard, Role.Guest),
+    TrafficJam("traffic_jam", "Bouchon", AlertType.Hazard, Role.Guest),
+    DamagedRoad("damaged_road", "Chaussée dégradée", AlertType.Hazard, Role.Guest),
+    Roadworks("roadworks", "Travaux", AlertType.Roadwork, Role.Guest),
+    SlipperyRoad("slippery_road", "Route glissante", AlertType.Hazard, Role.Guest),
+    LowVisibility("low_visibility", "Visibilité réduite", AlertType.Hazard, Role.Guest),
+    RoadCrew("road_crew", "Personnel autoroutier", AlertType.Roadwork, Role.Guest),
+    WrongWay("wrong_way", "Véhicule à contresens", AlertType.Hazard, Role.Guest);
 
     /** Can an account with [role] create this report type? */
     fun allowedFor(role: Role): Boolean = role.ordinal >= minRole.ordinal
 
     companion object {
         fun fromWire(value: String?): ReportType? = entries.firstOrNull { it.wire == value }
+
+        /** What the report sheet offers, in the order it is shown (6 per page). */
+        val PICKER: List<ReportType> = listOf(
+            RadarMobile,
+            ControlZone,
+            VoitureRadar,
+            StoppedVehicle,
+            Accident,
+            ObjectOnRoad,
+            TrafficJam,
+            DamagedRoad,
+            Roadworks,
+            SlipperyRoad,
+            LowVisibility,
+            RoadCrew,
+            WrongWay,
+            // Admin only, so it lands at the end of the last page.
+            Camera,
+        )
     }
 }

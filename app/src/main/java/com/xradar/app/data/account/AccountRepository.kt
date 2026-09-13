@@ -70,8 +70,26 @@ object AccountRepository {
     suspend fun claimGuest(username: String): AuthOutcome =
         api.claimGuest(ensureDeviceIdOrEmpty(), username).also(::applyOutcome)
 
-    suspend fun register(email: String, password: String, username: String): AuthOutcome =
-        api.register(email, password, username).also(::applyOutcome)
+    suspend fun register(email: String, password: String, username: String, referralCode: String? = null): AuthOutcome =
+        api.register(email, password, username, referralCode).also(::applyOutcome)
+
+    suspend fun stats(): AccountStats? = token?.let { api.stats(it) }
+
+    suspend fun postTrip(trip: com.xradar.app.core.model.TripRecord): Boolean =
+        token?.let { api.postTrip(it, trip) } ?: false
+
+    suspend fun postDrive(seconds: Int, meters: Int): Boolean =
+        token?.let { api.postDrive(it, seconds, meters) } ?: false
+
+    suspend fun referrals(): List<ReferralCode> = token?.let { api.referrals(it) } ?: emptyList()
+
+    suspend fun createReferral(): ReferralCode? = token?.let { api.createReferral(it) }
+
+    /** Re-read the account (access status can change: trial ending, referral…). */
+    suspend fun reload() {
+        val t = token ?: return
+        api.me(t)?.let { store(it, t) }
+    }
 
     suspend fun login(email: String, password: String): AuthOutcome =
         api.login(email, password).also(::applyOutcome)
@@ -84,6 +102,22 @@ object AccountRepository {
     suspend fun uploadAvatar(dataUrl: String): AuthOutcome {
         val t = token ?: return AuthOutcome.Failure("Non connecté")
         return api.uploadAvatar(t, dataUrl).also(::applyOutcome)
+    }
+
+    suspend fun forgot(email: String) = api.forgot(email)
+
+    suspend fun resetPassword(email: String, code: String, password: String): String? =
+        api.resetPassword(email, code, password)
+
+    suspend fun verifyEmail(code: String): String? {
+        val email = _account.value?.email ?: return "Aucun email"
+        val err = api.verify(email, code)
+        if (err == null) token?.let { t -> api.me(t)?.let { store(it, t) } } // refresh emailVerified
+        return err
+    }
+
+    suspend fun resendVerify() {
+        _account.value?.email?.let { api.resendVerify(it) }
     }
 
     fun logout() {
@@ -120,6 +154,11 @@ object AccountRepository {
         put("avatarUrl", a.avatarUrl)
         put("email", a.email)
         put("banned", a.banned)
+        put("emailVerified", a.emailVerified)
+        put("access", a.access.name.lowercase())
+        put("canNavigate", a.canNavigate)
+        put("accessEndsAt", a.accessEndsAt)
+        put("trust", a.trust)
     }
 
     private fun accountFromJson(o: JSONObject) = Account(
@@ -130,6 +169,11 @@ object AccountRepository {
         avatarUrl = o.optString("avatarUrl").ifBlank { null }.takeUnless { o.isNull("avatarUrl") },
         email = o.optString("email").ifBlank { null }.takeUnless { o.isNull("email") },
         banned = o.optBoolean("banned"),
+        emailVerified = o.optBoolean("emailVerified"),
+        access = com.xradar.app.core.model.Access.fromWire(o.optString("access")),
+        canNavigate = if (o.has("canNavigate")) o.optBoolean("canNavigate") else true,
+        accessEndsAt = o.optString("accessEndsAt").ifBlank { null }.takeUnless { o.isNull("accessEndsAt") },
+        trust = o.optDouble("trust", 2.5),
     )
 
     private const val KEY_DEVICE = "device_id"

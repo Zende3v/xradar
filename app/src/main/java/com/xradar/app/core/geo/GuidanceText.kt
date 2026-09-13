@@ -99,14 +99,16 @@ object GuidanceText {
         else -> "$meters m"
     }
 
-    /** Distance as spoken French ("250 mètres", "1,2 kilomètre"). */
+    /** Distance as spoken French ("250 mètres", "1,2 kilomètre", "2 kilomètres"). */
     fun spokenDistance(meters: Int): String = when {
         meters >= 1000 -> {
             val km = meters / 1000.0
-            if (km >= 10) "${km.roundToInt()} kilomètres"
-            else {
-                val s = "%.1f".format(km).replace('.', ',')
-                "$s kilomètre" + if (km >= 2) "s" else ""
+            val tenths = (km * 10).roundToInt()
+            when {
+                km >= 10 -> "${km.roundToInt()} kilomètres"
+                // "1,0 kilomètre" reads badly out loud — say "1 kilomètre".
+                tenths % 10 == 0 -> "${tenths / 10} kilomètre" + if (tenths >= 20) "s" else ""
+                else -> "%.1f".format(km).replace('.', ',') + " kilomètre" + if (km >= 2) "s" else ""
             }
         }
         else -> "${((meters + 25) / 50).coerceAtLeast(1) * 50} mètres"

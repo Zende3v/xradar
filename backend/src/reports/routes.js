@@ -32,6 +32,9 @@ reportRouter.post('/', (req, res) => {
   const lon = Number(req.body?.lon);
   const account = authAccount(req); // Bearer token (preferred) or deviceId fallback
   if (account?.banned) return res.status(403).json({ error: 'banned' });
+  if (account && !accountStore.accessFor(account).canNavigate) {
+    return res.status(403).json({ error: 'subscription required' });
+  }
 
   const minRole = config.reportMinRole[type];
   if (!minRole) return res.status(400).json({ error: 'unknown report type' });
@@ -43,14 +46,27 @@ reportRouter.post('/', (req, res) => {
   const plate = req.body?.plate ? String(req.body.plate).trim() : null;
   const street = req.body?.street ? String(req.body.street).trim() : null;
   const side = req.body?.side === 'left' || req.body?.side === 'right' ? req.body.side : null;
-  if (type === 'voiture_radar' && !plate) return res.status(400).json({ error: 'plate is required' });
-  if (type === 'camera' && !street) return res.status(400).json({ error: 'street is required' });
+  // Which way the reporter was facing, and their course — both optional.
+  const direction = req.body?.direction === 'opposite' ? 'opposite' : 'same';
+  const bearing = Number(req.body?.bearing);
 
-  const report = reportStore.add({ type, lat, lon, reporterRole: role, plate, street, side });
+  const report = reportStore.add({
+    type,
+    lat,
+    lon,
+    reporterId: account?.id ?? null,
+    reporterRole: role,
+    plate,
+    street,
+    side,
+    direction,
+    bearing: Number.isFinite(bearing) ? bearing : null,
+  });
   if (!report) {
     return res.status(400).json({ error: 'type (valid), lat and lon are required' });
   }
-  const { plate: _p, ...pub } = report; // never echo the plate back
+  if (account) accountStore.recordReportStat(account.id, 'reportsDeclared');
+  const { plate: _p, reporterId: _r, ...pub } = report; // never echo the plate or author
   res.status(201).json({ report: pub });
 });
 
@@ -78,7 +94,10 @@ reportRouter.get('/near', (req, res) => {
 reportRouter.post('/:id/confirm', (req, res) => {
   const r = reportStore.confirm(req.params.id);
   if (!r) return res.status(404).json({ error: 'report not found' });
-  res.json({ report: r });
+  // The first confirmation is what makes it a "really confirmed" report for its author.
+  if (r.confirmations === 1 && r.reporterId) accountStore.recordReportStat(r.reporterId, 'reportsConfirmed');
+  const { plate: _p, reporterId: _r, ...pub } = r;
+  res.json({ report: pub });
 });
 
 /** POST /api/reports/:id/deny — "plus là". */

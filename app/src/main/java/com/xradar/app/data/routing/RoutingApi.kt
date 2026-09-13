@@ -19,10 +19,20 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    suspend fun route(from: GeoPoint, to: GeoPoint): Route? = withContext(Dispatchers.IO) {
+    /** [avoid] holds "tolls" and/or "highways"; the backend maps them to ORS features. */
+    suspend fun route(
+        from: GeoPoint,
+        to: GeoPoint,
+        avoid: List<String> = emptyList(),
+    ): Route? = withContext(Dispatchers.IO) {
         val url = "${baseUrl.trimEnd('/')}/api/route" +
-            "?from=${from.lat},${from.lon}&to=${to.lat},${to.lon}"
-        client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            "?from=${from.lat},${from.lon}&to=${to.lat},${to.lon}" +
+            if (avoid.isEmpty()) "" else "&avoid=${avoid.joinToString(",")}"
+        // The backend refuses routing to a restricted account — it needs to know who asks.
+        val request = Request.Builder().url(url).apply {
+            com.xradar.app.data.account.AccountRepository.token?.let { header("Authorization", "Bearer $it") }
+        }.build()
+        client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return@use null
             val body = response.body?.string() ?: return@use null
             parse(body)

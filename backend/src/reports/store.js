@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { config } from '../config.js';
 import { haversine } from '../radars/geo.js';
 
-const VALID_TYPES = new Set(Object.keys(config.reportTtlMs));
+const VALID_TYPES = new Set(Object.keys(config.reportScore));
 
 /**
  * Crowdsourced report store. Kept in memory for fast reads, persisted to a JSON
@@ -69,26 +69,31 @@ class ReportStore {
     return dropped;
   }
 
-  add({ type, lat, lon, reporterRole = 'guest', plate = null, street = null, side = null }) {
+  add({ type, lat, lon, reporterId = null, reporterRole = 'guest', plate = null, street = null, side = null, direction = 'same', bearing = null }) {
     if (!VALID_TYPES.has(type)) return null;
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
     const now = Date.now();
-    const baseTtl = config.reportTtlMs[type] ?? config.reportDefaultTtlMs;
-    // Admin reports are fully trusted: max confidence + a longer life.
-    const trusted = reporterRole === 'admin';
-    // Radar cars move — never extend their life even for admins.
-    const ttl = trusted && type !== 'voiture_radar' ? baseTtl * 2 : baseTtl;
     const report = {
       id: randomUUID(),
       type,
       lat,
       lon,
       createdAt: now,
-      expiresAt: now + ttl,
-      confirms: trusted ? 5 : 0,
-      denials: 0,
-      trusted,
+      // Scoring state: the age decays the score, the two counters scale it.
+      // Guests and members count the same; only an admin is special (persistent
+      // reports are theirs to remove).
+      confirmations: 0,
+      contradictions: 0,
+      // How many people reported it (the first one, plus every confirmation).
+      reporters: 1,
+      // Who filed it — kept server-side for the author's statistics, never served.
+      reporterId,
       reporterRole,
+      expiresAt: expiryFor(type, now, 0, 0),
+      // Which side of the road it is on, from the reporter's point of view.
+      direction: direction === 'opposite' ? 'opposite' : 'same',
+      // Course of the reporter when they sent it: gives the report its orientation.
+      bearing: Number.isFinite(bearing) ? bearing : null,
       // Extra fields (only kept where relevant). Plate stays server-side.
       plate: type === 'voiture_radar' ? plate : null,
       street: type === 'camera' ? street : null,
@@ -99,21 +104,30 @@ class ReportStore {
     return report;
   }
 
+  /**
+   * Somebody still sees it. This does not rewind the clock — it raises the score
+   * through the confirmation bonus, so a stream of confirmations keeps an event alive
+   * without ever making it immortal.
+   */
   confirm(id) {
     const r = this.reports.get(id);
     if (!r) return null;
-    r.confirms++;
-    r.expiresAt = Math.min(r.expiresAt + config.reportConfirmExtendMs, Date.now() + maxTtl(r.type));
+    r.confirmations = (r.confirmations || 0) + 1;
+    r.reporters = (r.reporters || 1) + 1;
+    r.expiresAt = expiryFor(r.type, r.createdAt, r.confirmations, r.contradictions || 0);
     this.scheduleSave();
     return r;
   }
 
+  /** Nobody sees it any more: the contradiction penalty pulls the score down. */
   deny(id) {
     const r = this.reports.get(id);
     if (!r) return null;
-    r.denials++;
-    r.expiresAt -= config.reportDenyShortenMs;
-    if (r.denials - r.confirms >= config.reportDropScore || r.expiresAt <= Date.now()) {
+    const now = Date.now();
+    r.contradictions = (r.contradictions || 0) + 1;
+    r.expiresAt = expiryFor(r.type, r.createdAt, r.confirmations || 0, r.contradictions);
+    // A fixed camera is only ever removed by an admin, whatever the crowd says.
+    if (!scoreModel(r.type).persistent && intrinsicScore(r, now) < config.reportScoreMinimum) {
       this.reports.delete(id);
       this.scheduleSave();
       return { removed: true, id };
@@ -133,12 +147,22 @@ class ReportStore {
     this.prune();
     const out = [];
     for (const r of this.reports.values()) {
-      // Radar cars are served as aggregated zones, not individual points.
-      if (r.type === 'voiture_radar') continue;
+      // Radar cars reported with a plate become probability zones; without one they
+      // are just a point like any other report.
+      if (r.type === 'voiture_radar' && r.plate) continue;
       const distanceM = haversine(lat, lon, r.lat, r.lon);
       if (distanceM <= radiusM) {
-        const { plate, ...pub } = r; // never expose plates
-        out.push({ ...pub, distanceM: Math.round(distanceM) });
+        const { plate, reporterId, ...pub } = r; // never expose plates or authors
+        const model = scoreModel(r.type);
+        out.push({
+          ...pub,
+          distanceM: Math.round(distanceM),
+          // Intrinsic score: time + crowd. The app multiplies it by the road,
+          // direction and distance factors, which depend on the driver asking.
+          score: Math.round(intrinsicScore(r, Date.now())),
+          impactM: model.impactM,
+          persistent: model.persistent === true,
+        });
       }
     }
     out.sort((a, b) => a.distanceM - b.distanceM);
@@ -164,7 +188,7 @@ class ReportStore {
       let wLat = 0, wLon = 0, wSum = 0;
       for (const r of reports) {
         // Recent reports weigh more (linear decay over the report's lifetime).
-        const w = Math.max(0.15, 1 - (now - r.createdAt) / (r.expiresAt - r.createdAt));
+        const w = Math.max(0.15, 1 - (now - r.createdAt) / Math.max(1, r.expiresAt - r.createdAt));
         wLat += r.lat * w; wLon += r.lon * w; wSum += w;
       }
       const cLat = wLat / wSum;
@@ -193,9 +217,46 @@ class ReportStore {
   }
 }
 
-function maxTtl(type) {
-  // Cap how far confirmations can push a report so it can't live forever.
-  return (config.reportTtlMs[type] ?? config.reportDefaultTtlMs) * 2;
+function scoreModel(type) {
+  return config.reportScore[type] ?? config.reportScore.hazard;
+}
+
+/** min(1 + 0.10 × √confirmations, 1.40). */
+function confirmationBonus(confirmations) {
+  return Math.min(1 + config.reportConfirmStep * Math.sqrt(confirmations || 0), config.reportConfirmCap);
+}
+
+/** 1 / (1 + 0.25 × √contradictions). */
+function contradictionPenalty(contradictions) {
+  return 1 / (1 + config.reportContradictionStep * Math.sqrt(contradictions || 0));
+}
+
+/**
+ * factors × exp(-(k × age) / baseDuration) with k = ln(factors / minimum), so the
+ * score is exactly the minimum when age reaches the base duration.
+ */
+function timeScore(type, ageMs) {
+  const model = scoreModel(type);
+  if (model.persistent || model.baseDurationMs == null) return model.factors;
+  const k = Math.log(model.factors / config.reportScoreMinimum);
+  return model.factors * Math.exp(-(k * Math.max(0, ageMs)) / model.baseDurationMs);
+}
+
+/** What the report is worth in itself: time, confirmations, contradictions. */
+function intrinsicScore(r, now) {
+  const age = now - (r.createdAt ?? now);
+  return timeScore(r.type, age) * confirmationBonus(r.confirmations) * contradictionPenalty(r.contradictions);
+}
+
+/** When the intrinsic score will cross the minimum — that is the report's death. */
+function expiryFor(type, createdAt, confirmations, contradictions) {
+  const model = scoreModel(type);
+  if (model.persistent || model.baseDurationMs == null) return createdAt + config.reportPermanentMs;
+  const crowd = confirmationBonus(confirmations) * contradictionPenalty(contradictions);
+  const ratio = (model.factors * crowd) / config.reportScoreMinimum;
+  if (!(ratio > 1)) return createdAt; // already worthless
+  const k = Math.log(model.factors / config.reportScoreMinimum);
+  return createdAt + (model.baseDurationMs * Math.log(ratio)) / k;
 }
 
 /** Opaque, stable id for a plate — the plate itself never leaves the server. */

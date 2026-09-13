@@ -5,7 +5,8 @@
  * Manages guest/client/admin accounts through the backend's admin API.
  * Config via env (or a .env you `source`):
  *   X_RADAR_URL          backend base URL   (default http://127.0.0.1:8090)
- *   X_RADAR_ADMIN_TOKEN  must match the backend's ADMIN_TOKEN
+ *   X_RADAR_ADMIN_TOKEN  must match the backend's ADMIN_TOKEN — when it is not set,
+ *                        the token is read straight from the running systemd service.
  *
  * Usage:
  *   xradar-accounts list [guest|client|admin]
@@ -15,14 +16,44 @@
  *   xradar-accounts del <id>
  */
 
+import { execFileSync } from 'node:child_process';
+
 const BASE = (process.env.X_RADAR_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
-const TOKEN = process.env.X_RADAR_ADMIN_TOKEN || '';
+const TOKEN = process.env.X_RADAR_ADMIN_TOKEN || tokenFromService();
 const ROLES = ['guest', 'client', 'admin'];
+
+/**
+ * The backend already knows the token: it is in the systemd unit (or its drop-in).
+ * Rather than making you export it by hand, ask systemd. Silent no-op off a systemd
+ * host, or when the unit is not there — the caller then reports the missing token.
+ */
+function tokenFromService() {
+  const unit = process.env.X_RADAR_SERVICE || 'xradar-backend';
+  try {
+    const raw = execFileSync(
+      'systemctl',
+      ['show', unit, '--property=Environment', '--value'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    // systemd quotes values containing spaces: ADMIN_TOKEN=abc "SMTP_PASS=x y z"
+    const match = raw.match(/(?:^|\s)"?ADMIN_TOKEN=([^"\s]+)"?/);
+    return match ? match[1] : '';
+  } catch {
+    return '';
+  }
+}
 
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') return usage();
-  if (!TOKEN) fail('X_RADAR_ADMIN_TOKEN is not set (must match the backend ADMIN_TOKEN).');
+  if (!TOKEN) {
+    fail(
+      'jeton admin introuvable.\n' +
+      "  Le service tourne ? `systemctl is-active xradar-backend`\n" +
+      '  Sinon, exporte-le à la main :\n' +
+      '    export X_RADAR_ADMIN_TOKEN=<le même que ADMIN_TOKEN du backend>',
+    );
+  }
 
   switch (cmd) {
     case 'list': return list(rest[0]);

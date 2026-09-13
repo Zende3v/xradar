@@ -1,8 +1,11 @@
 package com.xradar.app.data.account
 
 import com.xradar.app.BuildConfig
+import com.xradar.app.core.model.Access
 import com.xradar.app.core.model.Account
 import com.xradar.app.core.model.Role
+import com.xradar.app.core.model.TripRecord
+import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -14,6 +17,26 @@ import java.util.concurrent.TimeUnit
 
 /** An account plus its session token (null token when unauthenticated). */
 data class AuthResult(val account: Account, val token: String?)
+
+/** Server-side statistics of the signed-in account. */
+data class AccountStats(
+    val tripCount: Int = 0,
+    val distanceMeters: Long = 0,
+    val driveSeconds: Long = 0,
+    val alertsTraversed: Int = 0,
+    val reportsDeclared: Int = 0,
+    val reportsConfirmed: Int = 0,
+    val trust: Double = 2.5,
+    val trips: List<TripRecord> = emptyList(),
+)
+
+/** A referral code an admin minted, and how many accounts used it. */
+data class ReferralCode(
+    val code: String,
+    val createdAt: String,
+    val months: Int,
+    val redemptions: Int,
+)
 
 /** Result of a network auth call: success, or a human error message. */
 sealed interface AuthOutcome {
@@ -49,9 +72,109 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         outcome("/api/accounts/guest", JSONObject().put("deviceId", deviceId).put("username", username).put("platform", "android"))
     }
 
-    suspend fun register(email: String, password: String, username: String): AuthOutcome = withContext(Dispatchers.IO) {
-        outcome("/api/accounts/register", JSONObject().put("email", email).put("password", password).put("username", username))
+    suspend fun register(email: String, password: String, username: String, referralCode: String?): AuthOutcome =
+        withContext(Dispatchers.IO) {
+            val payload = JSONObject().put("email", email).put("password", password).put("username", username)
+            if (!referralCode.isNullOrBlank()) payload.put("referralCode", referralCode.trim())
+            outcome("/api/accounts/register", payload)
+        }
+
+    // ---- Statistics ---------------------------------------------------------
+
+    suspend fun stats(token: String): AccountStats? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/me/stats")).header("Authorization", "Bearer $token").build()
+        runCatching {
+            client.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                parseStats(JSONObject(r.body?.string() ?: ""))
+            }
+        }.getOrNull()
     }
+
+    suspend fun postTrip(token: String, trip: TripRecord): Boolean = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("id", trip.id)
+            .put("startedAt", trip.startedAt)
+            .put("fromLabel", trip.fromLabel)
+            .put("toLabel", trip.toLabel)
+            .put("distanceMeters", trip.distanceMeters)
+            .put("durationSeconds", trip.durationSeconds)
+            .put("alertsCount", trip.alertsCount)
+            .put("topSpeedKmh", trip.topSpeedKmh)
+        authedPost(token, "/api/accounts/me/trips", body)
+    }
+
+    suspend fun postDrive(token: String, seconds: Int, meters: Int): Boolean = withContext(Dispatchers.IO) {
+        authedPost(token, "/api/accounts/me/drive", JSONObject().put("seconds", seconds).put("meters", meters))
+    }
+
+    // ---- Referral codes (admins) --------------------------------------------
+
+    suspend fun referrals(token: String): List<ReferralCode> = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/referrals")).header("Authorization", "Bearer $token").build()
+        runCatching {
+            client.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@use emptyList()
+                val arr = JSONObject(r.body?.string() ?: "").optJSONArray("referrals") ?: return@use emptyList()
+                (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(::parseReferral) }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun createReferral(token: String): ReferralCode? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/referrals"))
+            .header("Authorization", "Bearer $token")
+            .post("{}".toRequestBody(JSON))
+            .build()
+        runCatching {
+            client.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                JSONObject(r.body?.string() ?: "").optJSONObject("referral")?.let(::parseReferral)
+            }
+        }.getOrNull()
+    }
+
+    private fun authedPost(token: String, path: String, body: JSONObject): Boolean = runCatching {
+        val req = Request.Builder().url(url(path))
+            .header("Authorization", "Bearer $token")
+            .post(body.toString().toRequestBody(JSON))
+            .build()
+        client.newCall(req).execute().use { it.isSuccessful }
+    }.getOrDefault(false)
+
+    private fun parseStats(o: JSONObject): AccountStats {
+        val t = o.optJSONObject("totals") ?: JSONObject()
+        val trips = o.optJSONArray("trips") ?: JSONArray()
+        return AccountStats(
+            tripCount = t.optInt("tripCount"),
+            distanceMeters = t.optLong("distanceMeters"),
+            driveSeconds = t.optLong("driveDurationSeconds"),
+            alertsTraversed = t.optInt("alertsTraversed"),
+            reportsDeclared = t.optInt("reportsDeclared"),
+            reportsConfirmed = t.optInt("reportsConfirmed"),
+            trust = o.optDouble("trust", 2.5),
+            trips = (0 until trips.length()).mapNotNull { i ->
+                val x = trips.optJSONObject(i) ?: return@mapNotNull null
+                TripRecord(
+                    id = x.optString("id"),
+                    startedAt = x.optLong("startedAt"),
+                    fromLabel = x.optString("fromLabel"),
+                    toLabel = x.optString("toLabel"),
+                    distanceMeters = x.optInt("distanceMeters"),
+                    durationSeconds = x.optInt("durationSeconds"),
+                    alertsCount = x.optInt("alertsCount"),
+                    topSpeedKmh = x.optInt("topSpeedKmh"),
+                )
+            },
+        )
+    }
+
+    private fun parseReferral(o: JSONObject) = ReferralCode(
+        code = o.optString("code"),
+        createdAt = o.optString("createdAt"),
+        months = o.optInt("months", 6),
+        redemptions = o.optInt("redemptions"),
+    )
 
     suspend fun login(email: String, password: String): AuthOutcome = withContext(Dispatchers.IO) {
         outcome("/api/accounts/login", JSONObject().put("email", email).put("password", password))
@@ -127,7 +250,41 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         avatarUrl = o.optString("avatarUrl").ifBlank { null }.takeUnless { o.isNull("avatarUrl") },
         email = o.optString("email").ifBlank { null }.takeUnless { o.isNull("email") },
         banned = o.optBoolean("banned"),
+        emailVerified = o.optBoolean("emailVerified"),
+        access = Access.fromWire(o.optString("access")),
+        canNavigate = if (o.has("canNavigate")) o.optBoolean("canNavigate") else true,
+        accessEndsAt = o.optString("accessEndsAt").ifBlank { null }.takeUnless { o.isNull("accessEndsAt") },
+        trust = o.optDouble("trust", 2.5),
     )
+
+    /** POST returning {ok}/{error}: null on success, else a friendly message. */
+    private fun postSimple(path: String, payload: JSONObject): String? = try {
+        val req = Request.Builder().url(url(path)).post(payload.toString().toRequestBody(JSON)).build()
+        client.newCall(req).execute().use { r ->
+            if (r.isSuccessful) null else friendly(errorRaw(r.body?.string()))
+        }
+    } catch (e: Exception) {
+        "Réseau indisponible"
+    }
+
+    private fun errorRaw(body: String?): String =
+        runCatching { JSONObject(body ?: "").optString("error").ifBlank { "Erreur" } }.getOrDefault("Erreur")
+
+    suspend fun forgot(email: String): Unit = withContext(Dispatchers.IO) {
+        postSimple("/api/accounts/forgot", JSONObject().put("email", email)); Unit
+    }
+
+    suspend fun resetPassword(email: String, code: String, password: String): String? = withContext(Dispatchers.IO) {
+        postSimple("/api/accounts/reset", JSONObject().put("email", email).put("code", code).put("password", password))
+    }
+
+    suspend fun verify(email: String, code: String): String? = withContext(Dispatchers.IO) {
+        postSimple("/api/accounts/verify", JSONObject().put("email", email).put("code", code))
+    }
+
+    suspend fun resendVerify(email: String): Unit = withContext(Dispatchers.IO) {
+        postSimple("/api/accounts/resend-verify", JSONObject().put("email", email)); Unit
+    }
 
     private fun errorMessage(body: String): String = runCatching {
         JSONObject(body).optString("error").ifBlank { "Erreur" }
@@ -141,6 +298,8 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         err.contains("password too short") -> "Mot de passe trop court (8 caractères min)."
         err.contains("invalid credentials") -> "Email ou mot de passe incorrect."
         err.contains("banned") -> "Ce compte est banni."
+        err.contains("invalid referral") -> "Code de parrainage invalide."
+        err.contains("subscription required") -> "Abonnement requis."
         else -> err.replaceFirstChar { it.uppercase() }
     }
 

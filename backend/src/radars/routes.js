@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { config } from '../config.js';
-import { inBbox, near } from './geo.js';
+import { alongRoute, inBbox, near } from './geo.js';
 import { radarStore } from './store.js';
 
 export const radarRouter = Router();
@@ -44,6 +44,21 @@ radarRouter.get('/bbox', (req, res) => {
   const [minLon, minLat, maxLon, maxLat] = parts;
   const radars = inBbox(radarStore.all(), minLon, minLat, maxLon, maxLat, config.maxResults);
   res.json({ count: radars.length, radars });
+});
+
+/**
+ * POST /api/radars/route  { coordinates: [[lon,lat],...], buffer? }
+ * The trip's radars — within `buffer` metres of the route line — in one request, the
+ * same way /api/signs/route serves the trip's signs. Ordered along the route.
+ */
+radarRouter.post('/route', (req, res) => {
+  const coords = req.body?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) {
+    return res.status(400).json({ error: 'coordinates [[lon,lat],...] required' });
+  }
+  const buffer = clamp(Number(req.body?.buffer) || config.radarRouteBufferM, 1, config.radarRouteMaxBufferM);
+  const radars = alongRoute(radarStore.all(), coords, buffer, config.maxResults);
+  res.json({ count: radars.length, bufferM: buffer, radars });
 });
 
 function clamp(value, min, max) {

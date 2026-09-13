@@ -11,4 +11,8 @@ data class Place(
     val kind: PlaceKind,
     val lat: Double,
     val lon: Double,
+    /** Official fuel prices, only for a fuel station found by the nearby search. */
+    val fuel: StationFuel? = null,
+    /** Distance from the search point, for places found by the nearby search; else null. */
+    val distanceMeters: Int? = null,
 )

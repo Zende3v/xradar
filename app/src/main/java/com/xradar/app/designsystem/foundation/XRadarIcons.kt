@@ -201,6 +201,30 @@ object XRadarIcons {
         moveTo(17f, 11f); lineTo(17.6f, 13.1f)
     }
 
+    // ---- Signalisation ----
+    val TrafficLight = line("TrafficLight", width = 1.8f) {
+        moveTo(8f, 3f); lineTo(16f, 3f); lineTo(16f, 21f); lineTo(8f, 21f); close()
+        moveTo(12f, 6.5f); lineTo(12f, 6.51f)
+        moveTo(12f, 12f); lineTo(12f, 12.01f)
+        moveTo(12f, 17.5f); lineTo(12f, 17.51f)
+    }
+    val StopSign = line("StopSign", width = 1.8f) {
+        moveTo(8.5f, 3f); lineTo(15.5f, 3f); lineTo(21f, 8.5f); lineTo(21f, 15.5f)
+        lineTo(15.5f, 21f); lineTo(8.5f, 21f); lineTo(3f, 15.5f); lineTo(3f, 8.5f); close()
+    }
+    val Yield = line("Yield", width = 1.8f) {
+        moveTo(3f, 5f); lineTo(21f, 5f); lineTo(12f, 20f); close()
+    }
+    val Crossing = line("Crossing", width = 1.9f) {
+        moveTo(7f, 4f); lineTo(7f, 20f)
+        moveTo(12f, 4f); lineTo(12f, 20f)
+        moveTo(17f, 4f); lineTo(17f, 20f)
+    }
+    val NoEntry = line("NoEntry", width = 1.9f) {
+        moveTo(3f, 12f); arcTo(9f, 9f, 0f, true, true, 21f, 12f); arcTo(9f, 9f, 0f, true, true, 3f, 12f)
+        moveTo(7.5f, 12f); lineTo(16.5f, 12f)
+    }
+
     // ---- Guidage : manœuvres (flèches) ----
     val ManeuverStraight = line("ManeuverStraight", width = 2.2f) {
         moveTo(12f, 21f); lineTo(12f, 4.5f)

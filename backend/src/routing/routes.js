@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
+import { authAccount } from '../accounts/auth.js';
+import { accountStore } from '../accounts/store.js';
 
 export const routeRouter = Router();
 
@@ -9,6 +11,11 @@ export const routeRouter = Router();
  * (better quality + avoid options), otherwise falls back to the OSRM demo.
  */
 routeRouter.get('/', async (req, res) => {
+  // An expired trial (or lapsed subscription) keeps the map, not the navigation.
+  const account = authAccount(req);
+  if (account && !accountStore.accessFor(account).canNavigate) {
+    return res.status(403).json({ error: 'subscription required' });
+  }
   const from = parseCoord(req.query.from);
   const to = parseCoord(req.query.to);
   if (!from || !to) {
@@ -23,9 +30,13 @@ routeRouter.get('/', async (req, res) => {
     const route = config.orsApiKey
       ? await routeViaORS(from, to, avoid)
       : await routeViaOSRM(from, to);
-    if (route.error) return res.status(route.status || 502).json({ error: route.error });
+    if (route.error) {
+      console.warn(`[route] ${route.error}${route.detail ? ' — ' + route.detail : ''}`);
+      return res.status(route.status || 502).json({ error: route.error });
+    }
     res.json(route);
   } catch (e) {
+    console.warn('[route] unavailable —', String(e.message || e));
     res.status(502).json({ error: 'routing unavailable', detail: String(e.message || e) });
   }
 });

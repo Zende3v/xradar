@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Généré depuis assets/icoV2/bell-ringing.svg — couleurs d'origine conservées, dessiné sans teinte. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M6.99645 7.70578L5.46173 15.6192C5.22234 16.8536 6.16781 18 7.42514 18H9H15H16.5749C17.8322 18 18.7777 16.8535 18.5383 15.6192L17.0035 7.70578C17.0012 7.69359 16.999 7.68277 16.9962 7.67066C16.9263 7.36502 15.86 3 12 3C8.14005 3 7.0737 7.36501 7.00376 7.67066C7.00099 7.68277 6.99882 7.69359 6.99645 7.70578Z"
+        android:fillColor="#323232"
+        android:fillAlpha="0.1" />
+    <path
+        android:pathData="M9 18C9 18 9 21 12.0464 21C15.0929 21 15.0929 18 15.0929 18"
+        android:strokeColor="#323232"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M6.99645 7.70578L5.46173 15.6192C5.22234 16.8536 6.16781 18 7.42514 18H9H15H16.5749C17.8322 18 18.7777 16.8535 18.5383 15.6192L17.0035 7.70578C17.0012 7.69359 16.999 7.68277 16.9962 7.67066C16.9263 7.36502 15.86 3 12 3C8.14005 3 7.0737 7.36501 7.00376 7.67066C7.00099 7.68277 6.99882 7.69359 6.99645 7.70578Z"
+        android:strokeColor="#323232"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M20 7C19.5 5 19 4 18 3"
+        android:strokeColor="#323232"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M4 7C4.5 5 5 4 6 3"
+        android:strokeColor="#323232"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

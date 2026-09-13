@@ -16,6 +16,7 @@ export function authAccount(req) {
 /** What any viewer may see about an account (no email, no password). */
 export function publicView(account) {
   if (!account) return null;
+  const access = accountStore.accessFor(account);
   return {
     id: account.id,
     role: account.role,
@@ -23,5 +24,8 @@ export function publicView(account) {
     displayName: account.displayName ?? null,
     avatarUrl: account.avatarUrl ?? null,
     banned: Boolean(account.banned),
+    access: access.status,
+    canNavigate: access.canNavigate,
+    accessEndsAt: access.endsAt,
   };
 }

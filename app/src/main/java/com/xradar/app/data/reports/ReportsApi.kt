@@ -27,6 +27,10 @@ data class NewReport(
     val plate: String? = null,
     val street: String? = null,
     val side: String? = null,
+    /** "same" (my carriageway) or "opposite". */
+    val direction: String = "same",
+    /** The driver's course when reporting — orients the control zone. */
+    val bearingDeg: Double? = null,
 )
 
 /** HTTP client for crowdsourced reports (`/api/reports`). */
@@ -63,6 +67,8 @@ class ReportsApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 if (report.plate != null) put("plate", report.plate)
                 if (report.street != null) put("street", report.street)
                 if (report.side != null) put("side", report.side)
+                put("direction", report.direction)
+                if (report.bearingDeg != null) put("bearing", report.bearingDeg)
             }
             .toString()
             .toRequestBody(JSON)
@@ -101,9 +107,15 @@ class ReportsApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             lat = o.optDouble("lat"),
             lon = o.optDouble("lon"),
             ageMillis = (System.currentTimeMillis() - createdAt).coerceAtLeast(0),
-            confirms = o.optInt("confirms"),
-            denials = o.optInt("denials"),
-            trusted = o.optBoolean("trusted"),
+            confirmations = o.optInt("confirmations"),
+            contradictions = o.optInt("contradictions"),
+            reporters = o.optInt("reporters", 1).coerceAtLeast(1),
+            direction = o.optString("direction").ifBlank { "same" },
+            bearingDeg = if (o.isNull("bearing")) null else o.optDouble("bearing"),
+            score = o.optInt("score"),
+            impactMeters = o.optDouble("impactM", 1500.0),
+            persistent = o.optBoolean("persistent"),
+            reporterRole = o.optString("reporterRole").ifBlank { "guest" },
             street = if (o.isNull("street")) null else o.optString("street").ifBlank { null },
             side = if (o.isNull("side")) null else o.optString("side").ifBlank { null },
         )

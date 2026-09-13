@@ -21,8 +21,18 @@ class GeocodingApi {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    suspend fun search(query: String, limit: Int = 8): List<Place> = withContext(Dispatchers.IO) {
-        val url = "https://api-adresse.data.gouv.fr/search/?q=${URLEncoder.encode(query, "UTF-8")}&limit=$limit"
+    /**
+     * [aroundLat]/[aroundLon] bias the results toward the driver, so "rue de la gare"
+     * returns the one next to them and not the other end of France.
+     */
+    suspend fun search(
+        query: String,
+        limit: Int = 8,
+        aroundLat: Double? = null,
+        aroundLon: Double? = null,
+    ): List<Place> = withContext(Dispatchers.IO) {
+        val near = if (aroundLat != null && aroundLon != null) "&lat=$aroundLat&lon=$aroundLon" else ""
+        val url = "https://api-adresse.data.gouv.fr/search/?q=${URLEncoder.encode(query, "UTF-8")}&limit=$limit$near"
         client.newCall(Request.Builder().url(url).build()).execute().use { response ->
             if (!response.isSuccessful) return@use emptyList()
             parse(response.body?.string() ?: return@use emptyList())

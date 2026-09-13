@@ -22,6 +22,39 @@ function verifyPassword(password, stored) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
+function genCode() {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6-digit code
+}
+
+
+const EMPTY_STATS = Object.freeze({
+  tripCount: 0,
+  distanceMeters: 0,
+  driveDurationSeconds: 0,
+  alertsTraversed: 0,
+  reportsDeclared: 0,
+  reportsConfirmed: 0,
+});
+
+function statsShape(value) {
+  const input = value && typeof value === 'object' ? value : {};
+  return Object.fromEntries(Object.entries(EMPTY_STATS).map(([key, fallback]) => {
+    const value = Number(input[key]);
+    return [key, Number.isFinite(value) && value >= 0 ? Math.round(value) : fallback];
+  }));
+}
+
+function addMonths(iso, months) {
+  const date = new Date(iso);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString();
+}
+
+function trialEndsAt(createdAt) {
+  const start = Date.parse(createdAt);
+  const safeStart = Number.isFinite(start) ? start : Date.now();
+  return new Date(safeStart + config.guestTrialMs).toISOString();
+}
 /**
  * Account store. Device-based identity: each app install authenticates with a
  * deviceId and gets a `guest` account by default. Roles (client/admin) are
@@ -58,7 +91,19 @@ class AccountStore {
     }
   }
 
+  normalizeAccount(account) {
+    if (!Array.isArray(account.trips)) account.trips = [];
+    if (account.trips.length > config.accountTripHistoryMax) account.trips = account.trips.slice(0, config.accountTripHistoryMax);
+    account.stats = statsShape(account.stats);
+    if (!Array.isArray(account.referralCodes)) account.referralCodes = [];
+    if (account.role === 'guest' && !account.trialEndsAt) {
+      account.trialEndsAt = trialEndsAt(account.createdAt);
+    }
+    return account;
+  }
+
   index(account) {
+    this.normalizeAccount(account);
     this.byId.set(account.id, account);
     if (account.deviceId) this.byDevice.set(account.deviceId, account);
     if (account.usernameLower) this.byUsername.set(account.usernameLower, account);
@@ -117,6 +162,138 @@ class AccountStore {
 
   getByDevice(deviceId) {
     return this.byDevice.get(deviceId) ?? null;
+  }
+
+  accessFor(account) {
+    if (!account || account.banned) return { status: 'restricted', canNavigate: false, endsAt: null };
+    if (account.role === 'admin') return { status: 'active', canNavigate: true, endsAt: null };
+    if (account.role === 'client') {
+      const endsAt = account.subscriptionEndsAt ?? null;
+      if (!endsAt || Date.parse(endsAt) > Date.now()) return { status: 'active', canNavigate: true, endsAt };
+      return { status: 'restricted', canNavigate: false, endsAt };
+    }
+    const endsAt = account.trialEndsAt ?? trialEndsAt(account.createdAt);
+    if (Date.parse(endsAt) > Date.now()) return { status: 'trial', canNavigate: true, endsAt };
+    return { status: 'restricted', canNavigate: false, endsAt };
+  }
+
+  statsFor(id) {
+    const account = this.get(id);
+    if (!account) return null;
+    this.normalizeAccount(account);
+    return {
+      totals: { ...account.stats },
+      trips: account.trips.map((trip) => ({ ...trip })),
+    };
+  }
+
+  recordTrip(id, trip) {
+    const account = this.get(id);
+    if (!account) return { error: 'not found' };
+    this.normalizeAccount(account);
+    const startedAt = Number(trip?.startedAt);
+    const distanceMeters = Number(trip?.distanceMeters);
+    const durationSeconds = Number(trip?.durationSeconds);
+    const alertsCount = Number(trip?.alertsCount) || 0;
+    const topSpeedKmh = Number(trip?.topSpeedKmh) || 0;
+    const tripId = String(trip?.id || '').trim();
+    if (!tripId || !Number.isFinite(startedAt) || !Number.isFinite(distanceMeters) || !Number.isFinite(durationSeconds)) {
+      return { error: 'invalid trip' };
+    }
+    const existing = account.trips.find((item) => item.id === tripId);
+    if (existing) return { trip: existing, stats: { ...account.stats } };
+    const record = {
+      id: tripId.slice(0, 100),
+      startedAt: Math.round(startedAt),
+      fromLabel: String(trip?.fromLabel || 'Ma position').slice(0, 160),
+      toLabel: String(trip?.toLabel || 'Destination').slice(0, 160),
+      distanceMeters: Math.max(0, Math.round(distanceMeters)),
+      durationSeconds: Math.max(0, Math.round(durationSeconds)),
+      alertsCount: Math.max(0, Math.round(alertsCount)),
+      topSpeedKmh: Math.max(0, Math.round(topSpeedKmh)),
+    };
+    account.trips.unshift(record);
+    account.trips = account.trips.slice(0, config.accountTripHistoryMax);
+    account.stats.tripCount += 1;
+    account.stats.alertsTraversed += record.alertsCount;
+    this.scheduleSave();
+    return { trip: record, stats: { ...account.stats } };
+  }
+
+  /** Time and distance driven with the app open, trip or not. */
+  recordDrive(id, seconds, meters) {
+    const account = this.get(id);
+    if (!account) return { error: 'not found' };
+    this.normalizeAccount(account);
+    const s = Math.max(0, Math.min(Math.round(Number(seconds) || 0), 3600));
+    const m = Math.max(0, Math.min(Math.round(Number(meters) || 0), 200000));
+    account.stats.driveDurationSeconds += s;
+    account.stats.distanceMeters += m;
+    this.scheduleSave();
+    return { stats: { ...account.stats } };
+  }
+
+  recordReportStat(id, kind) {
+    const account = this.get(id);
+    if (!account || !Object.hasOwn(EMPTY_STATS, kind)) return;
+    this.normalizeAccount(account);
+    account.stats[kind] += 1;
+    this.scheduleSave();
+  }
+
+  findReferral(code) {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!normalized) return null;
+    for (const owner of this.byId.values()) {
+      const referral = owner.referralCodes?.find((entry) => entry.code === normalized && entry.active !== false);
+      if (referral) return { owner, referral };
+    }
+    return null;
+  }
+
+  createReferral(ownerId) {
+    const owner = this.get(ownerId);
+    if (!owner || owner.role !== 'admin') return { error: 'admin only' };
+    this.normalizeAccount(owner);
+    let code;
+    do {
+      code = `XR-${randomBytes(4).toString('hex').toUpperCase()}`;
+    } while (this.findReferral(code));
+    const referral = {
+      code,
+      active: true,
+      createdAt: new Date().toISOString(),
+      months: config.referralSubscriptionMonths,
+      redemptions: [],
+    };
+    owner.referralCodes.unshift(referral);
+    this.scheduleSave();
+    return { referral };
+  }
+
+  referralStats(ownerId) {
+    const owner = this.get(ownerId);
+    if (!owner || owner.role !== 'admin') return null;
+    this.normalizeAccount(owner);
+    return owner.referralCodes.map((entry) => ({
+      code: entry.code,
+      active: entry.active !== false,
+      createdAt: entry.createdAt,
+      months: entry.months ?? config.referralSubscriptionMonths,
+      redemptions: Array.isArray(entry.redemptions) ? entry.redemptions.length : 0,
+    }));
+  }
+
+  claimReferral(code, account) {
+    const hit = this.findReferral(code);
+    if (!hit) return { error: 'invalid referral code' };
+    const now = new Date().toISOString();
+    account.role = 'client';
+    account.subscriptionEndsAt = addMonths(now, hit.referral.months ?? config.referralSubscriptionMonths);
+    account.referredByCode = hit.referral.code;
+    if (!Array.isArray(hit.referral.redemptions)) hit.referral.redemptions = [];
+    hit.referral.redemptions.push({ accountId: account.id, redeemedAt: now });
+    return { referral: hit.referral };
   }
 
   list(role) {
@@ -231,7 +408,7 @@ class AccountStore {
     return { account };
   }
 
-  register({ email, password, username }) {
+  register({ email, password, username, referralCode = null }) {
     const e = String(email || '').trim().toLowerCase();
     if (!e.includes('@') || e.length > 190) return { error: 'invalid email' };
     if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
@@ -239,25 +416,82 @@ class AccountStore {
     if (!check.ok) return { error: `username ${check.error}` };
     if (this.byEmail.has(e)) return { error: 'email already registered' };
     const now = new Date().toISOString();
+    if (referralCode && !this.findReferral(referralCode)) return { error: 'invalid referral code' };
     const account = {
       id: randomUUID(),
       deviceId: null,
-      role: 'client',
+      role: 'guest',
       username,
       usernameLower: String(username).toLowerCase(),
       displayName: username,
       email,
       emailLower: e,
       passwordHash: hashPassword(password),
+      emailVerified: false,
       avatarUrl: null,
       platform: null,
       banned: false,
       createdAt: now,
       lastSeenAt: now,
     };
+    if (referralCode) {
+      const applied = this.claimReferral(referralCode, account);
+      if (applied.error) return applied;
+    }
     this.index(account);
     this.scheduleSave();
     return { account };
+  }
+
+  // ---- Email verification + password reset ----------------------------------
+
+  setVerifyCode(id) {
+    const a = this.byId.get(id);
+    if (!a) return null;
+    a.verifyCode = genCode();
+    this.scheduleSave();
+    return a.verifyCode;
+  }
+
+  resendVerify(email) {
+    const a = this.byEmail.get(String(email || '').trim().toLowerCase());
+    if (!a) return null;
+    a.verifyCode = genCode();
+    this.scheduleSave();
+    return { code: a.verifyCode, account: a };
+  }
+
+  verifyEmail(email, code) {
+    const a = this.byEmail.get(String(email || '').trim().toLowerCase());
+    if (!a) return { error: 'not found' };
+    if (!a.verifyCode || String(code) !== String(a.verifyCode)) return { error: 'invalid code' };
+    a.emailVerified = true;
+    a.verifyCode = null;
+    this.scheduleSave();
+    return { account: a };
+  }
+
+  /** Returns the reset code to email (or null if no such account — caller stays vague). */
+  startReset(email) {
+    const a = this.byEmail.get(String(email || '').trim().toLowerCase());
+    if (!a) return null;
+    a.resetCode = genCode();
+    a.resetExpiresAt = Date.now() + config.resetCodeTtlMs;
+    this.scheduleSave();
+    return { code: a.resetCode, account: a };
+  }
+
+  resetPassword(email, code, password) {
+    const a = this.byEmail.get(String(email || '').trim().toLowerCase());
+    if (!a || !a.resetCode) return { error: 'invalid code' };
+    if (String(code) !== String(a.resetCode)) return { error: 'invalid code' };
+    if (!a.resetExpiresAt || Date.now() > a.resetExpiresAt) return { error: 'code expired' };
+    if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
+    a.passwordHash = hashPassword(password);
+    a.resetCode = null;
+    a.resetExpiresAt = null;
+    this.scheduleSave();
+    return { account: a };
   }
 
   login(email, password) {

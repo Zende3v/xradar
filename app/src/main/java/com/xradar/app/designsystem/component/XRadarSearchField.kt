@@ -42,7 +42,9 @@ fun XRadarSearchField(
     Row(
         modifier = modifier
             .clip(XRadarTheme.shapes.md)
-            .background(colors.surfaceElevated)
+            // Same tint family as the HUD surfaces: an elevated (lighter) fill here
+            // reads as a grey bar cutting through the bar.
+            .background(colors.surface.copy(alpha = 0.62f))
             .border(BorderStroke(1.dp, colors.border), XRadarTheme.shapes.md)
             .padding(horizontal = XRadarTheme.spacing.md, vertical = XRadarTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,

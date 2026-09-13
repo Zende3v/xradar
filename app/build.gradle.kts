@@ -1,4 +1,13 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+// Stadia Maps key for the basemap styles. Put "stadia.apiKey=..." in local.properties
+// (git-ignored) or set STADIA_API_KEY in the environment. Empty = fall back to IGN.
+val stadiaApiKey: String = Properties().run {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+    getProperty("stadia.apiKey") ?: System.getenv("STADIA_API_KEY") ?: ""
+}
 
 plugins {
     // Kotlin support is built into AGP 9+ (do NOT apply org.jetbrains.kotlin.android).
@@ -17,6 +26,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "STADIA_API_KEY", "\"$stadiaApiKey\"")
     }
 
     buildTypes {

@@ -37,10 +37,13 @@ fun XRadarListRow(
     leadingTint: Color = XRadarTheme.colors.textSecondary,
     onClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    /** Pass one in to drive an outer animation from this row's presses. */
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
-    val interaction = remember { MutableInteractionSource() }
+    val ownInteraction = remember { MutableInteractionSource() }
+    val interaction = interactionSource ?: ownInteraction
     val pressed by interaction.collectIsPressedAsState()
     val background by animateColorAsState(
         if (onClick != null && pressed) colors.surfaceHigh.copy(alpha = 0.5f) else Color.Transparent,

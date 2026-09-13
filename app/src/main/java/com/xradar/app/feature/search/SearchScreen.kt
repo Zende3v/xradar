@@ -1,17 +1,40 @@
 package com.xradar.app.feature.search
 
+import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,16 +47,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xradar.app.R
+import com.xradar.app.core.model.FuelPrice
+import com.xradar.app.core.model.FuelStationPicker
+import com.xradar.app.core.model.FuelType
 import com.xradar.app.core.model.Place
+import com.xradar.app.core.model.PlaceCategory
 import com.xradar.app.core.model.PlaceKind
+import com.xradar.app.core.model.showsFuelPrice
 import com.xradar.app.data.geocoding.GeocodingRepository
+import com.xradar.app.data.places.FavoriteTrip
+import com.xradar.app.data.places.PlacesApi
+import com.xradar.app.data.places.SavedPlacesRepository
+import com.xradar.app.data.preferences.AppPreferences
 import com.xradar.app.data.recents.RecentsRepository
 import com.xradar.app.data.routing.ActiveTripRepository
+import com.xradar.app.designsystem.component.XRadarChip
 import com.xradar.app.designsystem.component.XRadarDivider
+import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarListGroup
 import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarLoadingState
@@ -42,17 +84,36 @@ import com.xradar.app.designsystem.component.XRadarSearchField
 import com.xradar.app.designsystem.component.XRadarText
 import com.xradar.app.designsystem.foundation.XRadarIcons
 import com.xradar.app.designsystem.theme.XRadarTheme
+import com.xradar.app.location.LocationRepository
 import kotlinx.coroutines.delay
+import java.util.Locale
+
+/** What the next pick sets: the trip's destination, its start, or a saved place. */
+private enum class PickTarget { Destination, Start, Home, Work }
 
 @Composable
 fun SearchRoute(onBack: () -> Unit) {
     val context = LocalContext.current
     val geocoding = remember { GeocodingRepository() }
+    val placesApi = remember { PlacesApi() }
     val recentsRepo = remember { RecentsRepository(context) }
-    val recents = remember { recentsRepo.recents() }
+    val savedRepo = remember { SavedPlacesRepository(context) }
+
+    var recents by remember { mutableStateOf(recentsRepo.recents()) }
+    val home by savedRepo.home.collectAsStateWithLifecycle()
+    val work by savedRepo.work.collectAsStateWithLifecycle()
+    val favorites by savedRepo.favorites.collectAsStateWithLifecycle()
+    val start by ActiveTripRepository.start.collectAsStateWithLifecycle()
+    val fix by LocationRepository.location.collectAsStateWithLifecycle()
+    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Place>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
+    var target by remember { mutableStateOf(PickTarget.Destination) }
+    var category by remember { mutableStateOf<PlaceCategory?>(null) }
+    var categoryPlaces by remember { mutableStateOf<List<Place>>(emptyList()) }
+    var categoryLoading by remember { mutableStateOf(false) }
 
     // Debounced live geocoding (French Base Adresse Nationale).
     LaunchedEffect(query) {
@@ -68,16 +129,85 @@ fun SearchRoute(onBack: () -> Unit) {
         loading = false
     }
 
+    // Nearest places of the chosen category — searched from the trip's start point.
+    LaunchedEffect(category, start) {
+        val cat = category ?: return@LaunchedEffect
+        val fromLat = start?.lat ?: fix?.latitude
+        val fromLon = start?.lon ?: fix?.longitude
+        if (fromLat == null || fromLon == null) {
+            categoryPlaces = emptyList()
+            return@LaunchedEffect
+        }
+        categoryLoading = true
+        categoryPlaces = placesApi.near(cat, fromLat, fromLon)
+        categoryLoading = false
+    }
+
+    fun pick(place: Place) {
+        when (target) {
+            PickTarget.Destination -> {
+                recentsRepo.add(place)
+                ActiveTripRepository.setDestination(place)
+                onBack()
+            }
+            PickTarget.Start -> {
+                ActiveTripRepository.setStart(place)
+                target = PickTarget.Destination
+                query = ""
+                category = null
+            }
+            PickTarget.Home -> {
+                savedRepo.setHome(place)
+                target = PickTarget.Destination
+                query = ""
+            }
+            PickTarget.Work -> {
+                savedRepo.setWork(place)
+                target = PickTarget.Destination
+                query = ""
+            }
+        }
+    }
+
     SearchScreen(
         query = query,
+        prompt = when (target) {
+            PickTarget.Destination -> "Où allez-vous ?"
+            PickTarget.Start -> "Point de départ"
+            PickTarget.Home -> "Adresse de la maison"
+            PickTarget.Work -> "Adresse du travail"
+        },
+        start = start,
+        home = home,
+        work = work,
+        favorites = favorites,
         recents = recents,
-        suggestions = Suggestions,
         results = results,
         loading = loading,
+        category = category,
+        categoryPlaces = categoryPlaces,
+        categoryLoading = categoryLoading,
+        preferredFuel = settings.preferredFuel,
+        onFuelSelect = { fuel -> AppPreferences.updateSettings { it.copy(preferredFuel = fuel) } },
         onQueryChange = { query = it },
-        onPick = { place ->
-            recentsRepo.add(place)
-            ActiveTripRepository.setDestination(place)
+        onPick = ::pick,
+        onCategory = { cat ->
+            category = if (category == cat) null else cat
+            categoryPlaces = emptyList()
+        },
+        onEditStart = { target = PickTarget.Start; query = "" },
+        onClearStart = { ActiveTripRepository.setStart(null) },
+        onSetHome = { target = PickTarget.Home; query = "" },
+        onSetWork = { target = PickTarget.Work; query = "" },
+        onRemoveRecent = { id ->
+            recentsRepo.remove(id)
+            recents = recentsRepo.recents()
+        },
+        onToggleFavorite = { place -> savedRepo.toggleFavorite(FavoriteTrip(place, start)) },
+        isFavorite = { id -> favorites.any { it.to.id == id || it.id == id } },
+        onStartFavorite = { trip ->
+            ActiveTripRepository.setStart(trip.from)
+            ActiveTripRepository.setDestination(trip.to)
             onBack()
         },
         onBack = onBack,
@@ -87,12 +217,31 @@ fun SearchRoute(onBack: () -> Unit) {
 @Composable
 fun SearchScreen(
     query: String,
+    prompt: String,
+    start: Place?,
+    home: Place?,
+    work: Place?,
+    favorites: List<FavoriteTrip>,
     recents: List<Place>,
-    suggestions: List<Place>,
     results: List<Place>,
     loading: Boolean,
+    category: PlaceCategory?,
+    categoryPlaces: List<Place>,
+    categoryLoading: Boolean,
     onQueryChange: (String) -> Unit,
     onPick: (Place) -> Unit,
+    onCategory: (PlaceCategory) -> Unit,
+    /** Fuel whose official price the "Carburant" results show. */
+    preferredFuel: FuelType = FuelType.Gazole,
+    onFuelSelect: (FuelType) -> Unit = {},
+    onEditStart: () -> Unit,
+    onClearStart: () -> Unit,
+    onSetHome: () -> Unit,
+    onSetWork: () -> Unit,
+    onRemoveRecent: (String) -> Unit,
+    onToggleFavorite: (Place) -> Unit,
+    isFavorite: (String) -> Boolean,
+    onStartFavorite: (FavoriteTrip) -> Unit,
     onBack: () -> Unit,
 ) {
     val colors = XRadarTheme.colors
@@ -110,6 +259,7 @@ fun SearchScreen(
             XRadarSearchField(
                 value = query,
                 onValueChange = onQueryChange,
+                placeholder = prompt,
                 modifier = Modifier.weight(1f),
                 autoFocus = true,
             )
@@ -123,19 +273,218 @@ fun SearchScreen(
             )
         }
 
+        StartRow(start = start, onEdit = onEditStart, onClear = onClearStart)
+
+        CategoryRow(selected = category, onSelect = onCategory)
+
+        // Official prices ride on the stations the search already found. When none of
+        // them has any (backend without prices yet), the list stays exactly as before.
+        val showPrices = category == PlaceCategory.Fuel &&
+            (categoryLoading || categoryPlaces.isEmpty() || categoryPlaces.any { it.fuel != null })
+        if (showPrices) {
+            FuelTypeRow(selected = preferredFuel, onSelect = onFuelSelect)
+        }
+
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             when {
-                query.trim().length < MIN_QUERY -> BlankState(recents, suggestions, onPick)
-                loading -> XRadarLoadingState(label = "Recherche…")
-                results.isEmpty() -> EmptyResults(query)
-                else -> ResultList(results, onPick)
+                query.trim().length >= MIN_QUERY && loading -> XRadarLoadingState(label = "Recherche…")
+                query.trim().length >= MIN_QUERY && results.isEmpty() -> EmptyResults(query)
+                query.trim().length >= MIN_QUERY -> ResultList(results, onPick)
+                category != null && categoryLoading -> XRadarLoadingState(label = "Recherche autour de toi…")
+                category != null && categoryPlaces.isEmpty() -> XRadarMessageState(
+                    icon = XRadarIcons.Search,
+                    title = "Rien trouvé",
+                    message = "Aucun résultat pour « ${category.label} » dans les environs.",
+                )
+                category != null -> {
+                    val fuel = if (showPrices) preferredFuel else null
+                    // Fuel comes as a bigger pool: in a city the nearest stations that show a
+                    // price come first; anywhere else it is the nearest 20, as before.
+                    val shown = remember(categoryPlaces, category, fuel) {
+                        if (category == PlaceCategory.Fuel) {
+                            FuelStationPicker.pick(categoryPlaces, fuel, System.currentTimeMillis())
+                        } else {
+                            categoryPlaces
+                        }
+                    }
+                    ResultList(results = shown, onPick = onPick, fuel = fuel)
+                }
+                else -> BlankState(
+                    home = home,
+                    work = work,
+                    favorites = favorites,
+                    recents = recents,
+                    onPick = onPick,
+                    onSetHome = onSetHome,
+                    onSetWork = onSetWork,
+                    onRemoveRecent = onRemoveRecent,
+                    onToggleFavorite = onToggleFavorite,
+                    isFavorite = isFavorite,
+                    onStartFavorite = onStartFavorite,
+                )
             }
         }
     }
 }
 
+/**
+ * The trip's departure: the driver's position unless they picked somewhere else.
+ * It presses in under the finger and the address slides in — a flat line here read as
+ * decoration, and nobody thought to tap it.
+ */
 @Composable
-private fun BlankState(recents: List<Place>, suggestions: List<Place>, onPick: (Place) -> Unit) {
+private fun StartRow(start: Place?, onEdit: () -> Unit, onClear: () -> Unit) {
+    val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "startScale")
+    val simulated = start != null
+    val border by animateColorAsState(if (simulated) colors.accent else colors.border, label = "startBorder")
+    val fill by animateColorAsState(
+        if (simulated) colors.accent.copy(alpha = 0.12f) else colors.surface.copy(alpha = 0.45f),
+        label = "startFill",
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = spacing.lg)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(XRadarTheme.shapes.md)
+            .background(fill)
+            .border(1.dp, border, XRadarTheme.shapes.md)
+            .clickable(interactionSource = interaction, indication = null, onClick = onEdit)
+            .padding(horizontal = spacing.md, vertical = spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+    ) {
+        XRadarIcon(
+            XRadarIcons.Gps,
+            contentDescription = null,
+            tint = if (simulated) colors.accent else colors.textTertiary,
+            size = 18.dp,
+        )
+        XRadarText("Départ", style = XRadarTheme.typography.caption, color = colors.textTertiary)
+        AnimatedContent(
+            targetState = start?.name ?: "Ma position",
+            transitionSpec = {
+                (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
+            },
+            modifier = Modifier.weight(1f),
+            label = "startName",
+        ) { name ->
+            XRadarText(
+                name,
+                style = XRadarTheme.typography.callout,
+                color = if (simulated) colors.textPrimary else colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (simulated) {
+            RowAction(XRadarIcons.Close, "Repartir de ma position", onClick = onClear)
+        } else {
+            XRadarText("Changer", style = XRadarTheme.typography.caption, color = colors.accent)
+        }
+    }
+}
+
+/**
+ * Category shortcuts, scrolled sideways: each one is its icon, drawn exactly as supplied,
+ * inside its coloured square.
+ */
+@Composable
+private fun CategoryRow(selected: PlaceCategory?, onSelect: (PlaceCategory) -> Unit) {
+    val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = spacing.lg, vertical = spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+    ) {
+        PlaceCategory.entries.forEach { category ->
+            val on = category == selected
+            val scale by animateFloatAsState(if (on) 1.08f else 1f, label = "chipScale")
+            val square by animateColorAsState(
+                if (on) colors.accent else categoryColor(category),
+                label = "chipColor",
+            )
+            Column(
+                modifier = Modifier
+                    .width(76.dp)
+                    .graphicsLayer { scaleX = scale; scaleY = scale }
+                    .clip(XRadarTheme.shapes.md)
+                    .clickable { onSelect(category) }
+                    .padding(vertical = spacing.xs),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(spacing.xs),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(XRadarTheme.shapes.md)
+                        .background(square),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Untinted: the supplied colours stay as they are.
+                    Image(
+                        painter = painterResource(categoryIcon(category)),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                XRadarText(
+                    category.label,
+                    style = XRadarTheme.typography.caption,
+                    color = if (on) colors.accent else colors.textSecondary,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+/** The icon inside each category square (vectors and PNGs, shown as supplied). */
+@DrawableRes
+private fun categoryIcon(category: PlaceCategory): Int = when (category) {
+    PlaceCategory.Fuel -> R.drawable.ic_place_fuel
+    PlaceCategory.Charging -> R.drawable.ic_place_charging
+    PlaceCategory.Parking -> R.drawable.ic_place_parking
+    PlaceCategory.Tobacco -> R.drawable.ic_place_tobacco
+    PlaceCategory.Garage -> R.drawable.ic_place_garage
+    PlaceCategory.Hotel -> R.drawable.ic_place_hotel
+    PlaceCategory.Atm -> R.drawable.ic_place_atm
+}
+
+/** One flat theme colour per category, behind its icon. */
+@Composable
+private fun categoryColor(category: PlaceCategory): Color = when (category) {
+    PlaceCategory.Fuel -> XRadarTheme.colors.radarMobile
+    PlaceCategory.Charging -> XRadarTheme.colors.success
+    PlaceCategory.Parking -> XRadarTheme.colors.info
+    PlaceCategory.Tobacco -> XRadarTheme.colors.danger
+    PlaceCategory.Garage -> XRadarTheme.colors.textSecondary
+    PlaceCategory.Hotel -> XRadarTheme.colors.controlZone
+    PlaceCategory.Atm -> XRadarTheme.colors.radarFixed
+}
+
+@Composable
+private fun BlankState(
+    home: Place?,
+    work: Place?,
+    favorites: List<FavoriteTrip>,
+    recents: List<Place>,
+    onPick: (Place) -> Unit,
+    onSetHome: () -> Unit,
+    onSetWork: () -> Unit,
+    onRemoveRecent: (String) -> Unit,
+    onToggleFavorite: (Place) -> Unit,
+    isFavorite: (String) -> Boolean,
+    onStartFavorite: (FavoriteTrip) -> Unit,
+) {
     val spacing = XRadarTheme.spacing
     Column(
         modifier = Modifier
@@ -144,24 +493,142 @@ private fun BlankState(recents: List<Place>, suggestions: List<Place>, onPick: (
             .padding(horizontal = spacing.lg, vertical = spacing.md),
         verticalArrangement = Arrangement.spacedBy(spacing.xl),
     ) {
-        if (recents.isNotEmpty()) Group("Récents", recents, onPick)
-        Group("Suggestions", suggestions, onPick)
-    }
-}
-
-@Composable
-private fun Group(title: String, places: List<Place>, onPick: (Place) -> Unit) {
-    XRadarListGroup(title = title) {
-        places.forEachIndexed { index, place ->
-            PlaceRow(place, onPick)
-            if (index < places.lastIndex) XRadarDivider(Modifier.padding(start = 58.dp))
+        XRadarListGroup(title = "Adresses") {
+            SavedRow("Maison", XRadarIcons.Home, home, onPick, onSetHome)
+            XRadarDivider(Modifier.padding(start = 58.dp))
+            SavedRow("Travail", XRadarIcons.Flag, work, onPick, onSetWork)
         }
+
+        if (favorites.isNotEmpty()) {
+            XRadarListGroup(title = "Trajets favoris") {
+                favorites.forEachIndexed { index, trip ->
+                    XRadarListRow(
+                        title = trip.to.name,
+                        subtitle = trip.from?.let { "Depuis ${it.name}" } ?: trip.to.subtitle,
+                        leadingIcon = XRadarIcons.Star,
+                        leadingTint = XRadarTheme.colors.accent,
+                        onClick = { onStartFavorite(trip) },
+                        trailing = {
+                            RowAction(XRadarIcons.Close, "Retirer des favoris") { onToggleFavorite(trip.to) }
+                        },
+                    )
+                    if (index < favorites.lastIndex) XRadarDivider(Modifier.padding(start = 58.dp))
+                }
+            }
+        }
+
+        if (recents.isNotEmpty()) {
+            XRadarListGroup(title = "Récents") {
+                recents.forEachIndexed { index, place ->
+                    XRadarListRow(
+                        title = place.name,
+                        subtitle = place.subtitle,
+                        leadingIcon = XRadarIcons.History,
+                        leadingTint = XRadarTheme.colors.accent,
+                        onClick = { onPick(place) },
+                        trailing = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.xs)) {
+                                RowAction(
+                                    icon = XRadarIcons.Star,
+                                    description = "Mettre en favori",
+                                    tint = if (isFavorite(place.id)) XRadarTheme.colors.accent else XRadarTheme.colors.textTertiary,
+                                ) { onToggleFavorite(place) }
+                                RowAction(XRadarIcons.Close, "Retirer des récents") { onRemoveRecent(place.id) }
+                            }
+                        },
+                    )
+                    if (index < recents.lastIndex) XRadarDivider(Modifier.padding(start = 58.dp))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(spacing.xxl))
+    }
+}
+
+/**
+ * Home / work. An empty one breathes gently and says "Définir" — otherwise nothing
+ * suggests the row does anything at all.
+ */
+@Composable
+private fun SavedRow(
+    label: String,
+    icon: ImageVector,
+    place: Place?,
+    onPick: (Place) -> Unit,
+    onSet: () -> Unit,
+) {
+    val colors = XRadarTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "savedScale")
+    val breathing = rememberInfiniteTransition(label = "savedHint")
+    val hint by breathing.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
+        label = "savedHintAlpha",
+    )
+
+    Box(modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale }) {
+        XRadarListRow(
+            title = label,
+            subtitle = place?.subtitle?.ifBlank { null } ?: place?.name,
+            leadingIcon = icon,
+            leadingTint = colors.accent,
+            interactionSource = interaction,
+            onClick = { if (place != null) onPick(place) else onSet() },
+            trailing = {
+                if (place != null) {
+                    RowAction(XRadarIcons.Settings, "Changer l'adresse", onClick = onSet)
+                } else {
+                    XRadarText(
+                        "Définir",
+                        style = XRadarTheme.typography.caption,
+                        color = colors.accent.copy(alpha = hint),
+                        modifier = Modifier
+                            .clip(XRadarTheme.shapes.pill)
+                            .background(colors.accent.copy(alpha = 0.12f * hint))
+                            .padding(horizontal = XRadarTheme.spacing.md, vertical = 4.dp),
+                    )
+                }
+            },
+        )
     }
 }
 
 @Composable
-private fun ResultList(results: List<Place>, onPick: (Place) -> Unit) {
+private fun RowAction(
+    icon: ImageVector,
+    description: String,
+    tint: Color = XRadarTheme.colors.textTertiary,
+    onClick: () -> Unit,
+) {
+    XRadarIcon(
+        icon,
+        contentDescription = description,
+        tint = tint,
+        size = 18.dp,
+        modifier = Modifier
+            .clip(XRadarTheme.shapes.pill)
+            .clickable(onClick = onClick)
+            .padding(6.dp),
+    )
+}
+
+/**
+ * Places to pick, in the order they came. With [fuel] set (the "Carburant" search), the
+ * stations that show a price for that fuel come first — each group still nearest first —
+ * every station shows its official price on the right, and the list credits the source.
+ */
+@Composable
+private fun ResultList(results: List<Place>, onPick: (Place) -> Unit, fuel: FuelType? = null) {
     val spacing = XRadarTheme.spacing
+    val now = remember(results, fuel) { System.currentTimeMillis() }
+    // A stable split of a list already sorted by distance: nothing moves inside a group.
+    val (priced, unpriced) = remember(results, fuel, now) {
+        if (fuel == null) results to emptyList() else results.partition { it.showsFuelPrice(fuel, now) }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -171,22 +638,109 @@ private fun ResultList(results: List<Place>, onPick: (Place) -> Unit) {
             bottom = spacing.xxxl,
         ),
     ) {
-        items(items = results, key = { it.id }) { place ->
-            PlaceRow(place, onPick)
-            XRadarDivider(Modifier.padding(start = 58.dp))
+        items(items = priced, key = { it.id }) { place ->
+            ResultRow(place = place, fuel = fuel, nowMillis = now, onPick = onPick)
+        }
+        if (unpriced.isNotEmpty()) {
+            if (priced.isNotEmpty()) {
+                item(key = "fuel-no-recent-price") {
+                    XRadarText(
+                        "Sans prix récent",
+                        style = XRadarTheme.typography.caption,
+                        color = XRadarTheme.colors.textTertiary,
+                        modifier = Modifier.padding(top = spacing.lg, bottom = spacing.xs),
+                    )
+                }
+            }
+            items(items = unpriced, key = { it.id }) { place ->
+                ResultRow(place = place, fuel = fuel, nowMillis = now, onPick = onPick)
+            }
+        }
+        if (fuel != null) {
+            item(key = "fuel-prices-source") {
+                XRadarText(
+                    "Prix officiels : prix-carburants.gouv.fr. Seuls les prix mis à jour depuis moins de 48 h sont affichés.",
+                    style = XRadarTheme.typography.footnote,
+                    color = XRadarTheme.colors.textTertiary,
+                    modifier = Modifier.padding(top = spacing.md),
+                )
+            }
         }
     }
 }
 
+/** One result line, with the official price on the right when [fuel] is set. */
 @Composable
-private fun PlaceRow(place: Place, onPick: (Place) -> Unit) {
+private fun ResultRow(place: Place, fuel: FuelType?, nowMillis: Long, onPick: (Place) -> Unit) {
+    val priceTag: (@Composable () -> Unit)? = if (fuel != null) {
+        { FuelPriceTag(place = place, fuel = fuel, nowMillis = nowMillis) }
+    } else {
+        null
+    }
     XRadarListRow(
         title = place.name,
         subtitle = place.subtitle,
         leadingIcon = place.kind.icon(),
         leadingTint = XRadarTheme.colors.accent,
         onClick = { onPick(place) },
+        trailing = priceTag,
     )
+    XRadarDivider(Modifier.padding(start = 58.dp))
+}
+
+/** Which fuel's price the stations show; the choice is remembered. */
+@Composable
+private fun FuelTypeRow(selected: FuelType, onSelect: (FuelType) -> Unit) {
+    val spacing = XRadarTheme.spacing
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = spacing.lg, vertical = spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+    ) {
+        FuelType.entries.forEach { fuel ->
+            XRadarChip(label = fuel.label, selected = fuel == selected, onClick = { onSelect(fuel) })
+        }
+    }
+}
+
+/**
+ * The official price of [fuel] at this station: "2,283 €" over its age, "Rupture" when the
+ * station is out of that fuel, "—" when it has no price younger than 48 h (or no match).
+ */
+@Composable
+private fun FuelPriceTag(place: Place, fuel: FuelType, nowMillis: Long) {
+    val colors = XRadarTheme.colors
+    val price = place.fuel?.prices?.firstOrNull { it.type == fuel }
+    Column(horizontalAlignment = Alignment.End) {
+        when {
+            price?.outOfStock == true -> XRadarText("Rupture", style = XRadarTheme.typography.callout, color = colors.hazard)
+            price != null && price.isFresh(nowMillis) -> {
+                XRadarText(
+                    "%.3f €".format(Locale.FRANCE, price.euros),
+                    style = XRadarTheme.typography.callout.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary,
+                )
+                priceAge(price, nowMillis)?.let {
+                    XRadarText(it, style = XRadarTheme.typography.caption, color = colors.textTertiary)
+                }
+            }
+            else -> XRadarText("—", style = XRadarTheme.typography.callout, color = colors.textTertiary)
+        }
+    }
+}
+
+/** "il y a 12 min", "il y a 3 h", "il y a 1 j" — how old a shown price is. */
+private fun priceAge(price: FuelPrice, nowMillis: Long): String? {
+    val at = price.updatedAtMillis ?: return null
+    val minutes = ((nowMillis - at) / 60_000L).coerceAtLeast(0)
+    return when {
+        minutes < 1 -> "à l'instant"
+        minutes < 60 -> "il y a $minutes min"
+        minutes < 24 * 60 -> "il y a ${minutes / 60} h"
+        else -> "il y a ${minutes / (24 * 60)} j"
+    }
 }
 
 @Composable
@@ -209,18 +763,35 @@ private fun PlaceKind.icon(): ImageVector = when (this) {
 private const val MIN_QUERY = 3
 private const val DEBOUNCE_MS = 300L
 
-private val Suggestions = listOf(
-    Place("montpellier", "Montpellier", "Hérault, Occitanie", PlaceKind.Result, 43.6108, 3.8767),
-    Place("paris", "Paris", "Île-de-France", PlaceKind.Result, 48.8566, 2.3522),
-    Place("lyon", "Lyon", "Auvergne-Rhône-Alpes", PlaceKind.Result, 45.7640, 4.8357),
-    Place("marseille", "Marseille", "Provence-Alpes-Côte d'Azur", PlaceKind.Result, 43.2965, 5.3698),
-    Place("nimes", "Nîmes", "Gard, Occitanie", PlaceKind.Result, 43.8367, 4.3601),
-)
-
-@Preview(name = "Recherche · suggestions", showBackground = true, backgroundColor = 0xFF06070A, widthDp = 380, heightDp = 800)
+@Preview(name = "Recherche", showBackground = true, backgroundColor = 0xFF06070A, widthDp = 380, heightDp = 800)
 @Composable
-private fun SearchSuggestionsPreview() {
+private fun SearchScreenPreview() {
     XRadarTheme(darkTheme = true) {
-        SearchScreen("", emptyList(), Suggestions, emptyList(), false, {}, {}, {})
+        SearchScreen(
+            query = "",
+            prompt = "Où allez-vous ?",
+            start = null,
+            home = null,
+            work = null,
+            favorites = emptyList(),
+            recents = listOf(Place("p", "Paris", "Île-de-France", PlaceKind.Recent, 48.85, 2.35)),
+            results = emptyList(),
+            loading = false,
+            category = null,
+            categoryPlaces = emptyList(),
+            categoryLoading = false,
+            onQueryChange = {},
+            onPick = {},
+            onCategory = {},
+            onEditStart = {},
+            onClearStart = {},
+            onSetHome = {},
+            onSetWork = {},
+            onRemoveRecent = {},
+            onToggleFavorite = {},
+            isFavorite = { false },
+            onStartFavorite = {},
+            onBack = {},
+        )
     }
 }

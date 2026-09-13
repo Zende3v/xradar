@@ -1,0 +1,18 @@
+// Build settings shared by every configuration.
+// Local secrets (Stadia key, Apple team) go in Secrets.xcconfig — git-ignored,
+// see Secrets.example.xcconfig. It is included last so it overrides the defaults.
+
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 1
+
+// Backend host only: "//" starts a comment in xcconfig, so the scheme is added
+// in Info.plist (XRBackendURL = https://$(XR_BACKEND_HOST)/).
+XR_BACKEND_HOST = debian.taila9954f.ts.net
+
+// Stadia Maps key for the basemap styles. Empty = map background stays blank.
+XR_STADIA_API_KEY =
+
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+
+#include? "Secrets.xcconfig"

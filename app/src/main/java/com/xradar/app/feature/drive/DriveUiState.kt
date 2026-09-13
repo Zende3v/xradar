@@ -18,8 +18,11 @@ data class DriveUiState(
     val speedLimitKmh: Int?,
     /** Non-null only while navigating to a destination; null when simply driving. */
     val trip: TripInfo?,
+    /** The nearest live alert (voice and trip counting); the first of [alerts]. */
     val alert: RoadAlert?,
     val gpsSignal: GpsSignal,
+    /** Every live alert, nearest first — the HUD stacks them all, none is dropped. */
+    val alerts: List<RoadAlert> = emptyList(),
     /** Latest raw fix, for the map to follow. */
     val location: LocationSample? = null,
     /** Radars around the driver, to plot on the map. */
@@ -30,10 +33,14 @@ data class DriveUiState(
     val zones: List<RadarZone> = emptyList(),
     /** Other drivers sharing their position nearby. */
     val liveUsers: List<LiveUser> = emptyList(),
+    /** OSM road signs near the driver. */
+    val signs: List<com.xradar.app.core.model.RoadSign> = emptyList(),
     /** Active route polyline, if navigating to a destination. */
     val routePoints: List<GeoPoint> = emptyList(),
     /** Next maneuver to display, if navigating with steps available. */
     val guidance: GuidanceInstruction? = null,
+    /** A destination was picked but no route came back (network / provider down). */
+    val routeError: Boolean = false,
 ) {
     val speedStatus: SpeedStatus?
         get() = SpeedStatus.of(speedKmh, speedLimitKmh)

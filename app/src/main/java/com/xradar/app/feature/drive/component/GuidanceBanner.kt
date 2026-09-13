@@ -36,7 +36,6 @@ fun GuidanceBanner(instruction: GuidanceInstruction, modifier: Modifier = Modifi
         shape = XRadarTheme.shapes.lg,
         color = colors.surface.copy(alpha = 0.82f),
         border = BorderStroke(1.dp, colors.border),
-        shadowElevation = XRadarTheme.elevation.level2,
     ) {
         Row(
             modifier = Modifier.padding(spacing.md),
@@ -50,7 +49,7 @@ fun GuidanceBanner(instruction: GuidanceInstruction, modifier: Modifier = Modifi
                 contentAlignment = Alignment.Center,
             ) {
                 XRadarIcon(
-                    iconFor(instruction.maneuver),
+                    maneuverIcon(instruction.maneuver),
                     contentDescription = null,
                     tint = colors.accent,
                     size = 34.dp,
@@ -75,7 +74,8 @@ fun GuidanceBanner(instruction: GuidanceInstruction, modifier: Modifier = Modifi
     }
 }
 
-private fun iconFor(maneuver: Maneuver): ImageVector = when (maneuver) {
+/** Arrow for a maneuver, shared by the top banner and the E3 dock. */
+internal fun maneuverIcon(maneuver: Maneuver): ImageVector = when (maneuver) {
     Maneuver.Depart -> XRadarIcons.Navigation
     Maneuver.Straight -> XRadarIcons.ManeuverStraight
     Maneuver.SlightLeft -> XRadarIcons.ManeuverSlightLeft

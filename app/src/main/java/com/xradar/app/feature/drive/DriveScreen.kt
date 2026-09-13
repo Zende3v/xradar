@@ -3,6 +3,8 @@ package com.xradar.app.feature.drive
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.slideOutVertically
@@ -10,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -34,10 +35,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import com.xradar.app.R
 import com.xradar.app.core.model.AlertType
 import com.xradar.app.core.model.ReportType
 import com.xradar.app.core.model.RoadAlert
 import com.xradar.app.core.model.TripInfo
+import com.xradar.app.data.preferences.AppPreferences
 import com.xradar.app.data.routing.ActiveTripRepository
 import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarIconButton
@@ -45,11 +51,11 @@ import com.xradar.app.designsystem.component.XRadarSurface
 import com.xradar.app.designsystem.component.XRadarText
 import com.xradar.app.designsystem.foundation.XRadarIcons
 import com.xradar.app.designsystem.theme.XRadarTheme
-import com.xradar.app.feature.drive.component.AlertSheet
+import com.xradar.app.feature.drive.component.AlertStack
+import com.xradar.app.feature.drive.component.key
+import com.xradar.app.feature.drive.component.DriveDock
 import com.xradar.app.feature.drive.component.DriveMap
 import com.xradar.app.feature.drive.component.GuidanceBanner
-import com.xradar.app.feature.drive.component.SpeedPanel
-import com.xradar.app.feature.drive.component.TripStrip
 
 /** Entry point wired to the Phase-1 simulation. Swap the source in Phase 2. */
 @Composable
@@ -60,6 +66,7 @@ fun DriveRoute(
     viewModel: DriveViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val dismissedAlerts by viewModel.dismissedAlerts.collectAsStateWithLifecycle()
     val account by com.xradar.app.data.account.AccountRepository.account.collectAsStateWithLifecycle()
     DriveScreen(
         state = state,
@@ -68,13 +75,16 @@ fun DriveRoute(
         onStopNavigation = { ActiveTripRepository.clear() },
         onReport = viewModel::report,
         isAdmin = account?.role == com.xradar.app.core.model.Role.Admin,
+        restricted = account?.isRestricted == true,
         onDeleteReport = viewModel::deleteReport,
+        dismissedAlerts = dismissedAlerts,
+        onDismissAlert = viewModel::dismissAlert,
         modifier = modifier,
     )
 }
 
-/** Signature for posting a report: type + optional plate / street / side. */
-typealias OnReport = (ReportType, String?, String?, String?) -> Unit
+/** Signature for posting a report — see [ReportDraft]. */
+typealias OnReport = (ReportDraft) -> Unit
 
 /** Stateless driving HUD — renders one [DriveUiState]. */
 @Composable
@@ -85,16 +95,21 @@ fun DriveScreen(
     onStopNavigation: () -> Unit,
     onReport: OnReport,
     isAdmin: Boolean = false,
+    /** Trial over / subscription lapsed: map only — no navigation, no reporting. */
+    restricted: Boolean = false,
     onDeleteReport: (String) -> Unit = {},
+    /** Keys of the alerts the driver swiped away; kept off the HUD for now. */
+    dismissedAlerts: Set<String> = emptySet(),
+    onDismissAlert: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
-    var satellite by remember { mutableStateOf(true) }
     var following by remember { mutableStateOf(true) }
-    var tripOptionsOpen by remember { mutableStateOf(false) }
     var reportOpen by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
+    var paywall by remember { mutableStateOf(false) }
+    var dockOpen by remember { mutableStateOf(false) }
 
     val topMode = when {
         state.guidance != null -> TopMode.Guidance
@@ -109,8 +124,8 @@ fun DriveScreen(
             reports = state.reports,
             zones = state.zones,
             liveUsers = state.liveUsers,
+            signs = state.signs,
             routePoints = state.routePoints,
-            satellite = satellite,
             following = following,
             onUserGesture = { following = false },
             onReportTap = if (isAdmin) ({ id -> pendingDelete = id }) else null,
@@ -135,7 +150,10 @@ fun DriveScreen(
                     TopMode.Guidance -> state.guidance?.let {
                         GuidanceBanner(instruction = it, modifier = Modifier.fillMaxWidth())
                     }
-                    TopMode.Search -> HudSearchBar(onClick = onOpenSearch, modifier = Modifier.fillMaxWidth())
+                    TopMode.Search -> HudSearchBar(
+                        onClick = { if (restricted) paywall = true else onOpenSearch() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     TopMode.None -> Unit
                 }
             }
@@ -153,10 +171,10 @@ fun DriveScreen(
                 )
             }
 
-            // Settings live at the top-right.
+            // The menu lives at the top-right, beside the search bar.
             XRadarIconButton(
-                icon = XRadarIcons.Gear,
-                contentDescription = "Réglages",
+                icon = ImageVector.vectorResource(R.drawable.ic_menu),
+                contentDescription = "Menu",
                 onClick = onOpenSettings,
                 tint = colors.textPrimary,
                 background = colors.surface.copy(alpha = 0.62f),
@@ -173,85 +191,114 @@ fun DriveScreen(
                 .padding(horizontal = spacing.lg, vertical = spacing.lg),
             verticalArrangement = Arrangement.spacedBy(spacing.md),
         ) {
+            // Alerts the driver swiped away stay off the HUD for a while (still live for the voice).
+            val shownAlerts = remember(state.alerts, dismissedAlerts) {
+                state.alerts.filter { it.key !in dismissedAlerts }
+            }
             AnimatedVisibility(
-                visible = state.alert != null,
+                visible = shownAlerts.isNotEmpty() && !restricted,
                 enter = slideInVertically { it / 2 } + fadeIn(),
                 exit = slideOutVertically { it / 2 } + fadeOut(),
             ) {
-                state.alert?.let { AlertSheet(it) }
+                // Every live alert in one card: the nearest in full, the others one tap away;
+                // a sideways swipe hides one.
+                AlertStack(shownAlerts, onDismiss = onDismissAlert)
             }
 
-            // ETA pill: Min. restantes · Distance · Arrivée (only while navigating).
-            AnimatedVisibility(visible = state.trip != null) {
-                state.trip?.let { TripStrip(trip = it, modifier = Modifier.fillMaxWidth()) }
+            AnimatedVisibility(visible = state.routeError) {
+                XRadarSurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = XRadarTheme.shapes.lg,
+                    color = colors.surface.copy(alpha = 0.82f),
+                    border = BorderStroke(1.dp, colors.hazard),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(spacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                    ) {
+                        XRadarIcon(XRadarIcons.Warning, contentDescription = null, tint = colors.hazard, size = 20.dp)
+                        XRadarText(
+                            "Itinéraire indisponible — vérifie la connexion et réessaie.",
+                            style = XRadarTheme.typography.subhead,
+                            color = colors.textPrimary,
+                        )
+                    }
+                }
             }
 
-            // Bottom row: current speed/limit on the left, the Options control on the right.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom,
+            // "e1"/"e2": alert sound + vibration, then voice — reachable without
+            // opening the dock, on the left so the reporting button stays on the right.
+            AnimatedVisibility(
+                visible = !dockOpen,
+                enter = fadeIn(),
+                exit = fadeOut(),
             ) {
-                SpeedPanel(
-                    speedKmh = state.speedKmh,
-                    status = state.speedStatus,
-                    searching = state.isSearchingGps,
-                    limitKmh = state.speedLimitKmh,
-                )
-                Spacer(Modifier.weight(1f))
-                OptionButton(onClick = { tripOptionsOpen = true })
+                Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                    AlertSoundButton()
+                    VoiceButton()
+                }
             }
+
+            // "E3": the drop-up dock — speed + live limit, red-light timer, and the
+            // options one drag away. Replaces the old ETA pill / speed / Options row.
+            DriveDock(
+                speedKmh = state.speedKmh,
+                limitKmh = state.speedLimitKmh,
+                status = state.speedStatus,
+                searching = state.isSearchingGps,
+                trip = state.trip,
+                onOpenChange = { dockOpen = it },
+            )
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(spacing.sm),
+        // Map controls: they step out of the way while the dock is deployed.
+        AnimatedVisibility(
+            visible = !dockOpen,
+            modifier = Modifier.align(Alignment.CenterEnd),
+            enter = fadeIn() + slideInHorizontally { it / 2 },
+            exit = fadeOut() + slideOutHorizontally { it / 2 },
         ) {
-            AnimatedVisibility(visible = !following) {
+            Column(
+                modifier = Modifier.padding(end = spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(spacing.sm),
+            ) {
+                AnimatedVisibility(visible = !following) {
+                    XRadarIconButton(
+                        icon = ImageVector.vectorResource(R.drawable.ic_recenter),
+                        contentDescription = "Recentrer",
+                        onClick = { following = true },
+                        tint = Color.Unspecified, // the asset carries its own colours
+                        background = colors.surface.copy(alpha = 0.62f),
+                        border = BorderStroke(1.dp, colors.border),
+                        size = 48.dp,
+                    )
+                }
+                // Primary crowdsourcing action: signal something on the road.
                 XRadarIconButton(
-                    icon = XRadarIcons.Gps,
-                    contentDescription = "Recentrer",
-                    onClick = { following = true },
-                    tint = colors.accent,
+                    icon = ImageVector.vectorResource(R.drawable.ic_report),
+                    contentDescription = "Signaler",
+                    onClick = { if (restricted) paywall = true else reportOpen = true },
+                    tint = colors.hazard,
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),
-                    size = 48.dp,
+                    size = 56.dp,
                 )
             }
-            XRadarIconButton(
-                icon = XRadarIcons.Layers,
-                contentDescription = "Type de carte",
-                onClick = { satellite = !satellite },
-                tint = colors.textPrimary,
-                background = colors.surface.copy(alpha = 0.62f),
-                border = BorderStroke(1.dp, colors.border),
-                size = 48.dp,
-            )
-            // Primary crowdsourcing action: signal something on the road.
-            XRadarIconButton(
-                icon = XRadarIcons.Warning,
-                contentDescription = "Signaler",
-                onClick = { reportOpen = true },
-                tint = colors.hazard,
-                background = colors.surface.copy(alpha = 0.62f),
-                border = BorderStroke(1.dp, colors.border),
-                size = 56.dp,
-            )
-        }
-
-        if (tripOptionsOpen) {
-            TripOptionsSheet(trip = state.trip, onDismiss = { tripOptionsOpen = false })
         }
 
         if (reportOpen) {
             ReportSheet(
-                onReport = { type, plate, street, side ->
-                    onReport(type, plate, street, side)
+                onReport = { draft ->
+                    onReport(draft)
                     reportOpen = false
                 },
                 onDismiss = { reportOpen = false },
             )
+        }
+
+        if (paywall) {
+            SubscriptionRequired(onClose = { paywall = false })
         }
 
         pendingDelete?.let { id ->
@@ -259,6 +306,94 @@ fun DriveScreen(
                 onCancel = { pendingDelete = null },
                 onConfirm = { onDeleteReport(id); pendingDelete = null },
             )
+        }
+    }
+}
+
+/**
+ * Alert sound: off → on → on with vibration. One button, three states, so the
+ * driver can silence everything with a thumb without opening a menu.
+ */
+@Composable
+private fun AlertSoundButton() {
+    val colors = XRadarTheme.colors
+    val prefs by AppPreferences.alerts.collectAsStateWithLifecycle()
+    val icon = when {
+        !prefs.sound -> R.drawable.ic_bell_off
+        prefs.vibration -> R.drawable.ic_bell_ringing
+        else -> R.drawable.ic_bell
+    }
+    XRadarIconButton(
+        icon = ImageVector.vectorResource(icon),
+        contentDescription = "Son des alertes",
+        onClick = {
+            AppPreferences.updateAlerts {
+                when {
+                    !it.sound -> it.copy(sound = true, vibration = false)
+                    !it.vibration -> it.copy(vibration = true)
+                    else -> it.copy(sound = false, vibration = false)
+                }
+            }
+        },
+        tint = Color.Unspecified, // the asset carries its own colours
+        background = colors.surface.copy(alpha = 0.62f),
+        border = BorderStroke(1.dp, colors.border),
+        size = 48.dp,
+    )
+}
+
+/** Spoken guidance and alert announcements, on or off. */
+@Composable
+private fun VoiceButton() {
+    val colors = XRadarTheme.colors
+    val prefs by AppPreferences.alerts.collectAsStateWithLifecycle()
+    XRadarIconButton(
+        icon = ImageVector.vectorResource(
+            if (prefs.voice) R.drawable.ic_volume_on else R.drawable.ic_volume_off,
+        ),
+        contentDescription = "Annonces vocales",
+        onClick = { AppPreferences.updateAlerts { it.copy(voice = !it.voice) } },
+        tint = Color.Unspecified, // the asset carries its own colours
+        background = colors.surface.copy(alpha = 0.62f),
+        border = BorderStroke(1.dp, colors.border),
+        size = 48.dp,
+    )
+}
+
+/** Shown when a restricted account tries to navigate or report. */
+@Composable
+private fun SubscriptionRequired(onClose: () -> Unit) {
+    val colors = XRadarTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.scrim)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        XRadarSurface(
+            modifier = Modifier.padding(XRadarTheme.spacing.xxl),
+            shape = XRadarTheme.shapes.xl,
+            color = colors.surfaceElevated,
+            border = BorderStroke(1.dp, colors.border),
+        ) {
+            Column(
+                modifier = Modifier.padding(XRadarTheme.spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.md),
+            ) {
+                XRadarText("Abonnement requis", style = XRadarTheme.typography.headline, color = colors.textPrimary)
+                XRadarText(
+                    "Ton essai gratuit est terminé. La carte reste disponible ; la navigation, " +
+                        "les alertes et les signalements reviennent avec un abonnement membre.",
+                    style = XRadarTheme.typography.subhead,
+                    color = colors.textSecondary,
+                )
+                Box(
+                    Modifier.fillMaxWidth().clip(XRadarTheme.shapes.lg).background(colors.accent)
+                        .clickable(onClick = onClose).padding(vertical = XRadarTheme.spacing.md),
+                    contentAlignment = Alignment.Center,
+                ) { XRadarText("Compris", style = XRadarTheme.typography.bodyStrong, color = colors.onAccent) }
+            }
         }
     }
 }
@@ -304,35 +439,6 @@ private fun DeleteConfirm(onCancel: () -> Unit, onConfirm: () -> Unit) {
 
 private enum class TopMode { Search, Guidance, None }
 
-/** Options control (bottom-right): tap opens the Waze-style trip/options sheet. */
-@Composable
-private fun OptionButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = XRadarTheme.colors
-    XRadarSurface(
-        modifier = modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            onClick = onClick,
-        ),
-        shape = XRadarTheme.shapes.lg,
-        color = colors.surface.copy(alpha = 0.62f),
-        border = BorderStroke(1.dp, colors.border),
-        shadowElevation = XRadarTheme.elevation.level2,
-    ) {
-        Row(
-            modifier = Modifier.padding(
-                horizontal = XRadarTheme.spacing.lg,
-                vertical = XRadarTheme.spacing.md,
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.sm),
-        ) {
-            XRadarIcon(XRadarIcons.Settings, contentDescription = null, tint = colors.textSecondary, size = 22.dp)
-            XRadarText("Options", style = XRadarTheme.typography.bodyStrong, color = colors.textPrimary)
-        }
-    }
-}
-
 @Composable
 private fun HudSearchBar(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = XRadarTheme.colors
@@ -342,7 +448,6 @@ private fun HudSearchBar(onClick: () -> Unit, modifier: Modifier = Modifier) {
         shape = XRadarTheme.shapes.lg,
         color = colors.surface.copy(alpha = 0.62f),
         border = BorderStroke(1.dp, colors.border),
-        shadowElevation = XRadarTheme.elevation.level2,
     ) {
         Row(
             modifier = Modifier.padding(
@@ -366,27 +471,55 @@ private fun HudSearchBar(onClick: () -> Unit, modifier: Modifier = Modifier) {
 @Preview(name = "HUD · dark", showBackground = true, backgroundColor = 0xFF06070A, widthDp = 380, heightDp = 800)
 @Composable
 private fun DriveScreenPreview() {
+    // Three alerts at once, as in central Paris: one in full, two rows beneath.
+    val alerts = listOf(
+        RoadAlert(
+            type = AlertType.RadarFixed,
+            title = "Radar fixe",
+            roadLabel = "Autoroute A7",
+            speedLimitKmh = 130,
+            distanceMeters = 300,
+            etaSeconds = 9,
+            confidence = 0.92f,
+            lastReportedLabel = null,
+            id = "radar-1",
+        ),
+        RoadAlert(
+            type = AlertType.ControlZone,
+            title = "Zone de contrôle",
+            roadLabel = "Sens opposé",
+            speedLimitKmh = null,
+            distanceMeters = 640,
+            etaSeconds = 18,
+            confidence = 0.7f,
+            lastReportedLabel = "2 signalements · il y a 4 min",
+            id = "report-1",
+        ),
+        RoadAlert(
+            type = AlertType.Accident,
+            title = "Accident",
+            roadLabel = null,
+            speedLimitKmh = null,
+            distanceMeters = 1200,
+            etaSeconds = 34,
+            confidence = 0.85f,
+            lastReportedLabel = "1 signalement · à l'instant",
+            id = "report-2",
+        ),
+    )
     XRadarTheme(darkTheme = true) {
         DriveScreen(
             onOpenSearch = {},
             onOpenSettings = {},
             onStopNavigation = {},
-            onReport = { _, _, _, _ -> },
+            onReport = {},
             state = DriveUiState(
                 speedKmh = 128,
                 speedLimitKmh = 130,
                 trip = TripInfo("08:42", "12,4 km", "20:14"),
-                alert = RoadAlert(
-                    type = AlertType.RadarFixed,
-                    title = "Radar fixe",
-                    roadLabel = "Autoroute A7",
-                    speedLimitKmh = 130,
-                    distanceMeters = 300,
-                    etaSeconds = 9,
-                    confidence = 0.92f,
-                    lastReportedLabel = null,
-                ),
+                alert = alerts.first(),
                 gpsSignal = GpsSignal.Good,
+                alerts = alerts,
             ),
         )
     }

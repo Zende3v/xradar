@@ -2,9 +2,17 @@ package com.xradar.app.feature.drive.component
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.Typeface
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xradar.app.BuildConfig
+import com.xradar.app.core.model.SignType
+import com.xradar.app.data.preferences.AppPreferences
+import com.xradar.app.data.preferences.MapStyle
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -48,6 +56,7 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -70,16 +79,19 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.xradar.app.R
 import com.xradar.app.core.geo.RoutePath
+import com.xradar.app.core.geo.SunClock
 import com.xradar.app.core.model.LiveUser
 import com.xradar.app.core.model.RadarZone
+import com.xradar.app.core.model.RoadSign
 import com.xradar.app.designsystem.foundation.XRadarIcons
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Real map: MapLibre rendering free IGN tiles (satellite ortho or plan). Plots the
+ * Real map: MapLibre rendering the Plans basemap (day or night palette). Plots the
  * user's position and nearby radars, and follows the GPS fix **keeping the user's
  * zoom** (recenters gently, north-up) so it never fights manual zoom/pan.
  */
@@ -90,8 +102,8 @@ fun DriveMap(
     reports: List<UserReport>,
     zones: List<RadarZone>,
     liveUsers: List<LiveUser>,
+    signs: List<RoadSign>,
     routePoints: List<GeoPoint>,
-    satellite: Boolean,
     following: Boolean,
     onUserGesture: () -> Unit,
     onReportTap: ((String) -> Unit)? = null,
@@ -151,6 +163,8 @@ fun DriveMap(
     val colors = XRadarTheme.colors
     val density = LocalDensity.current
     val markerPx = with(density) { 30.dp.roundToPx() }
+    val clusterAlertPx = with(density) { 34.dp.roundToPx() }
+    val clusterSignPx = with(density) { 30.dp.roundToPx() }
     val markerSpecs = listOf(
         Triple("RadarFixed", rememberVectorPainter(XRadarIcons.Radar), colors.radarFixed),
         Triple("RadarMobile", rememberVectorPainter(XRadarIcons.Radar), colors.radarMobile),
@@ -206,8 +220,21 @@ fun DriveMap(
             }
             // Tapping a report marker (admins can then delete it).
             ready.addOnMapClickListener { latLng ->
-                val handler = latestOnReportTap ?: return@addOnMapClickListener false
                 val screen = ready.projection.toScreenLocation(latLng)
+                val cluster = ready
+                    .queryRenderedFeatures(screen, RADAR_CLUSTER, REPORT_CLUSTER, SIGN_CLUSTER)
+                    .firstOrNull()
+                if (cluster != null) {
+                    ready.animateCamera(
+                        CameraUpdateFactory.newLatLngZoom(
+                            latLng,
+                            (ready.cameraPosition.zoom + CLUSTER_ZOOM_STEP).coerceAtMost(CLUSTER_ZOOM_MAX),
+                        ),
+                        CLUSTER_ZOOM_MS,
+                    )
+                    return@addOnMapClickListener true
+                }
+                val handler = latestOnReportTap ?: return@addOnMapClickListener false
                 val hit = ready.queryRenderedFeatures(screen, REPORT_LAYER).firstOrNull()
                 val rid = hit?.getStringProperty("rid")
                 if (rid != null) { handler(rid); true } else false
@@ -216,11 +243,29 @@ fun DriveMap(
         }
     }
 
-    // Load (or reload) the style whenever the layer choice changes.
-    LaunchedEffect(map, satellite) {
+    // Load (or reload) the style when the basemap choice or the daylight changes.
+    val mapStyle by AppPreferences.settings.collectAsStateWithLifecycle()
+    // "Auto" follows the sky, not the app theme: daylight where the driver actually is.
+    var daylight by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            val fix = locationState.value
+            daylight = SunClock.isDaylight(
+                fix?.latitude ?: FALLBACK_LAT,
+                fix?.longitude ?: FALLBACK_LON,
+            )
+            delay(SUN_CHECK_MS)
+        }
+    }
+    val darkMap = when (mapStyle.mapStyle) {
+        MapStyle.Auto -> !daylight
+        MapStyle.Bright -> false
+        MapStyle.Dark -> true
+    }
+    LaunchedEffect(map, darkMap) {
         val current = map ?: return@LaunchedEffect
         styleReady = false
-        current.setStyle(Style.Builder().fromJson(ignStyleJson(satellite))) { style ->
+        current.setStyle(baseStyle(context, darkMap)) { style ->
             // Route (drawn at the bottom, under radars and the user marker).
             style.addSource(GeoJsonSource(ROUTE_SOURCE))
             style.addLayer(
@@ -256,10 +301,35 @@ fun DriveMap(
                     PropertyFactory.lineOpacity(0.85f),
                 ),
             )
-            // Register a marker image per type (icon + color from the settings visuals).
+            // Custom PNG markers (map display only); vector fallback for the rest.
+            val assetMarkers = mapOf(
+                "RadarFixed" to R.drawable.marker_radar_fix,
+                "RadarMobile" to R.drawable.marker_radar_mobile,
+                "Camera" to R.drawable.marker_camera,
+                "ControlZone" to R.drawable.marker_zone_controle,
+                "Hazard" to R.drawable.marker_danger,
+                "Accident" to R.drawable.marker_accident,
+                "RadarCar" to R.drawable.marker_voiture_radar,
+            )
+            // Baseline vector markers for every type (always works)…
             markerSpecs.forEach { (key, painter, color) ->
                 style.addImage("m-$key", markerBitmap(painter, markerPx, color, density))
             }
+            // …then override with the custom PNGs (guarded so a decode issue can't
+            // abort the whole style and blank the map).
+            runCatching {
+                assetMarkers.forEach { (key, resId) ->
+                    BitmapFactory.decodeResource(context.resources, resId)?.let {
+                        style.addImage("m-$key", Bitmap.createScaledBitmap(it, markerPx, markerPx, true))
+                    }
+                }
+            }
+            // Cluster badges (Arthur's icons), scaled to a fixed height. The width that
+            // comes out drives where the count sits, so a swapped asset stays aligned.
+            val alertBadgeW = registerBadge(style, context, R.drawable.cluster_alert, CLUSTER_ALERT_IMAGE, clusterAlertPx)
+            val signBadgeW = registerBadge(style, context, R.drawable.cluster_sign, CLUSTER_SIGN_IMAGE, clusterSignPx)
+            val alertOffsetEm = badgeOffsetEm(alertBadgeW, density)
+            val signOffsetEm = badgeOffsetEm(signBadgeW, density)
             // Other live drivers (distinct violet marker).
             style.addImage(LIVE_IMAGE, markerBitmap(livePainter, markerPx, ComposeColor(0xFF8B7CF6), density))
             style.addSource(GeoJsonSource(LIVE_SOURCE))
@@ -273,24 +343,58 @@ fun DriveMap(
                     PropertyFactory.iconSize(0.8f),
                 ),
             )
+            // OSM road signs — real drawn traffic signs, a bit larger than alerts.
+            val signPx = (markerPx * 1.25f).toInt()
+            com.xradar.app.core.model.SignType.entries
+                .filter { it != com.xradar.app.core.model.SignType.SpeedLimit }
+                .forEach { t -> style.addImage("s-${t.wire}", signBitmap(t, signPx)) }
+            // Speed-limit change signs (red ring + number), used along the route.
+            SPEED_VALUES.forEach { v -> style.addImage("sp-$v", speedSignBitmap(v, signPx)) }
+            style.addSource(GeoJsonSource(SIGN_SOURCE, clusterOptions()))
+            style.addLayer(
+                SymbolLayer(SIGN_LAYER, SIGN_SOURCE).withProperties(
+                    PropertyFactory.iconImage(Expression.get("icon")),
+                    PropertyFactory.iconAllowOverlap(false),
+                    PropertyFactory.iconSize(1f),
+                ).also { it.setFilter(Expression.not(Expression.has(CLUSTER_COUNT))) },
+            )
+            addBadgeClusterLayer(style, SIGN_SOURCE, SIGN_CLUSTER, CLUSTER_SIGN_IMAGE, signOffsetEm, darkMap)
+            setSigns(style, signs)
             // Radars (drawn under the user marker) — each feature picks its icon.
-            style.addSource(GeoJsonSource(RADAR_SOURCE))
+            // Radars: everything is still loaded, but zoomed out they gather into
+            // counted bubbles at the centre of each pack, and split apart on zoom in.
+            style.addSource(GeoJsonSource(RADAR_SOURCE, clusterOptions()))
             style.addLayer(
                 SymbolLayer(RADAR_LAYER, RADAR_SOURCE).withProperties(
                     PropertyFactory.iconImage(Expression.get("icon")),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconSize(0.82f),
+                ).also { it.setFilter(Expression.not(Expression.has(CLUSTER_COUNT))) },
+            )
+            addBadgeClusterLayer(style, RADAR_SOURCE, RADAR_CLUSTER, CLUSTER_ALERT_IMAGE, alertOffsetEm, darkMap)
+            // A control zone is a stretch of road, not a dot: draw the 80 m it covers
+            // along the reporter's course, under the markers.
+            style.addSource(GeoJsonSource(CONTROL_SOURCE))
+            style.addLayer(
+                LineLayer(CONTROL_LAYER, CONTROL_SOURCE).withProperties(
+                    PropertyFactory.lineColor(String.format("#%06X", 0xFFFFFF and colors.controlZone.toArgb())),
+                    PropertyFactory.lineWidth(9f),
+                    PropertyFactory.lineOpacity(0.65f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 ),
             )
-            // Crowdsourced reports, above radars — same per-type icons.
-            style.addSource(GeoJsonSource(REPORT_SOURCE))
+            // Crowdsourced reports, above radars — same per-type icons, same clustering.
+            style.addSource(GeoJsonSource(REPORT_SOURCE, clusterOptions()))
             style.addLayer(
                 SymbolLayer(REPORT_LAYER, REPORT_SOURCE).withProperties(
                     PropertyFactory.iconImage(Expression.get("icon")),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
-                ),
+                    PropertyFactory.iconSize(0.82f),
+                ).also { it.setFilter(Expression.not(Expression.has(CLUSTER_COUNT))) },
             )
+            addBadgeClusterLayer(style, REPORT_SOURCE, REPORT_CLUSTER, CLUSTER_ALERT_IMAGE, alertOffsetEm, darkMap)
             // User position on top: a soft pulsing halo + a heading arrow.
             style.addImage(ARROW_IMAGE, arrowBitmap())
             style.addSource(GeoJsonSource(POSITION_SOURCE))
@@ -311,9 +415,10 @@ fun DriveMap(
                     PropertyFactory.iconSize(0.85f),
                 ),
             )
-            location?.let { setArrow(style, it.latitude, it.longitude, displayBearing(it, heading, 0f)) }
+            location?.let { setArrow(style, it.latitude, it.longitude, 0f) }
             setRadars(style, radars)
             setReports(style, reports)
+            setControlZones(style, reports)
             setZones(style, zones)
             setLive(style, liveUsers)
             setRoute(style, routePoints)
@@ -332,7 +437,10 @@ fun DriveMap(
     LaunchedEffect(map, styleReady, reports) {
         val current = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
-        current.style?.let { setReports(it, reports) }
+        current.style?.let {
+            setReports(it, reports)
+            setControlZones(it, reports)
+        }
     }
 
     // Update radar-car zones when they change.
@@ -349,9 +457,18 @@ fun DriveMap(
         current.style?.let { setLive(it, liveUsers) }
     }
 
+    // Update road signs when they change.
+    LaunchedEffect(map, styleReady, signs) {
+        val current = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        current.style?.let { setSigns(it, signs) }
+    }
+
     // Match each GPS fix onto the active route (snap + progress); off-route falls back to raw GPS.
     LaunchedEffect(location, routePath) {
         val fix = location ?: return@LaunchedEffect
+        nav.speedMps = (fix.speedMps ?: 0f).toDouble()
+        nav.fixAtMs = System.currentTimeMillis()
         val rp = routePath
         if (rp == null) { nav.onRoute = false; return@LaunchedEffect }
         val m = rp.match(fix.latitude, fix.longitude)
@@ -387,6 +504,7 @@ fun DriveMap(
         var arrowBearing = 0f
         var lastRouteAt = 0L
         var seededArrow = false
+        var firstFollow = true
         val startCam = current.cameraPosition
         var camLat = startCam.target?.latitude ?: arrowLat
         var camLon = startCam.target?.longitude ?: arrowLon
@@ -409,21 +527,37 @@ fun DriveMap(
                 }
                 val now = System.currentTimeMillis()
                 if (rp != null && nav.onRoute) {
-                    // Glide the progress toward the matched distance (forward-biased),
-                    // place the arrow exactly on the line, and trim what's behind.
-                    val delta = nav.targetAlong - displayedAlong
-                    displayedAlong += delta * if (delta >= 0) ALONG_LERP else 0.06
+                    // Dead reckoning: GPS lands once a second, the eye needs sixty. Between
+                    // fixes we keep advancing at the last known speed and glide onto the
+                    // real position when it arrives — motion stays perfectly continuous.
+                    val dt = (now - nav.fixAtMs).coerceIn(0L, MAX_DR_MS) / 1000.0
+                    val predicted = nav.targetAlong + nav.speedMps * dt
+                    val delta = predicted - displayedAlong
+                    displayedAlong += delta * if (delta >= 0) ALONG_LERP else BACK_LERP
                     val (pt, tangent) = rp.poseAt(displayedAlong)
                     arrowLat = pt.lat; arrowLon = pt.lon
-                    arrowBearing = lerpAngle(arrowBearing.toDouble(), tangent.toFloat(), 0.5f).toFloat()
+                    arrowBearing = lerpAngle(arrowBearing.toDouble(), tangent.toFloat(), TANGENT_LERP).toFloat()
                     if (now - lastRouteAt > ROUTE_TRIM_MS) {
                         lastRouteAt = now
                         setRoute(style, rp.trimFrom(displayedAlong))
                     }
                 } else {
-                    arrowLat += (fix.latitude - arrowLat) * POS_LERP
-                    arrowLon += (fix.longitude - arrowLon) * POS_LERP
-                    arrowBearing = displayBearing(fix, heading, arrowBearing)
+                    // Same trick off-route: project the last fix along its heading.
+                    val moving = (fix.speedMps ?: 0f) > MIN_SPEED_MS
+                    var tLat = fix.latitude
+                    var tLon = fix.longitude
+                    val brg = fix.bearingDeg?.toDouble()
+                    if (moving && brg != null) {
+                        val dt = (now - nav.fixAtMs).coerceIn(0L, MAX_DR_MS) / 1000.0
+                        val travelled = nav.speedMps * dt
+                        tLat += travelled * cos(Math.toRadians(brg)) / 111_320.0
+                        tLon += travelled * sin(Math.toRadians(brg)) /
+                            (111_320.0 * cos(Math.toRadians(fix.latitude)))
+                    }
+                    arrowLat += (tLat - arrowLat) * POS_LERP
+                    arrowLon += (tLon - arrowLon) * POS_LERP
+                    // North-up when stopped (avoids a wrong compass heading), GPS course when moving.
+                    arrowBearing = if (moving) (brg?.toFloat() ?: arrowBearing) else 0f
                     if (rp != null && now - lastRouteAt > ROUTE_TRIM_MS) {
                         lastRouteAt = now
                         setRoute(style, rp.points) // show the whole route until we're back on it
@@ -436,6 +570,13 @@ fun DriveMap(
                     PropertyFactory.circleOpacity(0.10f + 0.16f * pulse),
                 )
                 if (followingState.value) {
+                    if (firstFollow) {
+                        // Snap on the very first frame so the map opens already upright.
+                        firstFollow = false
+                        camLat = arrowLat; camLon = arrowLon
+                        camZoom = NAV_ZOOM; camTilt = NAV_TILT
+                        camBearing = arrowBearing.toDouble()
+                    }
                     camLat += (arrowLat - camLat) * POS_LERP
                     camLon += (arrowLon - camLon) * POS_LERP
                     camZoom += (NAV_ZOOM - camZoom) * EASE_LERP
@@ -457,10 +598,69 @@ fun DriveMap(
                     camTilt = cam.tilt
                 }
             }
-            phase += 0.18f
+            phase += PULSE_STEP
             delay(FRAME_MS)
         }
     }
+}
+
+/** Clustering shared by the radar and report sources (alerts only, never road signs). */
+private fun clusterOptions(): GeoJsonOptions = GeoJsonOptions()
+    .withCluster(true)
+    .withClusterRadius(CLUSTER_RADIUS_PX)
+    .withClusterMaxZoom(CLUSTER_MAX_ZOOM)
+
+/** Registers a cluster badge scaled to [heightPx]; returns its width in px (0 if absent). */
+private fun registerBadge(
+    style: Style,
+    context: android.content.Context,
+    resId: Int,
+    name: String,
+    heightPx: Int,
+): Int = runCatching {
+    val src = BitmapFactory.decodeResource(context.resources, resId) ?: return@runCatching 0
+    val width = (heightPx * src.width.toFloat() / src.height).toInt().coerceAtLeast(1)
+    style.addImage(name, Bitmap.createScaledBitmap(src, width, heightPx, true))
+    width
+}.getOrDefault(0)
+
+/** Half the badge plus a small gap, in ems of the count's text size. */
+private fun badgeOffsetEm(widthPx: Int, density: Density): Float {
+    if (widthPx <= 0) return 1.2f
+    val widthDp = with(density) { widthPx.toDp().value }
+    return (widthDp / 2f + CLUSTER_TEXT_GAP_DP) / CLUSTER_TEXT_SIZE
+}
+
+/**
+ * A pack of markers: the badge icon with the count set beside it, never on top of it.
+ * The number flips between two colours (plus the opposite halo) so it stays readable
+ * on both the light and the dark basemap.
+ */
+private fun addBadgeClusterLayer(
+    style: Style,
+    source: String,
+    layerId: String,
+    image: String,
+    offsetEm: Float,
+    darkMap: Boolean,
+) {
+    val layer = SymbolLayer(layerId, source).withProperties(
+        PropertyFactory.iconImage(image),
+        PropertyFactory.iconAllowOverlap(true),
+        PropertyFactory.iconIgnorePlacement(true),
+        PropertyFactory.textField(Expression.get("point_count_abbreviated")),
+        PropertyFactory.textFont(arrayOf("Stadia Semibold")),
+        PropertyFactory.textSize(CLUSTER_TEXT_SIZE),
+        PropertyFactory.textColor(if (darkMap) "#FFFFFF" else "#0A0B0D"),
+        PropertyFactory.textHaloColor(if (darkMap) "#06070A" else "#FFFFFF"),
+        PropertyFactory.textHaloWidth(1.8f),
+        PropertyFactory.textAnchor(Property.TEXT_ANCHOR_LEFT),
+        PropertyFactory.textOffset(arrayOf(offsetEm, 0f)),
+        PropertyFactory.textAllowOverlap(true),
+        PropertyFactory.textIgnorePlacement(true),
+    )
+    layer.setFilter(Expression.has(CLUSTER_COUNT))
+    style.addLayer(layer)
 }
 
 private fun setArrow(style: Style, lat: Double, lon: Double, bearing: Float) {
@@ -473,6 +673,9 @@ private fun setArrow(style: Style, lat: Double, lon: Double, bearing: Float) {
 private class NavHolder {
     @Volatile var targetAlong: Double = 0.0
     @Volatile var onRoute: Boolean = false
+    /** Last fix's ground speed and arrival time — the render loop extrapolates from them. */
+    @Volatile var speedMps: Double = 0.0
+    @Volatile var fixAtMs: Long = 0L
 }
 
 /** Fused heading: smoothed sensor azimuth realigned to the GPS travel direction. */
@@ -519,7 +722,7 @@ private fun arrowBitmap(): Bitmap {
         lineTo(size * 0.18f, size * 0.86f)  // bottom-left
         close()
     }
-    // White halo/outline for contrast on satellite imagery.
+    // White halo/outline so the arrow reads on any basemap.
     canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = size * 0.09f
@@ -543,6 +746,28 @@ private fun setRadars(style: Style, radars: List<Radar>) {
         ?.setGeoJson(FeatureCollection.fromFeatures(features))
 }
 
+/** The 80 m a control zone covers, drawn along the course its reporter had. */
+private fun setControlZones(style: Style, reports: List<UserReport>) {
+    val features = reports.mapNotNull { r ->
+        if (r.type != com.xradar.app.core.model.ReportType.ControlZone) return@mapNotNull null
+        val bearing = r.bearingDeg ?: return@mapNotNull null
+        val half = CONTROL_ZONE_LENGTH_M / 2.0
+        val dLat = half * cos(Math.toRadians(bearing)) / 111_320.0
+        val dLon = half * sin(Math.toRadians(bearing)) /
+            (111_320.0 * cos(Math.toRadians(r.lat)).coerceAtLeast(0.1))
+        Feature.fromGeometry(
+            LineString.fromLngLats(
+                listOf(
+                    Point.fromLngLat(r.lon - dLon, r.lat - dLat),
+                    Point.fromLngLat(r.lon + dLon, r.lat + dLat),
+                ),
+            ),
+        )
+    }
+    style.getSourceAs<GeoJsonSource>(CONTROL_SOURCE)
+        ?.setGeoJson(FeatureCollection.fromFeatures(features))
+}
+
 private fun setReports(style: Style, reports: List<UserReport>) {
     val features = reports.map {
         Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)).apply {
@@ -552,6 +777,169 @@ private fun setReports(style: Style, reports: List<UserReport>) {
     }
     style.getSourceAs<GeoJsonSource>(REPORT_SOURCE)
         ?.setGeoJson(FeatureCollection.fromFeatures(features))
+}
+
+// ---- Drawn traffic signs (French/EU look) ----------------------------------
+private const val SIGN_RED = 0xFFD22B2B.toInt()
+private const val SIGN_BLUE = 0xFF1F5AA8.toInt()
+private const val SIGN_YELLOW = 0xFFF6C700.toInt()
+private const val SIGN_WHITE = 0xFFFFFFFF.toInt()
+private const val SIGN_BLACK = 0xFF161616.toInt()
+
+private fun fill(color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; this.color = color }
+private fun stroke(color: Int, w: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE; this.color = color; strokeWidth = w; strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
+}
+
+/** Draw a recognizable French road sign into a square bitmap. */
+private fun signBitmap(type: SignType, sizePx: Int): Bitmap {
+    val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val s = sizePx.toFloat()
+    val cx = s / 2f
+    val cy = s / 2f
+    val r = s * 0.44f
+    when (type) {
+        SignType.Stop -> {
+            val p = polygon(cx, cy, r, 8, -22.5)
+            c.drawPath(p, fill(SIGN_RED))
+            c.drawPath(p, stroke(SIGN_WHITE, s * 0.05f))
+            val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = SIGN_WHITE; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; textSize = s * 0.26f
+            }
+            c.drawText("STOP", cx, cy + tp.textSize * 0.36f, tp)
+        }
+        SignType.GiveWay -> {
+            val p = triangleDown(cx, cy, r * 1.05f)
+            c.drawPath(p, fill(SIGN_WHITE))
+            c.drawPath(p, stroke(SIGN_RED, s * 0.11f))
+        }
+        SignType.LevelCrossing -> {
+            // Croix de Saint-André: two white arms with a red edge, on a white disc
+            // so it reads on both basemaps.
+            c.drawCircle(cx, cy, r, fill(SIGN_WHITE))
+            c.drawCircle(cx, cy, r, stroke(SIGN_RED, s * 0.06f))
+            val arm = r * 0.78f
+            val edge = stroke(SIGN_RED, s * 0.16f)
+            val core = stroke(SIGN_WHITE, s * 0.08f)
+            c.drawLine(cx - arm, cy - arm, cx + arm, cy + arm, edge)
+            c.drawLine(cx + arm, cy - arm, cx - arm, cy + arm, edge)
+            c.drawLine(cx - arm, cy - arm, cx + arm, cy + arm, core)
+            c.drawLine(cx + arm, cy - arm, cx - arm, cy + arm, core)
+        }
+        SignType.NoEntry -> {
+            c.drawCircle(cx, cy, r, fill(SIGN_RED))
+            c.drawCircle(cx, cy, r, stroke(SIGN_WHITE, s * 0.03f))
+            val bar = RectF(cx - r * 0.55f, cy - r * 0.17f, cx + r * 0.55f, cy + r * 0.17f)
+            c.drawRoundRect(bar, s * 0.03f, s * 0.03f, fill(SIGN_WHITE))
+        }
+        SignType.Roundabout -> {
+            c.drawCircle(cx, cy, r, fill(SIGN_BLUE))
+            val ap = stroke(SIGN_WHITE, s * 0.08f)
+            val ring = r * 0.42f
+            for (k in 0..2) {
+                val a = Math.toRadians(90.0 + k * 120.0)
+                val bx = cx + (ring * cos(a)).toFloat(); val by = cy + (ring * sin(a)).toFloat()
+                val a2 = a + Math.toRadians(70.0)
+                val ex = cx + (ring * cos(a2)).toFloat(); val ey = cy + (ring * sin(a2)).toFloat()
+                c.drawLine(bx, by, ex, ey, ap)
+                c.drawPath(arrowHead(ex, ey, Math.toDegrees(a2).toFloat() + 90f, s * 0.11f), fill(SIGN_WHITE))
+            }
+        }
+        SignType.Crossing -> {
+            val sq = RectF(cx - r, cy - r, cx + r, cy + r)
+            c.drawRoundRect(sq, s * 0.08f, s * 0.08f, fill(SIGN_BLUE))
+            // white pedestrian stripes + a simple walking figure
+            val wp = fill(SIGN_WHITE)
+            c.drawCircle(cx, cy - r * 0.42f, r * 0.16f, wp) // head
+            val body = Path().apply {
+                moveTo(cx, cy - r * 0.24f); lineTo(cx, cy + r * 0.18f)
+                moveTo(cx, cy - r * 0.10f); lineTo(cx + r * 0.28f, cy + r * 0.02f)
+                moveTo(cx, cy - r * 0.10f); lineTo(cx - r * 0.22f, cy + r * 0.04f)
+                moveTo(cx, cy + r * 0.18f); lineTo(cx + r * 0.24f, cy + r * 0.5f)
+                moveTo(cx, cy + r * 0.18f); lineTo(cx - r * 0.20f, cy + r * 0.5f)
+            }
+            c.drawPath(body, stroke(SIGN_WHITE, s * 0.055f))
+        }
+        SignType.Construction -> {
+            val p = triangleUp(cx, cy, r * 1.05f)
+            c.drawPath(p, fill(SIGN_YELLOW))
+            c.drawPath(p, stroke(SIGN_RED, s * 0.09f))
+            // simplified worker + mound
+            val bp = stroke(SIGN_BLACK, s * 0.05f)
+            c.drawCircle(cx - r * 0.1f, cy - r * 0.05f, r * 0.11f, fill(SIGN_BLACK)) // head
+            c.drawLine(cx - r * 0.1f, cy + r * 0.05f, cx - r * 0.1f, cy + r * 0.32f, bp)
+            c.drawLine(cx - r * 0.1f, cy + r * 0.12f, cx + r * 0.28f, cy - r * 0.12f, bp) // shovel arm
+            val mound = Path().apply { moveTo(cx - r * 0.35f, cy + r * 0.42f); lineTo(cx + r * 0.02f, cy + r * 0.42f); lineTo(cx - r * 0.16f, cy + r * 0.28f); close() }
+            c.drawPath(mound, fill(SIGN_BLACK))
+        }
+        SignType.TrafficSignals -> {
+            val box = RectF(cx - r * 0.5f, cy - r, cx + r * 0.5f, cy + r)
+            c.drawRoundRect(box, s * 0.06f, s * 0.06f, fill(SIGN_BLACK))
+            val rr = r * 0.22f
+            c.drawCircle(cx, cy - r * 0.5f, rr, fill(0xFFE23B3B.toInt()))
+            c.drawCircle(cx, cy, rr, fill(0xFFF3A825.toInt()))
+            c.drawCircle(cx, cy + r * 0.5f, rr, fill(0xFF2FBF57.toInt()))
+        }
+        SignType.SpeedLimit -> { // rendered via speedSignBitmap; fallback ring
+            c.drawCircle(cx, cy, r, fill(SIGN_WHITE))
+            c.drawCircle(cx, cy, r - s * 0.07f, stroke(SIGN_RED, s * 0.12f))
+        }
+    }
+    return bmp
+}
+
+private fun polygon(cx: Float, cy: Float, r: Float, sides: Int, startDeg: Double): Path = Path().apply {
+    for (i in 0 until sides) {
+        val a = Math.toRadians(startDeg + 360.0 * i / sides)
+        val x = cx + (r * cos(a)).toFloat(); val y = cy + (r * sin(a)).toFloat()
+        if (i == 0) moveTo(x, y) else lineTo(x, y)
+    }
+    close()
+}
+private fun triangleDown(cx: Float, cy: Float, r: Float): Path = Path().apply {
+    moveTo(cx - r, cy - r * 0.7f); lineTo(cx + r, cy - r * 0.7f); lineTo(cx, cy + r * 0.85f); close()
+}
+private fun triangleUp(cx: Float, cy: Float, r: Float): Path = Path().apply {
+    moveTo(cx, cy - r * 0.85f); lineTo(cx + r, cy + r * 0.7f); lineTo(cx - r, cy + r * 0.7f); close()
+}
+private fun arrowHead(x: Float, y: Float, dirDeg: Float, size: Float): Path = Path().apply {
+    val a = Math.toRadians(dirDeg.toDouble())
+    val la = a + Math.toRadians(140.0); val ra = a - Math.toRadians(140.0)
+    moveTo(x, y)
+    lineTo(x + (size * cos(la)).toFloat(), y + (size * sin(la)).toFloat())
+    lineTo(x + (size * cos(ra)).toFloat(), y + (size * sin(ra)).toFloat())
+    close()
+}
+
+private val SPEED_VALUES = intArrayOf(20, 30, 50, 70, 80, 90, 100, 110, 130)
+private fun snapSpeed(v: Int?): Int {
+    val s = v ?: 50
+    return SPEED_VALUES.minByOrNull { kotlin.math.abs(it - s) } ?: 50
+}
+
+private fun setSigns(style: Style, signs: List<RoadSign>) {
+    val features = signs.map {
+        val icon = if (it.type == SignType.SpeedLimit) "sp-${snapSpeed(it.speed)}" else "s-${it.type.wire}"
+        Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)).apply { addStringProperty("icon", icon) }
+    }
+    style.getSourceAs<GeoJsonSource>(SIGN_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(features))
+}
+
+/** Round French speed-limit sign: white disc, red ring, black number. */
+private fun speedSignBitmap(v: Int, sizePx: Int): Bitmap {
+    val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val cx = sizePx / 2f
+    val r = sizePx * 0.46f
+    c.drawCircle(cx, cx, r, fill(SIGN_WHITE))
+    c.drawCircle(cx, cx, r - sizePx * 0.07f, stroke(SIGN_RED, sizePx * 0.13f))
+    val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = SIGN_BLACK; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD
+        textSize = sizePx * (if (v >= 100) 0.40f else 0.46f)
+    }
+    c.drawText(v.toString(), cx, cx + tp.textSize * 0.35f, tp)
+    return bmp
 }
 
 private fun setLive(style: Style, users: List<LiveUser>) {
@@ -610,39 +998,33 @@ private fun setRoute(style: Style, points: List<GeoPoint>) {
     source.setGeoJson(Feature.fromGeometry(line))
 }
 
-private fun ignStyleJson(satellite: Boolean): String {
-    val layer = if (satellite) "ORTHOIMAGERY.ORTHOPHOTOS" else "GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2"
-    val format = if (satellite) "image/jpeg" else "image/png"
-    val url = "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile" +
-        "&LAYER=$layer&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=$format"
-    return """
-        {
-          "version": 8,
-          "sources": {
-            "ign": {
-              "type": "raster",
-              "tiles": ["$url"],
-              "tileSize": 256,
-              "maxzoom": 19,
-              "attribution": "© IGN-F/Géoplateforme"
-            }
-          },
-          "layers": [
-            { "id": "bg", "type": "background", "paint": { "background-color": "#06070A" } },
-            { "id": "ign", "type": "raster", "source": "ign" }
-          ]
-        }
-    """.trimIndent()
-}
+/**
+ * The basemap under the app layers: our Apple-Plans-like style ([PlansMapStyle]), day or
+ * night palette, drawn over Stadia's vector tiles. Needs STADIA_API_KEY (see GUIDE §10).
+ */
+private fun baseStyle(context: Context, dark: Boolean): Style.Builder =
+    Style.Builder().fromJson(PlansMapStyle.json(context, dark, BuildConfig.STADIA_API_KEY))
 
 private const val POSITION_SOURCE = "xr-position"
 private const val POSITION_HALO = "xr-position-halo"
 private const val POSITION_ARROW = "xr-position-arrow"
 private const val ARROW_IMAGE = "xr-arrow"
+private const val CLUSTER_ALERT_IMAGE = "xr-cluster-alert"
+private const val CLUSTER_SIGN_IMAGE = "xr-cluster-sign"
 private const val RADAR_SOURCE = "xr-radars"
 private const val RADAR_LAYER = "xr-radars-dot"
+private const val RADAR_CLUSTER = "xr-radars-cluster"
+private const val CONTROL_SOURCE = "xr-control-zones"
+private const val CONTROL_LAYER = "xr-control-zones-line"
+/** How much of the lane a reported control zone covers. */
+private const val CONTROL_ZONE_LENGTH_M = 80.0
 private const val REPORT_SOURCE = "xr-reports"
 private const val REPORT_LAYER = "xr-reports-dot"
+private const val REPORT_CLUSTER = "xr-reports-cluster"
+private const val SIGN_SOURCE = "xr-signs"
+private const val SIGN_LAYER = "xr-signs-dot"
+private const val SIGN_CLUSTER = "xr-signs-cluster"
+private const val MARKER_MIN_ZOOM = 9.5f
 private const val LIVE_SOURCE = "xr-live"
 private const val LIVE_LAYER = "xr-live-dot"
 private const val LIVE_IMAGE = "m-live"
@@ -657,11 +1039,33 @@ private const val NAV_ZOOM = 17.6
 private const val NAV_TILT = 45.0
 private const val MIN_SPEED_MS = 2f
 // Smoothing factors for the follow-camera loop (0..1 per frame) + frame pacing.
-private const val POS_LERP = 0.18
-private const val EASE_LERP = 0.1
-private const val BEARING_LERP = 0.2f
-private const val FRAME_MS = 33L
+// Follow factors are tuned for the 60 fps loop below (halved from the 30 fps values).
+private const val POS_LERP = 0.10
+private const val EASE_LERP = 0.06
+private const val BEARING_LERP = 0.12f
+private const val TANGENT_LERP = 0.3f
+private const val PULSE_STEP = 0.09f
+private const val FRAME_MS = 16L
 // Map-matching: snap radius, progress smoothing, and how often the trimmed line refreshes.
+// Daylight check for the "Auto" basemap: cheap, so a coarse tick is plenty. Before
+// the first fix we assume Paris — only the first few seconds of a launch use it.
+private const val SUN_CHECK_MS = 5 * 60 * 1000L
+private const val FALLBACK_LAT = 48.8566
+private const val FALLBACK_LON = 2.3522
+// Alert clustering: group below this zoom, within this many screen pixels.
+private const val CLUSTER_MAX_ZOOM = 13
+private const val CLUSTER_RADIUS_PX = 62
+private const val CLUSTER_COUNT = "point_count"
+private const val CLUSTER_ZOOM_STEP = 1.8
+private const val CLUSTER_ZOOM_MAX = 16.5
+private const val CLUSTER_ZOOM_MS = 500
+// The count sits to the right of the badge; the offset is derived from the badge's
+// own width (see badgeOffsetEm) so each icon gets the gap it actually needs.
+private const val CLUSTER_TEXT_SIZE = 14f
+private const val CLUSTER_TEXT_GAP_DP = 4f
 private const val ON_ROUTE_M = 40.0
-private const val ALONG_LERP = 0.22
+private const val ALONG_LERP = 0.12
+private const val BACK_LERP = 0.04
+/** Never dead-reckon further than this past the last fix (GPS lost, tunnel…). */
+private const val MAX_DR_MS = 2_500L
 private const val ROUTE_TRIM_MS = 120L

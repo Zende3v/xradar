@@ -11,14 +11,35 @@ data class UserReport(
     val lon: Double,
     /** Milliseconds since the report was created (from the backend). */
     val ageMillis: Long,
-    val confirms: Int,
-    val denials: Int,
-    /** Posted by an admin → fully trusted. */
-    val trusted: Boolean = false,
+    /** Confirmations and contradictions the crowd has posted. */
+    val confirmations: Int = 0,
+    val contradictions: Int = 0,
+    /** How many people reported it (the first one, plus every confirmation). */
+    val reporters: Int = 1,
+    /** "same" = the driver's own carriageway, "opposite" = the other one. */
+    val direction: String = "same",
+    /** Course of the reporter, in degrees — orients a control zone on the map. */
+    val bearingDeg: Double? = null,
+    /** Relevance right now (0..100), decayed by the backend since the last report. */
+    val score: Int = 0,
+    /** How far ahead this type is worth warning about, in metres. */
+    val impactMeters: Double = 1500.0,
+    /** A fixed camera: it never decays and only an admin removes it. */
+    val persistent: Boolean = false,
+    /** "guest" / "client" / "admin" — informational; guests and members count alike. */
+    val reporterRole: String = "guest",
     /** Camera reports: the precise street and side ("left"/"right"). */
     val street: String? = null,
     val side: String? = null,
 ) {
+    /** "Mon sens" / "Sens opposé". */
+    val directionLabel: String
+        get() = if (direction == "opposite") "Sens opposé" else "Mon sens"
+
+    /** "3 signalements · il y a 12 min" — who saw it, and how fresh that is. */
+    val crowdLabel: String
+        get() = (if (reporters > 1) "$reporters signalements" else "1 signalement") + " · " + ageLabel
+
     /** "à gauche" / "à droite" / null. */
     val sideLabel: String?
         get() = when (side) {
@@ -27,13 +48,9 @@ data class UserReport(
             else -> null
         }
 
-    /** 0.4f..1f — more confirmations & freshness → higher confidence; admins = 1f. */
+    /** The intrinsic score as a 0..1 gauge, for the reliability bar. */
     val confidence: Float
-        get() {
-            if (trusted) return 1f
-            val net = (confirms - denials).coerceAtLeast(0)
-            return (0.5f + net * 0.15f).coerceIn(0.4f, 1f)
-        }
+        get() = (score / 100f).coerceIn(0f, 1f)
 
     /** "à l'instant", "il y a 5 min", "il y a 2 h". */
     val ageLabel: String

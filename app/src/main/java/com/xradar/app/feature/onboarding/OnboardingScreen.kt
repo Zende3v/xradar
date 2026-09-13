@@ -33,7 +33,7 @@ import com.xradar.app.designsystem.component.XRadarText
 import com.xradar.app.designsystem.theme.XRadarTheme
 import kotlinx.coroutines.launch
 
-private enum class Mode { Choose, Guest, Login, Register }
+private enum class Mode { Choose, Guest, Login, Register, Forgot, Reset }
 
 @Composable
 fun OnboardingRoute() {
@@ -50,8 +50,16 @@ fun OnboardingScreen() {
     var pseudo by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var referral by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var info by remember { mutableStateOf<String?>(null) }
+
+    fun launch(block: suspend () -> String?) {
+        error = null; info = null; loading = true
+        scope.launch { val e = block(); loading = false; if (e != null) error = e }
+    }
 
     fun submit(block: suspend () -> AuthOutcome) {
         error = null
@@ -82,7 +90,9 @@ fun OnboardingScreen() {
                     Mode.Choose -> "Ta route, tes radars, tes alertes."
                     Mode.Guest -> "Choisis un pseudo unique."
                     Mode.Login -> "Content de te revoir."
-                    Mode.Register -> "Crée ton compte membre."
+                    Mode.Register -> "7 jours d'essai gratuit — ou un code de parrainage."
+                    Mode.Forgot -> "Reçois un code par email."
+                    Mode.Reset -> "Entre le code reçu et ton nouveau mot de passe."
                 },
                 style = XRadarTheme.typography.subhead,
                 color = colors.textSecondary,
@@ -105,18 +115,45 @@ fun OnboardingScreen() {
                         Field(email, { email = it.trim() }, "Email", KeyboardCapitalization.None, KeyboardType.Email)
                         Field(password, { password = it }, "Mot de passe", KeyboardCapitalization.None, KeyboardType.Password, password = true)
                         Primary("Se connecter", loading) { submit { AccountRepository.login(email, password) } }
+                        Back(label = "Mot de passe oublié ?") { mode = Mode.Forgot; error = null; info = null }
                         Back { mode = Mode.Choose; error = null }
                     }
                     Mode.Register -> {
                         Field(pseudo, { pseudo = it.trim() }, "Pseudo", KeyboardCapitalization.None)
                         Field(email, { email = it.trim() }, "Email", KeyboardCapitalization.None, KeyboardType.Email)
                         Field(password, { password = it }, "Mot de passe (8 min.)", KeyboardCapitalization.None, KeyboardType.Password, password = true)
-                        Primary("Créer le compte", loading) { submit { AccountRepository.register(email, password, pseudo) } }
+                        // Only here, at creation: a code turns the new account into 6 months of membership.
+                        Field(referral, { referral = it.uppercase().trim() }, "Code de parrainage (facultatif)", KeyboardCapitalization.Characters, KeyboardType.Text)
+                        Primary("Créer le compte", loading) {
+                            submit { AccountRepository.register(email, password, pseudo, referral.ifBlank { null }) }
+                        }
                         Back { mode = Mode.Choose; error = null }
+                    }
+                    Mode.Forgot -> {
+                        Field(email, { email = it.trim() }, "Email", KeyboardCapitalization.None, KeyboardType.Email)
+                        Primary("Envoyer le code", loading) {
+                            launch { AccountRepository.forgot(email); info = "Si un compte existe, un code a été envoyé."; mode = Mode.Reset; null }
+                        }
+                        Back { mode = Mode.Login; error = null; info = null }
+                    }
+                    Mode.Reset -> {
+                        Field(code, { code = it.trim() }, "Code reçu par email", KeyboardCapitalization.None, KeyboardType.Number)
+                        Field(password, { password = it }, "Nouveau mot de passe (8 min.)", KeyboardCapitalization.None, KeyboardType.Password, password = true)
+                        Primary("Réinitialiser", loading) {
+                            launch {
+                                val e = AccountRepository.resetPassword(email, code, password)
+                                if (e == null) { info = "Mot de passe changé, connecte-toi."; password = ""; code = ""; mode = Mode.Login }
+                                e
+                            }
+                        }
+                        Back { mode = Mode.Login; error = null; info = null }
                     }
                 }
                 error?.let {
                     XRadarText(it, style = XRadarTheme.typography.footnote, color = colors.hazard, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                }
+                info?.let {
+                    XRadarText(it, style = XRadarTheme.typography.footnote, color = colors.accent, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -190,8 +227,8 @@ private fun Ghost(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Back(onClick: () -> Unit) {
+private fun Back(label: String = "Retour", onClick: () -> Unit) {
     Box(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = XRadarTheme.spacing.sm), contentAlignment = Alignment.Center) {
-        XRadarText("Retour", style = XRadarTheme.typography.subhead, color = XRadarTheme.colors.textSecondary)
+        XRadarText(label, style = XRadarTheme.typography.subhead, color = XRadarTheme.colors.textSecondary)
     }
 }

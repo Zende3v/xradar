@@ -30,8 +30,14 @@ class RecentsRepository(context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    /** Drop one entry from the list (the ✕ on a row). */
+    fun remove(id: String) = write(recents().filter { it.id != id })
+
     fun add(place: Place) {
-        val updated = (listOf(place) + recents().filter { it.id != place.id }).take(MAX)
+        write((listOf(place) + recents().filter { it.id != place.id }).take(MAX))
+    }
+
+    private fun write(updated: List<Place>) {
         val array = JSONArray()
         updated.forEach { p ->
             array.put(

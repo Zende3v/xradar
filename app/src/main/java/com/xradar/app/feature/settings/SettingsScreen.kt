@@ -1,6 +1,10 @@
 package com.xradar.app.feature.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,13 +20,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xradar.app.R
 import com.xradar.app.data.preferences.AlertPreferences
 import com.xradar.app.data.preferences.AppPreferences
+import com.xradar.app.data.preferences.MapStyle
+import com.xradar.app.data.preferences.ThemeMode
 import com.xradar.app.designsystem.component.XRadarDivider
 import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarListGroup
@@ -36,14 +45,10 @@ import com.xradar.app.designsystem.theme.XRadarTheme
 @Composable
 fun SettingsRoute(
     onBack: () -> Unit,
-    onOpenProfile: () -> Unit,
-    onOpenHistory: () -> Unit,
     onOpenDiagnostic: () -> Unit,
 ) {
     SettingsScreen(
         onBack = onBack,
-        onOpenProfile = onOpenProfile,
-        onOpenHistory = onOpenHistory,
         onOpenDiagnostic = onOpenDiagnostic,
     )
 }
@@ -52,12 +57,11 @@ fun SettingsRoute(
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onOpenProfile: () -> Unit,
-    onOpenHistory: () -> Unit,
     onOpenDiagnostic: () -> Unit,
 ) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
+    val account by com.xradar.app.data.account.AccountRepository.account.collectAsStateWithLifecycle()
 
     XRadarScreenScaffold(title = "Réglages", onBack = onBack) {
         Column(
@@ -69,31 +73,25 @@ fun SettingsScreen(
         ) {
             Spacer(Modifier.height(spacing.xs))
 
-            XRadarListGroup(title = "Alertes") {
-                AlertRadiusRow()
+            XRadarListGroup(title = "Apparence") {
+                ThemeSetting()
+                RowDivider()
+                MapStyleSetting()
             }
 
             XRadarListGroup(title = "Communauté") {
                 LiveSettings()
             }
 
-            XRadarListGroup(title = "Compte") {
-                NavRow("Profil", XRadarIcons.User, colors.accent, onOpenProfile)
-                RowDivider()
-                NavRow("Historique des trajets", XRadarIcons.History, colors.textSecondary, onOpenHistory)
-            }
-
-            XRadarListGroup(title = "À propos") {
-                XRadarListRow(
-                    title = "Version",
-                    trailing = {
-                        XRadarText("0.1.0", style = XRadarTheme.typography.callout, color = colors.textTertiary)
-                    },
-                )
-            }
-
-            XRadarListGroup(title = "Développeur") {
-                NavRow("Diagnostic backend", XRadarIcons.Info, colors.accent, onOpenDiagnostic)
+            if (account?.role == com.xradar.app.core.model.Role.Admin) {
+                XRadarListGroup(title = "Développeur") {
+                    NavRow(
+                        "Diagnostic backend",
+                        ImageVector.vectorResource(R.drawable.ic_diagnostic),
+                        colors.accent,
+                        onOpenDiagnostic,
+                    )
+                }
             }
 
             Spacer(Modifier.height(spacing.xxl))
@@ -101,40 +99,78 @@ fun SettingsScreen(
     }
 }
 
+/** App color scheme: follow the phone, or force one. */
 @Composable
-private fun AlertRadiusRow() {
+private fun ThemeSetting() {
+    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+    Segmented(
+        title = "Thème de l'app",
+        options = listOf(
+            "Système" to ThemeMode.System,
+            "Clair" to ThemeMode.Light,
+            "Sombre" to ThemeMode.Dark,
+        ),
+        selected = settings.themeMode,
+        onSelect = { mode -> AppPreferences.updateSettings { it.copy(themeMode = mode) } },
+    )
+}
+
+/** Basemap: follow the theme, or pin OSM Bright / Alidade Smooth Dark. */
+@Composable
+private fun MapStyleSetting() {
+    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+    Segmented(
+        title = "Fond de carte",
+        options = listOf(
+            "Auto" to MapStyle.Auto,
+            "Clair" to MapStyle.Bright,
+            "Sombre" to MapStyle.Dark,
+        ),
+        selected = settings.mapStyle,
+        onSelect = { style -> AppPreferences.updateSettings { it.copy(mapStyle = style) } },
+        hint = "Auto suit le jour et la nuit à ta position : OSM Bright de jour, Alidade Smooth Dark de nuit.",
+    )
+}
+
+/** Small pill picker — one row, one choice, no Material segmented button. */
+@Composable
+private fun <T> Segmented(
+    title: String,
+    options: List<Pair<String, T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    hint: String? = null,
+) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
-    val prefs by AppPreferences.alerts.collectAsStateWithLifecycle()
     Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            XRadarText("Zone de chargement", style = XRadarTheme.typography.body, color = colors.textPrimary)
-            XRadarText("${prefs.alertRadiusKm} km", style = XRadarTheme.typography.callout, color = colors.accent)
-        }
-        Slider(
-            value = prefs.alertRadiusKm.toFloat(),
-            onValueChange = { v ->
-                AppPreferences.updateAlerts {
-                    it.copy(alertRadiusKm = v.toInt().coerceIn(AlertPreferences.MIN_RADIUS_KM, AlertPreferences.MAX_RADIUS_KM))
+        XRadarText(title, style = XRadarTheme.typography.body, color = colors.textPrimary)
+        Spacer(Modifier.height(spacing.sm))
+        Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+            options.forEach { (label, value) ->
+                val on = value == selected
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(XRadarTheme.shapes.md)
+                        .background(if (on) colors.accent.copy(alpha = 0.18f) else colors.surface)
+                        .border(1.dp, if (on) colors.accent else colors.border, XRadarTheme.shapes.md)
+                        .clickable { onSelect(value) }
+                        .padding(vertical = spacing.sm),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    XRadarText(
+                        label,
+                        style = XRadarTheme.typography.callout,
+                        color = if (on) colors.accent else colors.textSecondary,
+                    )
                 }
-            },
-            valueRange = AlertPreferences.MIN_RADIUS_KM.toFloat()..AlertPreferences.MAX_RADIUS_KM.toFloat(),
-            steps = 48,
-            colors = SliderDefaults.colors(
-                thumbColor = colors.accent,
-                activeTrackColor = colors.accent,
-                inactiveTrackColor = colors.surfaceHigh,
-            ),
-        )
-        XRadarText(
-            "Rayon autour de toi où radars et signalements sont chargés (réduit auto en zone dense).",
-            style = XRadarTheme.typography.footnote,
-            color = colors.textTertiary,
-        )
+            }
+        }
+        if (hint != null) {
+            Spacer(Modifier.height(spacing.xs))
+            XRadarText(hint, style = XRadarTheme.typography.footnote, color = colors.textTertiary)
+        }
     }
 }
 
@@ -208,6 +244,6 @@ private fun RowDivider() {
 @Composable
 private fun SettingsScreenPreview() {
     XRadarTheme(darkTheme = true) {
-        SettingsScreen(onBack = {}, onOpenProfile = {}, onOpenHistory = {}, onOpenDiagnostic = {})
+        SettingsScreen(onBack = {}, onOpenDiagnostic = {})
     }
 }

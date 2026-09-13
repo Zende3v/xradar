@@ -56,6 +56,9 @@ internal object Palette {
     val OnAccentInkDark = Color(0xFF062024)
     val CyanL = Color(0xFF0AA7B4)
     val CyanPressedL = Color(0xFF0B8592)
+
+    // Report picker disc — the same dark grey in both themes.
+    val ReportDisc = Color(0xFF302C2C)
 }
 
 /**
@@ -96,6 +99,9 @@ data class XRadarColors(
     val radarMobile: Color,
     val controlZone: Color,
     val hazard: Color,
+    // Report picker: every category on the same disc, its icon in orange with a soft glow.
+    val reportTile: Color = Palette.ReportDisc,
+    val reportIcon: Color = Palette.OrangeD,
 )
 
 val XRadarDarkColors = XRadarColors(
@@ -125,6 +131,8 @@ val XRadarDarkColors = XRadarColors(
     radarMobile = Palette.OrangeD,
     controlZone = Palette.IndigoD,
     hazard = Palette.YellowD,
+    reportTile = Palette.ReportDisc,
+    reportIcon = Palette.OrangeD,
 )
 
 val XRadarLightColors = XRadarColors(
@@ -154,4 +162,6 @@ val XRadarLightColors = XRadarColors(
     radarMobile = Palette.OrangeL,
     controlZone = Palette.IndigoL,
     hazard = Palette.YellowL,
+    reportTile = Palette.ReportDisc,
+    reportIcon = Palette.OrangeL,
 )
