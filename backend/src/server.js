@@ -14,6 +14,8 @@ import { reportStore } from './reports/store.js';
 import { routeRouter } from './routing/routes.js';
 import { signDataset } from './signs/dataset.js';
 import { signRouter } from './signs/routes.js';
+import { speedLimitRouter } from './speedlimits/routes.js';
+import { speedLimitStore } from './speedlimits/store.js';
 
 /** Builds the Express app (kept separate from bootstrap for testability). */
 export function createApp() {
@@ -36,6 +38,7 @@ export function createApp() {
       live: liveStore.meta,
       routing: { provider: config.orsApiKey ? 'ors' : 'osrm' },
       signs: { ready: signDataset.ready, count: signDataset.count },
+      speedLimits: speedLimitStore.meta,
       fuel: fuelStore.meta,
       memoryMB: Math.round(process.memoryUsage().rss / 1e6),
     });
@@ -49,6 +52,7 @@ export function createApp() {
   app.use('/api/reports', reportRouter);
   app.use('/api/route', routeRouter);
   app.use('/api/signs', signRouter);
+  app.use('/api/speed-limits', speedLimitRouter);
 
   return app;
 }

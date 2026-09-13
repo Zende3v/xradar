@@ -30,6 +30,21 @@ Radar shape:
 
 `vma` = vitesse maximale autorisée (speed limit at the radar, km/h).
 
+### Speed-limit maintenance
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/signs/limit?lat=&lon=&bearing=` | Limit where the driver is: OSM, with the validated changes for that way on top |
+| POST | `/api/speed-limits/reports` | `{ lat, lon, newKmh, bearing?, displayedKmh?, displayedSource?, deviceId? }` — propose the limit a sign shows (account or device required) |
+| GET | `/api/speed-limits/near?lat=&lon=&radius=` | Pending and validated changes around a point |
+| GET | `/api/speed-limits/:id` | One change with its proposals and events (admin) |
+| DELETE | `/api/speed-limits/:id` | Stop applying / reject a change, kept in the history (admin) |
+
+Proposals at one spot (same way, same former limit) are one change, scored with the report
+formula (`src/reports/score.js`). It is applied once its score reaches the "high" band with
+enough distinct people (3 on a known limit, 2 where none is known; an admin applies at once),
+then stays until a later change replaces it. Stored in `data/speed-limits.json`.
+
 ## Deploy on the VPS
 
 **Docker (recommended):**

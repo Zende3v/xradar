@@ -44,6 +44,9 @@ signRouter.get('/limit', (req, res) => {
     return res.status(400).json({ error: 'lat and lon are required numbers' });
   }
   if (!signDataset.ready) return res.json({ v: null, source: 'none' });
-  const v = signDataset.limitAt(lat, lon, config.signLimitMaxDistM);
+  // The driver's course (optional) keeps a change validated for one way off the other.
+  const raw = req.query.bearing;
+  const bearing = raw == null || raw === '' ? NaN : Number(raw);
+  const v = signDataset.limitAt(lat, lon, config.signLimitMaxDistM, Number.isFinite(bearing) ? bearing : null);
   res.json({ v: v || null, source: 'dataset' });
 });

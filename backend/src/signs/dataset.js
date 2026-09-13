@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { config } from '../config.js';
-import { haversine } from '../radars/geo.js';
+import { bearingDeg, haversine } from '../radars/geo.js';
 
 export const SIGN_TYPES = [
   'traffic_signals', 'stop', 'give_way', 'crossing', 'roundabout', 'construction', 'no_entry', 'speed',
@@ -25,6 +25,10 @@ class SignDataset {
     this.count = 0;
     this.grid = new Map(); // cellKey -> number[] (indices)
     this.ready = false;
+    this.loading = false;
+    // Speed-limit changes drivers validated, laid over the OSM limits (speedlimits/store.js):
+    // anything with nearest(lat, lon, maxDistM, bearing) → { d, v, lat, lon, key } | null.
+    this.overrides = null;
   }
 
   key(la, lo) {
@@ -32,6 +36,15 @@ class SignDataset {
   }
 
   async load() {
+    this.loading = true;
+    try {
+      return await this.read();
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  async read() {
     // Two independent sources: the OSM signs dump and the SNCF level crossings.
     // Either one alone is enough to serve; only both missing falls back to Overpass.
     const crossings = await loadLevelCrossings();
@@ -113,8 +126,12 @@ class SignDataset {
     return out.slice(0, limit).map(({ d, ...s }) => s);
   }
 
-  /** Speed limit (km/h) at a position: nearest sampled speed point, or null. */
-  limitAt(lat, lon, maxDistM) {
+  /**
+   * Speed limit (km/h) at a position: nearest sampled speed point, or null. A validated
+   * change covering the spot wins; [bearing] (the driver's course, optional) keeps a change
+   * validated for one way from applying to the other.
+   */
+  limitAt(lat, lon, maxDistM, bearing = null) {
     const dLat = maxDistM / 111000;
     const dLon = maxDistM / (111000 * Math.cos((lat * Math.PI) / 180) || 1);
     let best = null;
@@ -123,7 +140,23 @@ class SignDataset {
       const d = haversine(lat, lon, this.lat[i], this.lon[i]);
       if (d <= maxDistM && (best === null || d < best.d)) best = { d, v: this.val[i] };
     }
+    const over = this.overrides?.nearest(lat, lon, maxDistM, bearing);
+    if (over && (best === null || over.d <= best.d + config.speedLimitOverrideTieM)) return over.v;
     return best ? best.v : null;
+  }
+
+  /** The mapped (OSM) speed points within [radiusM] of a position, as { lat, lon, v }. */
+  speedPointsNear(lat, lon, radiusM) {
+    const dLat = radiusM / 111000;
+    const dLon = radiusM / (111000 * Math.cos((lat * Math.PI) / 180) || 1);
+    const out = [];
+    for (const i of this.candidates(lat - dLat, lat + dLat, lon - dLon, lon + dLon)) {
+      if (this.type[i] !== SPEED_IDX) continue;
+      if (haversine(lat, lon, this.lat[i], this.lon[i]) <= radiusM) {
+        out.push({ lat: this.lat[i], lon: this.lon[i], v: this.val[i] });
+      }
+    }
+    return out;
   }
 
   /** Signs within [bufferM] of the route ([[lon,lat],...]) + speed-limit CHANGES. */
@@ -153,13 +186,23 @@ class SignDataset {
           if (out.length >= limit) return out;
         }
       }
-      if (bestSpeed) {
-        speedSeen.add(bestSpeed.i);
-        const v = this.val[bestSpeed.i];
-        if (v !== lastSpeed) { // only emit where the limit actually changes
-          out.push({ type: 'speed', v, lat: this.lat[bestSpeed.i], lon: this.lon[bestSpeed.i] });
-          lastSpeed = v;
+      // A change drivers validated on this stretch wins, for the way the route runs.
+      const next = coords[Math.min(s + step, coords.length - 1)];
+      const course = next !== coords[s] ? bearingDeg(lat, lon, next[1], next[0]) : null;
+      const over = this.overrides?.nearest(lat, lon, bufferM, course);
+      let speed = null;
+      if (over && (bestSpeed === null || over.d <= bestSpeed.d + config.speedLimitOverrideTieM)) {
+        if (!speedSeen.has(over.key)) {
+          speedSeen.add(over.key);
+          speed = { v: over.v, lat: over.lat, lon: over.lon };
         }
+      } else if (bestSpeed) {
+        speedSeen.add(bestSpeed.i);
+        speed = { v: this.val[bestSpeed.i], lat: this.lat[bestSpeed.i], lon: this.lon[bestSpeed.i] };
+      }
+      if (speed && speed.v !== lastSpeed) { // only emit where the limit actually changes
+        out.push({ type: 'speed', v: speed.v, lat: speed.lat, lon: speed.lon });
+        lastSpeed = speed.v;
       }
     }
     return out;

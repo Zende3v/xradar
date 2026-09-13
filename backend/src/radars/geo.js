@@ -10,6 +10,20 @@ export function haversine(lat1, lon1, lat2, lon2) {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
+/** Initial course from the first point to the second, in degrees (0 = north, clockwise). */
+export function bearingDeg(lat1, lon1, lat2, lon2) {
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+/** Smallest angle between two courses, in degrees (0..180). */
+export function angleBetween(a, b) {
+  const d = Math.abs((a - b) % 360);
+  return d > 180 ? 360 - d : d;
+}
+
 /** Radars within [radiusM] of (lat, lon), each annotated with distanceM, nearest first. */
 export function near(radars, lat, lon, radiusM, limit) {
   const out = [];

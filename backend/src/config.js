@@ -178,6 +178,43 @@ export const config = {
   reportMaxNearRadiusM: 1_000_000,
   reportDefaultNearRadiusM: 8000,
 
+  // Speed-limit maintenance: drivers propose the limit a sign shows ("50 → 70"). The
+  // proposals for one spot are scored with the report formula (reports/score.js) and the
+  // limit only changes once they are strong enough; a change applied is permanent.
+  speedLimitsFile: process.env.SPEED_LIMITS_FILE || './data/speed-limits.json',
+  /** The limits a driver can pick: the ones the app draws as signs. */
+  speedLimitValues: [20, 30, 50, 70, 80, 90, 100, 110, 130],
+  /**
+   * Same shape as reportScore. A proposal is worth `factors` and decays over
+   * `baseDurationMs` from the last driver who proposed the same value: a sign does not go
+   * away like an event, each new witness renews it. Drivers proposing anything else there
+   * (the current limit included) are its contradictions.
+   *
+   * A proposal is applied when its score reaches the "high" relevance band, at least
+   * `minSupporters` distinct people back it and they outnumber everyone else there:
+   *   known   — the spot has a limit (OSM, radar VMA, an earlier change): 3 people, and
+   *             one other opinion there takes 8 of them.
+   *   unknown — nothing mapped there yet: 2 people fill the gap.
+   * An admin's proposal is applied at once.
+   */
+  speedLimitScore: {
+    known: { factors: 60, baseDurationMs: 60 * D, minSupporters: 3 },
+    unknown: { factors: 70, baseDurationMs: 60 * D, minSupporters: 2 },
+  },
+  /** Proposals this close to one another, on the same way and from the same limit, are one change. */
+  speedLimitGroupRadiusM: 250,
+  /** An applied change replaces the mapped limit points this close to its supporters. */
+  speedLimitZoneRadiusM: 150,
+  /** Two courses closer than this run the same way (ReportRelevance's same-way angle). */
+  speedLimitSameWayDeg: 60,
+  /** An applied change still wins over a mapped point up to this much nearer. */
+  speedLimitOverrideTieM: 10,
+  /** Proposals that never applied (expired, outdated, rejected) stay in the history this long. */
+  speedLimitHistoryMs: 365 * D,
+  speedLimitMinRole: 'guest',
+  speedLimitDefaultNearRadiusM: 5000,
+  speedLimitMaxNearRadiusM: 100000,
+
   // Accounts (identity + roles guest/client/admin).
   accountsFile: process.env.ACCOUNTS_FILE || './data/accounts.json',
   // A Guest gets the complete navigation experience for one week. Afterwards
