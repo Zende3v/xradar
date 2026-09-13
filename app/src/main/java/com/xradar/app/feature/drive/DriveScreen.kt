@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xradar.app.core.model.GpsSignal
@@ -68,6 +69,11 @@ fun DriveRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val dismissedAlerts by viewModel.dismissedAlerts.collectAsStateWithLifecycle()
     val account by com.xradar.app.data.account.AccountRepository.account.collectAsStateWithLifecycle()
+    // Back from Android's settings (or anywhere else): notification access may have changed.
+    LifecycleStartEffect(viewModel) {
+        viewModel.onHudStarted()
+        onStopOrDispose { }
+    }
     DriveScreen(
         state = state,
         onOpenSearch = onOpenSearch,

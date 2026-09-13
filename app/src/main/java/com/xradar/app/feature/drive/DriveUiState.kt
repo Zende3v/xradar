@@ -11,6 +11,7 @@ import com.xradar.app.core.model.RoadAlert
 import com.xradar.app.core.model.SpeedStatus
 import com.xradar.app.core.model.TripInfo
 import com.xradar.app.core.model.UserReport
+import com.xradar.app.media.MediaPlaybackState
 
 /** Everything the driving HUD needs to render one frame. */
 data class DriveUiState(
@@ -41,6 +42,10 @@ data class DriveUiState(
     val guidance: GuidanceInstruction? = null,
     /** A destination was picked but no route came back (network / provider down). */
     val routeError: Boolean = false,
+    /** Music in Spotify / Apple Music / Deezer, read from the system media sessions. */
+    val media: MediaPlaybackState = MediaPlaybackState.PermissionMissing,
+    /** The music banner is open. HUD state only, never persisted. */
+    val musicOpen: Boolean = false,
 ) {
     val speedStatus: SpeedStatus?
         get() = SpeedStatus.of(speedKmh, speedLimitKmh)

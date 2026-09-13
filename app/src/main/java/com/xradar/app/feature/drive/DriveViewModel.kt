@@ -30,6 +30,7 @@ import com.xradar.app.data.routing.ActiveTripRepository
 import com.xradar.app.data.routing.RoutingRepository
 import com.xradar.app.data.stats.TripHistoryRepository
 import com.xradar.app.location.LocationRepository
+import com.xradar.app.media.MediaRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -71,6 +72,13 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** Set when a destination was chosen but routing came back empty. */
     private val routeError = MutableStateFlow(false)
     private val speaker = GuidanceSpeaker(application)
+    /** Music in the three supported apps. Only [uiState] reads it — see there. */
+    private val media = MediaRepository.run {
+        init(application)
+        state
+    }
+    /** Whether the music banner is open: HUD state only, never persisted. */
+    private val musicOpen = MutableStateFlow(false)
 
     /** Radars + reports + radar-car zones, pre-combined so the main combine stays ≤5 flows. */
     private val roadObjects = combine(radars, reports, zones) { r, rep, z -> Triple(r, rep, z) }
@@ -113,7 +121,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private var lastTripLat = Double.NaN
     private var lastTripLon = Double.NaN
 
-    val uiState: StateFlow<DriveUiState> = combine(
+    /**
+     * The driving state. The voice and trip collectors below keep it running for as long as
+     * the ViewModel lives; the screen reads it through [uiState].
+     */
+    private val driveState: StateFlow<DriveUiState> = combine(
         LocationRepository.location,
         LocationRepository.signal,
         roadObjects,
@@ -169,6 +181,19 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }.combine(osmLimit) { state, live ->
         // The road's own limit beats the radar VMA: it is true everywhere, all the time.
         if (live != null) state.copy(speedLimitKmh = live) else state
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+        initialValue = DriveUiState(0, null, null, null, GpsSignal.Searching),
+    )
+
+    /**
+     * What the HUD renders: [driveState] plus the music banner. Only the driving screen
+     * collects it, so the media sessions are watched while that screen is started (and
+     * [STOP_TIMEOUT_MS] after), never by the collectors that keep [driveState] running.
+     */
+    val uiState: StateFlow<DriveUiState> = combine(driveState, media, musicOpen) { state, playback, open ->
+        state.copy(media = playback, musicOpen = open)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -350,13 +375,13 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Count distinct alert encounters during the trip.
         viewModelScope.launch {
-            uiState.map { it.alert != null }.distinctUntilChanged().collect { present ->
+            driveState.map { it.alert != null }.distinctUntilChanged().collect { present ->
                 if (present && tripActive) tripAlerts++
             }
         }
         // Voice announcements for radars/reports (distance steps) + overspeed.
         viewModelScope.launch {
-            uiState.collect { s ->
+            driveState.collect { s ->
                 if (!AppPreferences.alerts.value.voice) return@collect
                 announceAlert(s.alert)
                 announceOverspeed(s.speedKmh, s.speedLimitKmh)
@@ -729,6 +754,21 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             dismissJobs.remove(key)
         }
     }
+
+    /** The HUD's music button, the banner's controls and its empty states. */
+    fun onMusic(action: MusicAction) {
+        when (action) {
+            MusicAction.ToggleBanner -> musicOpen.value = !musicOpen.value
+            MusicAction.PlayPause -> MediaRepository.playPause()
+            MusicAction.Next -> MediaRepository.next()
+            MusicAction.Previous -> MediaRepository.previous()
+            MusicAction.OpenAccessSettings -> MediaRepository.openAccessSettings()
+            is MusicAction.Launch -> MediaRepository.launch(action.app)
+        }
+    }
+
+    /** The driving screen is in front again: notification access may have changed meanwhile. */
+    fun onHudStarted() = MediaRepository.refresh()
 
     private val announcedAlerts = HashSet<String>()
     private var lastOverspeedAt = 0L
