@@ -315,13 +315,7 @@ tar xzf /var/backups/xradar/data-AAAA-MM-JJ.tgz -C /opt/xradar-backend/data && c
 systemctl start xradar-backend
 ```
 
-Sauvegarde auto quotidienne **non installée** (proposée) :
-```bash
-cat > /etc/cron.d/xradar-backup <<'EOF'
-# x_radar : sauvegarde quotidienne crowd + comptes, 14 jours gardés (04:00).
-0 4 * * * root mkdir -p /var/backups/xradar && runuser -u postgres -- pg_dump -Fc -n crowd xradar > /var/backups/xradar/crowd-$(date +\%F).dump && tar czf /var/backups/xradar/data-$(date +\%F).tgz -C /opt/xradar-backend/data accounts.json avatars && find /var/backups/xradar -mtime +14 -delete
-EOF
-```
+Pas de sauvegarde automatique (choix assumé) : lancer la sauvegarde manuelle avant toute opération risquée (migration, restauration, gros déploiement).
 
 ---
 
@@ -523,7 +517,6 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 
 ## 13. Reste à faire
 
-- Sauvegarde auto quotidienne (§6, à installer).
 - Vrai keystore release + `versionName` (encore 0.1.0).
 - Login Google / Apple, portail de paiement.
 - Timer feu rouge (E4) : source de données manquante.
