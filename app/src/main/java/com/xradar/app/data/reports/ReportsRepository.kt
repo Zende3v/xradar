@@ -17,6 +17,6 @@ class ReportsRepository(private val api: ReportsApi = ReportsApi()) {
     suspend fun delete(id: String, token: String?): Boolean =
         runCatching { api.delete(id, token) }.getOrDefault(false)
 
-    suspend fun vote(id: String, confirm: Boolean): Boolean =
-        runCatching { api.vote(id, confirm) }.getOrDefault(false)
+    suspend fun vote(id: String, confirm: Boolean, token: String?, deviceId: String?): Boolean =
+        runCatching { api.vote(id, confirm, token, deviceId) }.getOrDefault(false)
 }

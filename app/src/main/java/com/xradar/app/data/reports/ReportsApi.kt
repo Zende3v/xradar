@@ -91,13 +91,15 @@ class ReportsApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         client.newCall(req).execute().use { it.isSuccessful }
     }
 
-    suspend fun vote(id: String, confirm: Boolean): Boolean = withContext(Dispatchers.IO) {
+    /** "Toujours là" / "Plus là". Each person has one voice per report, so it goes with the account. */
+    suspend fun vote(id: String, confirm: Boolean, token: String?, deviceId: String?): Boolean = withContext(Dispatchers.IO) {
         val action = if (confirm) "confirm" else "deny"
-        val request = Request.Builder()
+        val body = JSONObject().apply { if (deviceId != null) put("deviceId", deviceId) }.toString()
+        val builder = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/api/reports/$id/$action")
-            .post("".toRequestBody(JSON))
-            .build()
-        client.newCall(request).execute().use { it.isSuccessful }
+            .post(body.toRequestBody(JSON))
+        if (token != null) builder.header("Authorization", "Bearer $token")
+        client.newCall(builder.build()).execute().use { it.isSuccessful }
     }
 
     private fun toReport(o: JSONObject): UserReport? {

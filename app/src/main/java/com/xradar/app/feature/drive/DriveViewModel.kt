@@ -723,7 +723,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun refreshReports(lat: Double, lon: Double) {
         val near = reportsRepository.near(lat, lon, radiusM())
-        reports.value = near.reports
+        reports.value = near.reports.filterNot { it.id in deniedReports }
         zones.value = near.zones
     }
 
@@ -753,9 +753,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 AccountRepository.token,
                 AccountRepository.deviceId,
             )
-            // Radar cars appear as zones, not points → refetch to get the new zone.
+            // Radar cars appear as zones, not points → refetch to get the new zone. A report the
+            // backend merged into one already there comes back as that one: replaced, not doubled.
             if (created != null && draft.type != ReportType.VoitureRadar) {
-                reports.value = reports.value + created
+                reports.value = reports.value.filterNot { it.id == created.id } + created
             }
             refreshReports(lat, lon)
         }
@@ -770,11 +771,23 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Community vote on a report ("toujours là" / "plus là"). */
+    private val _votedReports = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Reports the driver voted on in this session: their "toujours là / plus là" go away. */
+    val votedReports: StateFlow<Set<String>> get() = _votedReports
+
+    /** Reports the driver said are gone: never shown again to them, whatever the crowd says. */
+    private val deniedReports = HashSet<String>()
+
+    /** Community vote on a report ("toujours là" / "plus là"), one voice per person. */
     fun vote(reportId: String, confirm: Boolean) {
+        _votedReports.value = _votedReports.value + reportId
+        if (!confirm) {
+            deniedReports.add(reportId)
+            reports.value = reports.value.filterNot { it.id == reportId }
+        }
         viewModelScope.launch {
-            reportsRepository.vote(reportId, confirm)
-            if (!confirm) reports.value = reports.value.filterNot { it.id == reportId }
+            reportsRepository.vote(reportId, confirm, AccountRepository.token, AccountRepository.deviceId)
             LocationRepository.location.value?.let { fix -> refreshReports(fix.latitude, fix.longitude) }
         }
     }

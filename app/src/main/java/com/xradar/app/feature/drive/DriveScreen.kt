@@ -69,6 +69,7 @@ fun DriveRoute(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val dismissedAlerts by viewModel.dismissedAlerts.collectAsStateWithLifecycle()
+    val votedReports by viewModel.votedReports.collectAsStateWithLifecycle()
     val account by com.xradar.app.data.account.AccountRepository.account.collectAsStateWithLifecycle()
     // Back from Android's settings (or anywhere else): notification access may have changed.
     LifecycleStartEffect(viewModel) {
@@ -88,6 +89,8 @@ fun DriveRoute(
         onDismissAlert = viewModel::dismissAlert,
         onMusic = viewModel::onMusic,
         onReportSpeedLimit = viewModel::reportSpeedLimit,
+        votedReports = votedReports,
+        onVote = viewModel::vote,
         modifier = modifier,
     )
 }
@@ -114,6 +117,9 @@ fun DriveScreen(
     onMusic: (MusicAction) -> Unit = {},
     /** A new speed limit the driver proposes where they are (see [SpeedLimitSheet]). */
     onReportSpeedLimit: (Int) -> Unit = {},
+    /** Reports the driver already voted on, and the vote itself ("toujours là" = true). */
+    votedReports: Set<String> = emptySet(),
+    onVote: (String, Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val colors = XRadarTheme.colors
@@ -234,7 +240,17 @@ fun DriveScreen(
             ) {
                 // Every live alert in one card: the nearest in full, the others one tap away;
                 // a sideways swipe hides one.
-                AlertStack(shownAlerts, onDismiss = onDismissAlert)
+                AlertStack(
+                    shownAlerts,
+                    onDismiss = onDismissAlert,
+                    // Only crowd reports, close ahead, and one voice per driver.
+                    canVote = { alert ->
+                        val id = alert.id
+                        id != null && alert.lastReportedLabel != null && id !in votedReports &&
+                            alert.distanceMeters <= VOTE_DISTANCE_M
+                    },
+                    onVote = { alert, confirm -> alert.id?.let { onVote(it, confirm) } },
+                )
             }
 
             AnimatedVisibility(visible = state.routeError) {
@@ -497,6 +513,9 @@ private enum class TopMode { Search, Guidance, None }
 
 /** Recenter, music and report share one size: the report button's. */
 private val MAP_CONTROL_SIZE = 56.dp
+
+/** A report closer than this shows "toujours là / plus là". */
+private const val VOTE_DISTANCE_M = 300
 
 @Composable
 private fun HudSearchBar(onClick: () -> Unit, modifier: Modifier = Modifier) {

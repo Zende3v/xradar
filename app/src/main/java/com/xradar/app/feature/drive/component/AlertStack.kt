@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,7 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +54,7 @@ import com.xradar.app.core.model.RoadAlert
 import com.xradar.app.designsystem.component.XRadarCard
 import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarText
+import com.xradar.app.designsystem.foundation.XRadarIcons
 import com.xradar.app.designsystem.theme.XRadarTheme
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -70,6 +74,9 @@ fun AlertStack(
     alerts: List<RoadAlert>,
     modifier: Modifier = Modifier,
     onDismiss: (String) -> Unit = {},
+    /** Whether the driver can still say if this alert is there ("toujours là / plus là"). */
+    canVote: (RoadAlert) -> Boolean = { false },
+    onVote: (RoadAlert, Boolean) -> Unit = { _, _ -> },
 ) {
     if (alerts.isEmpty()) return
     val colors = XRadarTheme.colors
@@ -136,6 +143,11 @@ fun AlertStack(
                             .background(accent),
                     )
                 }
+            }
+
+            if (canVote(focus)) {
+                Spacer(Modifier.height(spacing.sm))
+                VoteRow(onVote = { confirm -> onVote(focus, confirm) })
             }
 
             if (others.isNotEmpty()) {
@@ -291,6 +303,43 @@ private fun SwipeAway(
             ),
     ) {
         content()
+    }
+}
+
+/** "Toujours là" / "Plus là" for a crowd report close ahead: the driver's one voice on it. */
+@Composable
+private fun VoteRow(onVote: (Boolean) -> Unit) {
+    val colors = XRadarTheme.colors
+    Row(horizontalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.sm)) {
+        VoteButton("Toujours là", XRadarIcons.Check, colors.accent, Modifier.weight(1f)) { onVote(true) }
+        VoteButton("Plus là", XRadarIcons.Close, colors.textSecondary, Modifier.weight(1f)) { onVote(false) }
+    }
+}
+
+@Composable
+private fun VoteButton(label: String, icon: ImageVector, tint: Color, modifier: Modifier, onClick: () -> Unit) {
+    val spacing = XRadarTheme.spacing
+    Row(
+        modifier = modifier
+            .heightIn(min = VOTE_HEIGHT)
+            .clip(XRadarTheme.shapes.pill)
+            .background(tint.copy(alpha = 0.12f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.xs, Alignment.CenterHorizontally),
+    ) {
+        XRadarIcon(icon, contentDescription = null, tint = tint, size = 16.dp)
+        XRadarText(
+            label,
+            style = XRadarTheme.typography.footnote.copy(fontWeight = FontWeight.SemiBold),
+            color = XRadarTheme.colors.textPrimary,
+            maxLines = 1,
+        )
     }
 }
 
@@ -478,6 +527,9 @@ internal fun stableOrder(previous: List<String>, alerts: List<RoadAlert>, margin
     }
     return sorted
 }
+
+/** Touch height of the vote buttons, for a thumb while driving. */
+private val VOTE_HEIGHT = 40.dp
 
 /** Other alerts shown as chips before the rest fold into "+N". */
 private const val MAX_CHIPS = 3
