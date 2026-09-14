@@ -1,6 +1,6 @@
 # x_radar — installer, déployer, lancer, surveiller, réparer
 
-Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + PostgreSQL/PostGIS sur un VPS Debian, exposé en HTTPS par Tailscale Funnel. L'app iOS a son propre guide de dev : [ios/XRadar/README.md](ios/XRadar/README.md).
+Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + PostgreSQL/PostGIS sur un VPS Debian, exposé en HTTPS par Tailscale Funnel. L'app iOS vit dans son propre dépôt : `git@github.com:Zende3v/xradar_ios.git` (guide dans son README).
 
 ---
 
@@ -58,7 +58,6 @@ backend/
 ├─ deploy/                unit systemd + setup-admin.sh
 └─ scripts/apk-server.js  serveur temporaire de téléchargement APK
 app/                      app Android
-ios/XRadar/               app iOS (hors git côté build, voir son README)
 ```
 
 ---
@@ -530,4 +529,4 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 - Login Google / Apple, portail de paiement.
 - Timer feu rouge (E4) : source de données manquante.
 - Script du style de carte à rapatrier dans le repo.
-- App iOS : suivre [ios/XRadar/README.md](ios/XRadar/README.md).
+- App iOS : dépôt `xradar_ios` (voir son README).
