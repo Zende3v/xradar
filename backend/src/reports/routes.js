@@ -6,24 +6,36 @@ import { reportStore } from './store.js';
 
 export const reportRouter = Router();
 
+const ROLE_RANK = { guest: 0, client: 1, admin: 2 };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Runs a handler; a database failure answers 503 instead of crashing the request. */
+const guarded = (handler) => async (req, res) => {
+  try {
+    await handler(req, res);
+  } catch (e) {
+    console.error('[reports]', e.message);
+    res.status(503).json({ error: 'reports unavailable' });
+  }
+};
+
 /** DELETE /api/reports/:id — moderation, admins only (account or ADMIN_TOKEN). */
-reportRouter.delete('/:id', (req, res) => {
+reportRouter.delete('/:id', guarded(async (req, res) => {
   if (!isAdminRequest(req)) {
     return res.status(403).json({ error: 'admin only' });
   }
-  const removed = reportStore.removeById(req.params.id);
+  const removed = UUID.test(req.params.id) && await reportStore.removeById(req.params.id);
   if (!removed) return res.status(404).json({ error: 'not found' });
   res.json({ removed: true, id: req.params.id });
-});
-
-const ROLE_RANK = { guest: 0, client: 1, admin: 2 };
+}));
 
 /**
- * POST /api/reports  { type, lat, lon, deviceId?, plate?, street?, side? }
- * Create a crowdsourced report. Role-gated per type: voiture_radar = admin,
- * camera = client+, the rest = everyone. An admin's report is fully trusted.
+ * POST /api/reports  { type, lat, lon, deviceId?, plate?, street?, side?, direction?, bearing? }
+ * Report an event. Role-gated per type: voiture_radar = client, camera = admin, the rest =
+ * everyone. The same event already reported close by is not duplicated: the report joins it
+ * as one more voice (200, merged: true) instead of creating a new one (201).
  */
-reportRouter.post('/', (req, res) => {
+reportRouter.post('/', guarded(async (req, res) => {
   const { type } = req.body || {};
   const lat = Number(req.body?.lat);
   const lon = Number(req.body?.lon);
@@ -40,38 +52,34 @@ reportRouter.post('/', (req, res) => {
     return res.status(403).json({ error: `type "${type}" requires role ${minRole}` });
   }
 
-  const plate = req.body?.plate ? String(req.body.plate).trim() : null;
-  const street = req.body?.street ? String(req.body.street).trim() : null;
-  const side = req.body?.side === 'left' || req.body?.side === 'right' ? req.body.side : null;
-  // Which way the reporter was facing, and their course — both optional.
-  const direction = req.body?.direction === 'opposite' ? 'opposite' : 'same';
   const bearing = Number(req.body?.bearing);
-
-  const report = reportStore.add({
+  const result = await reportStore.add({
     type,
     lat,
     lon,
     reporterId: account?.id ?? null,
     reporterRole: role,
-    plate,
-    street,
-    side,
-    direction,
-    bearing: Number.isFinite(bearing) ? bearing : null,
+    plate: req.body?.plate ? String(req.body.plate).trim() : null,
+    street: req.body?.street ? String(req.body.street).trim() : null,
+    side: req.body?.side === 'left' || req.body?.side === 'right' ? req.body.side : null,
+    // Which way the reporter was facing, and their course — both optional.
+    direction: req.body?.direction === 'opposite' ? 'opposite' : 'same',
+    bearing: req.body?.bearing != null && Number.isFinite(bearing) ? bearing : null,
   });
-  if (!report) {
+  if (!result) {
     return res.status(400).json({ error: 'type (valid), lat and lon are required' });
   }
   if (account) accountStore.recordReportStat(account.id, 'reportsDeclared');
-  const { plate: _p, reporterId: _r, ...pub } = report; // never echo the plate or author
-  res.status(201).json({ report: pub });
-});
+  // The first confirmation is what makes it a "really confirmed" report for its author.
+  if (result.authorFirstConfirmed) accountStore.recordReportStat(result.authorFirstConfirmed, 'reportsConfirmed');
+  res.status(result.merged ? 200 : 201).json({ report: result.report, merged: result.merged });
+}));
 
 /**
  * GET /api/reports/near?lat=..&lon=..&radius=..
- * Active reports around the driver, nearest first.
+ * Live reports around the driver, nearest first, and the radar-car zones.
  */
-reportRouter.get('/near', (req, res) => {
+reportRouter.get('/near', guarded(async (req, res) => {
   const lat = Number(req.query.lat);
   const lon = Number(req.query.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
@@ -82,27 +90,33 @@ reportRouter.get('/near', (req, res) => {
     1,
     config.reportMaxNearRadiusM,
   );
-  const reports = reportStore.near(lat, lon, radius, config.maxResults);
-  const zones = reportStore.zonesNear(lat, lon, radius);
+  const [reports, zones] = await Promise.all([
+    reportStore.near(lat, lon, radius, config.maxResults),
+    reportStore.zonesNear(lat, lon, radius),
+  ]);
   res.json({ count: reports.length, radiusM: radius, reports, zones });
-});
+}));
 
-/** POST /api/reports/:id/confirm — "toujours là". */
-reportRouter.post('/:id/confirm', (req, res) => {
-  const r = reportStore.confirm(req.params.id);
+/** POST /api/reports/:id/confirm — "toujours là". One voice per person: an identity is required. */
+reportRouter.post('/:id/confirm', guarded(async (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'account required' });
+  if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'report not found' });
+  const r = await reportStore.confirm(req.params.id, account.id);
   if (!r) return res.status(404).json({ error: 'report not found' });
-  // The first confirmation is what makes it a "really confirmed" report for its author.
-  if (r.confirmations === 1 && r.reporterId) accountStore.recordReportStat(r.reporterId, 'reportsConfirmed');
-  const { plate: _p, reporterId: _r, ...pub } = r;
-  res.json({ report: pub });
-});
+  if (r.authorFirstConfirmed) accountStore.recordReportStat(r.authorFirstConfirmed, 'reportsConfirmed');
+  res.json({ report: r.report });
+}));
 
-/** POST /api/reports/:id/deny — "plus là". */
-reportRouter.post('/:id/deny', (req, res) => {
-  const r = reportStore.deny(req.params.id);
+/** POST /api/reports/:id/deny — "plus là". One voice per person: an identity is required. */
+reportRouter.post('/:id/deny', guarded(async (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'account required' });
+  if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'report not found' });
+  const r = await reportStore.deny(req.params.id, account.id);
   if (!r) return res.status(404).json({ error: 'report not found' });
-  res.json(r.removed ? { removed: true, id: r.id } : { report: r });
-});
+  res.json(r.removed ? { removed: true, id: r.id } : { report: r.report });
+}));
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));

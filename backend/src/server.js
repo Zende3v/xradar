@@ -12,7 +12,6 @@ import { radarStore } from './radars/store.js';
 import { reportRouter } from './reports/routes.js';
 import { reportStore } from './reports/store.js';
 import { routeRouter } from './routing/routes.js';
-import { signDataset } from './signs/dataset.js';
 import { meta as signsMeta } from './signs/postgis.js';
 import { signRouter } from './signs/routes.js';
 import { speedLimitRouter } from './speedlimits/routes.js';
@@ -31,8 +30,8 @@ export function createApp() {
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {
-    // The published signalisation v2, when the database answers.
-    const published = config.signsSource === 'postgis' ? await signsMeta().catch(() => null) : null;
+    // The published signalisation, when the database answers.
+    const published = await signsMeta().catch(() => null);
     res.json({
       status: 'ok',
       radars: radarStore.meta,
@@ -40,7 +39,7 @@ export function createApp() {
       accounts: accountStore.meta,
       live: liveStore.meta,
       routing: { provider: config.orsApiKey ? 'ors' : 'osrm' },
-      signs: { source: config.signsSource, published, dataset: { ready: signDataset.ready, count: signDataset.count } },
+      signs: { published },
       speedLimits: speedLimitStore.meta,
       fuel: fuelStore.meta,
       memoryMB: Math.round(process.memoryUsage().rss / 1e6),

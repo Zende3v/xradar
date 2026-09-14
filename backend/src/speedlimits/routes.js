@@ -2,12 +2,21 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { accountStore } from '../accounts/store.js';
 import { authAccount, isAdminRequest } from '../accounts/auth.js';
-import { signDataset } from '../signs/dataset.js';
 import { speedLimitStore } from './store.js';
 
 export const speedLimitRouter = Router();
 
 const ROLE_RANK = { guest: 0, client: 1, admin: 2 };
+
+/** Runs a handler; a database failure answers 503 instead of crashing the request. */
+const guarded = (handler) => async (req, res) => {
+  try {
+    await handler(req, res);
+  } catch (e) {
+    console.error('[speed-limits]', e.message);
+    res.status(503).json({ error: 'speed limits unavailable' });
+  }
+};
 
 /**
  * POST /api/speed-limits/reports
@@ -15,7 +24,7 @@ const ROLE_RANK = { guest: 0, client: 1, admin: 2 };
  * A driver proposes the limit the sign shows. Same gate as road reports; an identity
  * (account token or device) is required, since each person has a single voice per change.
  */
-speedLimitRouter.post('/reports', (req, res) => {
+speedLimitRouter.post('/reports', guarded(async (req, res) => {
   const account = authAccount(req);
   if (!account) return res.status(401).json({ error: 'account required' });
   if (account.banned) return res.status(403).json({ error: 'banned' });
@@ -26,10 +35,8 @@ speedLimitRouter.post('/reports', (req, res) => {
   if ((ROLE_RANK[role] ?? 0) < (ROLE_RANK[config.speedLimitMinRole] ?? 0)) {
     return res.status(403).json({ error: `requires role ${config.speedLimitMinRole}` });
   }
-  // The map's limits are still loading: the former limit here cannot be known yet.
-  if (signDataset.loading) return res.status(503).json({ error: 'speed limits loading, retry shortly' });
 
-  const result = speedLimitStore.report({
+  const result = await speedLimitStore.report({
     lat: Number(req.body?.lat),
     lon: Number(req.body?.lon),
     newKmh: Number(req.body?.newKmh),
@@ -42,10 +49,10 @@ speedLimitRouter.post('/reports', (req, res) => {
   if (result.error) return res.status(400).json({ error: result.error });
   if (result.firstVoice) accountStore.recordReportStat(account.id, 'reportsDeclared');
   res.status(result.change ? 201 : 200).json({ change: result.change });
-});
+}));
 
 /** GET /api/speed-limits/near?lat=..&lon=..&radius=.. — pending and validated changes around a point. */
-speedLimitRouter.get('/near', (req, res) => {
+speedLimitRouter.get('/near', guarded(async (req, res) => {
   const lat = Number(req.query.lat);
   const lon = Number(req.query.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
@@ -55,25 +62,29 @@ speedLimitRouter.get('/near', (req, res) => {
     Number(req.query.radius) || config.speedLimitDefaultNearRadiusM,
     config.speedLimitMaxNearRadiusM,
   ));
-  const changes = speedLimitStore.near(lat, lon, radius);
+  const changes = await speedLimitStore.near(lat, lon, radius);
   res.json({ count: changes.length, radiusM: radius, changes });
-});
+}));
 
-/** GET /api/speed-limits/:id — one change with its proposals and events (admins only). */
-speedLimitRouter.get('/:id', (req, res) => {
+/** GET /api/speed-limits/:id — one change with its voices, events and zone (admins only). */
+speedLimitRouter.get('/:id', guarded(async (req, res) => {
   if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
-  const change = speedLimitStore.history(req.params.id);
+  if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'not found' });
+  const change = await speedLimitStore.history(req.params.id);
   if (!change) return res.status(404).json({ error: 'not found' });
   res.json({ change });
-});
+}));
 
 /** DELETE /api/speed-limits/:id — moderation: stop applying / reject a change (admins only). */
-speedLimitRouter.delete('/:id', (req, res) => {
+speedLimitRouter.delete('/:id', guarded(async (req, res) => {
   if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
-  const change = speedLimitStore.remove(req.params.id);
+  if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'not found' });
+  const change = await speedLimitStore.remove(req.params.id);
   if (!change) return res.status(404).json({ error: 'not found' });
   res.json({ change });
-});
+}));
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function optionalNumber(value) {
   if (value == null || value === '') return null;

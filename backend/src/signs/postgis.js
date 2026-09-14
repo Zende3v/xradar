@@ -66,10 +66,35 @@ const CANDIDATES_SQL = `
   ORDER BY r.geom_m <-> p.g
   LIMIT 8`;
 
-/** The road under the driver and its limit for the way they go: { limit, wayId, highway, d } or null. */
+// Speed-limit changes drivers validated (schema crowd), nearest first.
+const OVERRIDES_SQL = `
+  WITH p AS (SELECT ST_Transform(ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326), 2154) AS g)
+  SELECT o.id, o.new_kmh, o.course, ST_Distance(o.zone_m, p.g) AS d
+  FROM crowd.speed_limit_change o, p
+  WHERE o.status = 'validated' AND ST_DWithin(o.zone_m, p.g, $3)
+  ORDER BY d
+  LIMIT 4`;
+
+/**
+ * A change drivers validated wins over the mapped limit — for the way it was validated for,
+ * and unless the mapped road is clearly closer.
+ */
+function withOverride(road, overrides, course) {
+  const over = overrides.find((o) => o.course == null || course == null || angleBetween(o.course, course) <= config.speedLimitSameWayDeg);
+  if (!over || (road && over.d > road.d + config.speedLimitOverrideTieM)) return road;
+  return { ...(road ?? { wayId: null, highway: null, d: over.d, forward: true }), limit: over.new_kmh, changeId: over.id };
+}
+
+/**
+ * The road under the driver and its limit for the way they go, a validated change included:
+ * { limit, wayId, highway, d, forward, changeId? } or null.
+ */
 export async function roadAt(lat, lon, { bearing = null, previousWayId = null } = {}) {
-  const { rows } = await db.query(CANDIDATES_SQL, [lat, lon, config.signRoadMaxDistM]);
-  return pickRoad(rows, bearing, previousWayId);
+  const [candidates, overrides] = await Promise.all([
+    db.query(CANDIDATES_SQL, [lat, lon, config.signRoadMaxDistM]),
+    db.query(OVERRIDES_SQL, [lat, lon, config.signRoadMaxDistM]),
+  ]);
+  return withOverride(pickRoad(candidates.rows, bearing, previousWayId), overrides.rows, bearing);
 }
 
 /** A route as a clean LineString: valid [lon, lat] pairs, no repeated point. */
@@ -104,7 +129,8 @@ const ROUTE_ROADS_SQL = `
     FROM line, ST_DumpPoints(ST_LineInterpolatePoints(line.g, least(1, $2 / greatest(ST_Length(line.g), 1)))) dp
   )
   SELECT pts.i, ST_Y(ST_Transform(pts.g, 4326)) AS lat, ST_X(ST_Transform(pts.g, 4326)) AS lon,
-         c.way_id, c.highway, c.oneway, c.maxspeed_fwd, c.maxspeed_bwd, c.d, c.course
+         c.way_id, c.highway, c.oneway, c.maxspeed_fwd, c.maxspeed_bwd, c.d, c.course,
+         o.id AS over_id, o.new_kmh AS over_kmh, o.course AS over_course, o.d AS over_d
   FROM pts
   LEFT JOIN LATERAL (
     SELECT r.way_id, r.highway, r.oneway, r.maxspeed_fwd, r.maxspeed_bwd,
@@ -115,6 +141,13 @@ const ROUTE_ROADS_SQL = `
     ORDER BY r.geom_m <-> pts.g
     LIMIT 4
   ) c ON true
+  LEFT JOIN LATERAL (
+    SELECT x.id, x.new_kmh, x.course, ST_Distance(x.zone_m, pts.g) AS d
+    FROM crowd.speed_limit_change x
+    WHERE x.status = 'validated' AND ST_DWithin(x.zone_m, pts.g, $3)
+    ORDER BY d
+    LIMIT 1
+  ) o ON true
   ORDER BY pts.i`;
 
 /**
@@ -154,8 +187,11 @@ function limitChanges(rows) {
   const samples = new Map(); // i -> { lat, lon, candidates }
   for (const row of rows) {
     let sample = samples.get(row.i);
-    if (!sample) samples.set(row.i, (sample = { i: row.i, lat: row.lat, lon: row.lon, candidates: [] }));
+    if (!sample) samples.set(row.i, (sample = { i: row.i, lat: row.lat, lon: row.lon, candidates: [], overrides: [] }));
     if (row.way_id != null) sample.candidates.push(row);
+    if (row.over_id != null && sample.overrides.length === 0) {
+      sample.overrides.push({ id: row.over_id, new_kmh: row.over_kmh, course: row.over_course, d: row.over_d });
+    }
   }
   const ordered = [...samples.values()].sort((a, b) => a.i - b.i);
   const out = [];
@@ -166,7 +202,7 @@ function limitChanges(rows) {
     const before = ordered[Math.max(0, k - 1)];
     const after = ordered[Math.min(ordered.length - 1, k + 1)];
     const course = before === after ? null : bearingDeg(before.lat, before.lon, after.lat, after.lon);
-    const picked = pickRoad(sample.candidates, course, previousWayId);
+    const picked = withOverride(pickRoad(sample.candidates, course, previousWayId), sample.overrides, course);
     previousWayId = picked?.wayId ?? previousWayId;
     const limit = picked?.limit ?? null;
     if (limit == null || limit === shown) {
