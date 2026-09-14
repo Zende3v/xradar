@@ -1,8 +1,9 @@
 -- x_radar signalisation v2 — osm2pgsql flex style (osm2pgsql 2.x).
 --
 -- Keeps what a driver needs from OpenStreetMap: the roads a car can take, with their limit
--- in each direction, and the sign nodes on or beside them. Everything lands in schema "osm";
--- build.sql turns it into the published tables (snapped, oriented, deduplicated).
+-- in each direction, the sign nodes on or beside them, the nearby services a driver looks for
+-- and the communes. Everything lands in schema "osm"; build.sql and places.sql turn it into
+-- the published tables (snapped, oriented, deduplicated).
 
 local SRID = 4326
 
@@ -75,6 +76,83 @@ local way_signs = osm2pgsql.define_table({
     },
 })
 
+-- Nearby services (fuel, chargers, car parks…): nodes, closed ways and multipolygons, with the
+-- tags the search shows. Filtered and deduplicated by places.sql.
+local places = osm2pgsql.define_table({
+    name = 'places',
+    schema = 'osm',
+    ids = { type = 'any', id_column = 'osm_id', type_column = 'osm_type' },
+    columns = {
+        { column = 'kind', type = 'text', not_null = true },
+        { column = 'tags', type = 'jsonb', not_null = true },
+        { column = 'geom', type = 'geometry', projection = SRID, not_null = true },
+    },
+})
+
+-- Communes (admin_level 8), to name the town of a place that has no addr:city.
+local communes = osm2pgsql.define_relation_table('communes', {
+    { column = 'name', type = 'text', not_null = true },
+    { column = 'insee', type = 'text' },
+    { column = 'geom', type = 'multipolygon', projection = SRID, not_null = true },
+}, { schema = 'osm' })
+
+-- Tags a place keeps (plus every socket:* of a charger).
+local PLACE_TAGS = {
+    'name', 'brand', 'operator', 'network', 'opening_hours', 'access', 'fee', 'parking', 'capacity',
+    'park_ride', 'covered', 'maxstay', 'stars', 'charging_station:output', 'maxpower',
+    'addr:housenumber', 'addr:street', 'addr:place', 'addr:postcode', 'addr:city', 'ref:FR:prix-carburants',
+    'amenity', 'shop', 'tourism', 'motorcar', 'bicycle', 'hgv',
+}
+
+-- Nobody passing by may use it.
+local CLOSED_ACCESS = {
+    private = true, no = true, delivery = true, military = true, employees = true, staff = true,
+    permit = true, residents = true, emergency = true, forestry = true, agricultural = true,
+}
+
+-- Car park kinds that are private boxes or kerbside lanes, not a car park to drive to.
+local NOT_CAR_PARKS = { garage_boxes = true, carports = true, sheds = true, lane = true, layby = true }
+
+local function place_kind(tags)
+    local amenity, shop, tourism = tags.amenity, tags.shop, tags.tourism
+    if amenity == 'fuel' then return 'fuel' end
+    if amenity == 'charging_station' then return 'charging' end
+    if amenity == 'parking' then return 'parking' end
+    if amenity == 'atm' or (amenity == 'bank' and tags.atm == 'yes') then return 'atm' end
+    if shop == 'tobacco' then return 'tobacco' end
+    -- A bar-tabac or a newsagent licensed to sell tobacco.
+    if (tags.tobacco == 'yes' or tags.tobacco == 'only') and (shop or amenity) then return 'tobacco' end
+    if shop == 'car_repair' then return 'garage' end
+    if tourism == 'hotel' or tourism == 'motel' then return 'hotel' end
+    return nil
+end
+
+local function place_row(tags)
+    local kind = place_kind(tags)
+    if not kind then return nil end
+    if CLOSED_ACCESS[tags.access] then return nil end
+    local hours = tags.opening_hours
+    if hours == 'closed' or hours == 'off' then return nil end
+    if kind == 'fuel' or kind == 'charging' or kind == 'parking' then
+        if tags.motorcar == 'no' or tags.motor_vehicle == 'no' then return nil end
+    end
+    if kind == 'parking' and NOT_CAR_PARKS[tags.parking] then return nil end
+    -- A charger for bikes only.
+    if kind == 'charging' and (tags.bicycle == 'designated' or tags.bicycle == 'yes') and tags.motorcar ~= 'yes' then
+        return nil
+    end
+    local out = {}
+    for _, key in ipairs(PLACE_TAGS) do
+        if tags[key] then out[key] = tags[key] end
+    end
+    if kind == 'charging' then
+        for key, value in pairs(tags) do
+            if key:sub(1, 7) == 'socket:' then out[key] = value end
+        end
+    end
+    return { kind = kind, tags = out }
+end
+
 -- Nodes come before ways in the file: remember which ones carry a sign.
 local sign_node_ids = {}
 
@@ -126,6 +204,11 @@ function osm2pgsql.process_node(object)
     local tags = object.tags
     local seen = {}
 
+    local place = place_row(tags)
+    if place then
+        places:insert({ kind = place.kind, tags = place.tags, geom = object:as_point() })
+    end
+
     local function add(kind, value, forced)
         local key = kind .. ':' .. tostring(value) .. ':' .. tostring(forced)
         if seen[key] then return end
@@ -175,6 +258,15 @@ end
 
 function osm2pgsql.process_way(object)
     local tags = object.tags
+
+    local place = place_row(tags)
+    if place then
+        local geom = object.is_closed and object:as_polygon() or object:as_linestring()
+        if not geom:is_null() then
+            places:insert({ kind = place.kind, tags = place.tags, geom = geom })
+        end
+    end
+
     if not CAR_ROADS[tags.highway] or NOT_STREETS[tags.service] or tags.area == 'yes' then return end
     local fwd, bwd = road_limits(tags)
     roads:insert({
@@ -192,5 +284,28 @@ function osm2pgsql.process_way(object)
     local n = #nodes
     for i, id in ipairs(nodes) do
         if sign_node_ids[id] then way_signs:insert({ node_id = id, seq = i, n = n }) end
+    end
+end
+
+function osm2pgsql.process_relation(object)
+    local tags = object.tags
+    if tags.type ~= 'multipolygon' and tags.type ~= 'boundary' then return end
+
+    if tags.type == 'boundary' and tags.boundary == 'administrative' and tags.admin_level == '8' and tags.name then
+        local geom = object:as_multipolygon()
+        if not geom:is_null() then
+            communes:insert({ name = tags.name, insee = tags['ref:INSEE'], geom = geom })
+        end
+        return
+    end
+
+    if tags.type == 'multipolygon' then
+        local place = place_row(tags)
+        if place then
+            local geom = object:as_multipolygon()
+            if not geom:is_null() then
+                places:insert({ kind = place.kind, tags = place.tags, geom = geom })
+            end
+        end
     end
 end

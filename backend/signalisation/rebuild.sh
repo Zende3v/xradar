@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Signalisation v2 — weekly rebuild: fresh France extract, import, build, checks, publish.
+# Signalisation v2 — weekly rebuild: fresh France extract, import, build (signs, then nearby
+# services), checks, publish.
 # Any failure stops here and the published version stays. Run as root (cron.d/xradar-signs).
 #
 set -euo pipefail
@@ -26,6 +27,7 @@ bash "$HERE/import.sh" "$WORK/france-latest.osm.pbf"
 
 echo "[rebuild] building"
 psql_xradar -f "$HERE/build.sql"
+psql_xradar -f "$HERE/places.sql"
 
 echo "[rebuild] checking"
 psql_xradar -f "$HERE/checks.sql"

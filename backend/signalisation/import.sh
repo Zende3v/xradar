@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Signalisation v2, step 1: keep the car roads and the sign nodes of a France extract, then
-# load them into PostGIS (schema "osm") with osm2pgsql and style.lua. build.sql comes next.
+# Signalisation v2, step 1: keep the car roads, the sign nodes, the nearby services and the
+# communes of a France extract, then load them into PostGIS (schema "osm") with osm2pgsql and
+# style.lua. build.sql and places.sql come next.
 #
 # Run as root:  bash import.sh [/path/to/france-latest.osm.pbf]
 #
@@ -15,12 +16,14 @@ DB="${DB:-xradar}"
 mkdir -p "$WORK"
 chown xradar:xradar "$WORK"
 
-echo "[import] filtering roads and sign nodes…"
+echo "[import] filtering roads, sign nodes, services and communes…"
 osmium tags-filter --overwrite -o "$WORK/roads-signs.osm.pbf" "$PBF" \
   w/highway=motorway,motorway_link,trunk,trunk_link,primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,unclassified,residential,living_street,service,road \
   n/highway=traffic_signals,stop,give_way,crossing,mini_roundabout \
   n/traffic_sign n/traffic_sign:forward n/traffic_sign:backward \
-  n/railway=level_crossing
+  n/railway=level_crossing \
+  nwr/amenity=fuel,charging_station,parking,atm,bank nwr/shop=tobacco,car_repair nwr/tobacco=yes,only \
+  nwr/tourism=hotel,motel r/admin_level=8
 chown xradar:xradar "$WORK/roads-signs.osm.pbf"
 
 echo "[import] loading into PostGIS (schema osm)…"
