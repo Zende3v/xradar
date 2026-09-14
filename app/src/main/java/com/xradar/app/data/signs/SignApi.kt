@@ -15,6 +15,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/** The limit on the road under the driver ([kmh] null = not mapped), and that road's id. */
+data class RoadLimit(val kmh: Int?, val wayId: String?)
+
 /** Client for OSM road signs (`/api/signs`). */
 class SignApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
@@ -44,15 +47,29 @@ class SignApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
     }
 
     /**
-     * Speed limit (km/h) at a position, from the preloaded OSM dataset and the changes drivers
-     * validated; [bearingDeg] (the driver's course) picks the ones made for that way.
+     * Speed limit where the driver is, for the way they go: the backend picks the road by
+     * distance, [bearingDeg] (their course) and continuity with [previousWayId] (the road the
+     * previous answer gave). Null when the request failed.
      */
-    suspend fun limit(lat: Double, lon: Double, bearingDeg: Double? = null): Int? = withContext(Dispatchers.IO) {
+    suspend fun limit(
+        lat: Double,
+        lon: Double,
+        bearingDeg: Double? = null,
+        previousWayId: String? = null,
+    ): RoadLimit? = withContext(Dispatchers.IO) {
         runCatching {
-            val u = url("/api/signs/limit?lat=$lat&lon=$lon" + (bearingDeg?.let { "&bearing=$it" } ?: ""))
+            val u = url(
+                "/api/signs/limit?lat=$lat&lon=$lon" +
+                    (bearingDeg?.let { "&bearing=$it" } ?: "") +
+                    (previousWayId?.let { "&way=$it" } ?: ""),
+            )
             client.newCall(Request.Builder().url(u).build()).execute().use { r ->
+                if (!r.isSuccessful) return@use null
                 val o = JSONObject(r.body?.string() ?: "")
-                if (o.isNull("v")) null else o.optInt("v").takeIf { it in 5..130 }
+                RoadLimit(
+                    kmh = if (o.isNull("v")) null else o.optInt("v").takeIf { it in 5..130 },
+                    wayId = if (o.isNull("way")) null else o.optString("way").ifBlank { null },
+                )
             }
         }.getOrNull()
     }

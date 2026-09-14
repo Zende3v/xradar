@@ -17,6 +17,7 @@ import com.xradar.app.core.model.RadarZone
 import com.xradar.app.core.model.ReportType
 import com.xradar.app.core.model.RoadAlert
 import com.xradar.app.core.model.Route
+import com.xradar.app.core.model.SignType
 import com.xradar.app.core.model.SpeedLimitChange
 import com.xradar.app.core.model.SpeedLimitSource
 import com.xradar.app.core.model.TripInfo
@@ -72,8 +73,13 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val signApi = com.xradar.app.data.signs.SignApi()
     private val signs = MutableStateFlow<List<com.xradar.app.core.model.RoadSign>>(emptyList())
     private val guidance = MutableStateFlow<GuidanceInstruction?>(null)
-    /** Speed limit where the driver is, from the OSM dataset (null = unknown). */
+    /** Speed limit where the driver is, from the road's own limit (null = unknown). */
     private val osmLimit = MutableStateFlow<Int?>(null)
+    /** Limit changes along the active route: (distance along it in metres, km/h), in order. */
+    @Volatile private var routeLimits: List<Pair<Double, Int>> = emptyList()
+    @Volatile private var routeLimitPath: RoutePath? = null
+    /** True while the limit is read from the route the driver follows (no polling then). */
+    @Volatile private var limitFromRoute = false
     /** Set when a destination was chosen but routing came back empty. */
     private val routeError = MutableStateFlow(false)
     private val speaker = GuidanceSpeaker(application)
@@ -281,19 +287,38 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 delay(LIVE_REFRESH_MS)
             }
         }
-        // Live speed limit under the car (OSM dataset), refreshed as we move.
+        // On the route, the limit is read from the route's own limit changes at the driver's
+        // progress: instant, and no request. Off it (or with no route), the polling below runs.
+        viewModelScope.launch {
+            LocationRepository.location.collect { fix ->
+                val rp = routeLimitPath
+                val changes = routeLimits
+                val match = if (fix == null || rp == null || changes.isEmpty()) null else rp.match(fix.latitude, fix.longitude)
+                if (match == null || match.offRouteMeters > ROUTE_LIMIT_MAX_OFF_M) {
+                    limitFromRoute = false
+                    return@collect
+                }
+                limitFromRoute = true
+                osmLimit.value = (changes.lastOrNull { it.first <= match.alongMeters } ?: changes.first()).second
+            }
+        }
+        // Live speed limit under the car, refreshed as we move: the backend follows the road
+        // the driver is on (course, and the road id it gave last time).
         viewModelScope.launch {
             var lastLat = Double.NaN
             var lastLon = Double.NaN
             var lastHitAt = 0L
+            var lastWayId: String? = null
             while (true) {
                 val fix = LocationRepository.location.value
                 val moved = fix != null &&
                     (lastLat.isNaN() || Geo.haversine(lastLat, lastLon, fix.latitude, fix.longitude) > LIMIT_MOVE_M)
-                if (fix != null && moved) {
+                if (fix != null && moved && !limitFromRoute) {
                     lastLat = fix.latitude
                     lastLon = fix.longitude
-                    val v = signApi.limit(fix.latitude, fix.longitude, fix.bearingDeg?.toDouble())
+                    val result = signApi.limit(fix.latitude, fix.longitude, fix.bearingDeg?.toDouble(), lastWayId)
+                    lastWayId = result?.wayId ?: lastWayId
+                    val v = result?.kmh
                     val now = System.currentTimeMillis()
                     if (v != null) {
                         osmLimit.value = v
@@ -415,17 +440,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        // Signs along the whole route while navigating; near the driver otherwise.
+        // Road signs belong to the trip: the whole route at once, nothing at all when simply
+        // driving around.
         viewModelScope.launch {
-            ActiveTripRepository.route.collect { route ->
-                // Road signs belong to the trip: the whole route at once, nothing at
-                // all when simply driving around.
-                signs.value = if (route != null && route.points.size >= 2) {
-                    signApi.route(route.points)
-                } else {
-                    emptyList()
-                }
-            }
+            ActiveTripRepository.route.collect { route -> loadRouteSigns(route) }
         }
         // Reset the turn-by-turn cursor whenever the route changes (new trip or recalc).
         viewModelScope.launch {
@@ -633,6 +651,27 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         tripToLabel = null
     }
 
+    /**
+     * The signs of [route] (already filtered by the backend for the way it runs, limit changes
+     * included), and those limit changes placed along it for [routeLimits].
+     */
+    private suspend fun loadRouteSigns(route: Route?) {
+        val points = route?.points?.takeIf { it.size >= 2 }
+        val rp = points?.let { RoutePath(it) }
+        val list = if (points != null) signApi.route(points) else emptyList()
+        signs.value = list
+        routeLimits = if (rp == null) {
+            emptyList()
+        } else {
+            list.mapNotNull { sign ->
+                val kmh = sign.speed?.takeIf { sign.type == SignType.SpeedLimit } ?: return@mapNotNull null
+                rp.match(sign.lat, sign.lon)?.let { it.alongMeters to kmh }
+            }.sortedBy { it.first }
+        }
+        routeLimitPath = rp
+        if (rp == null) limitFromRoute = false
+    }
+
     /** Reports are few enough to hold the whole country at once. */
     private fun radiusM(): Int = FULL_LOAD_M
 
@@ -763,9 +802,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             ) ?: return@launch
             if (change.status == SpeedLimitChange.Status.Validated && change.newKmh != null) {
                 osmLimit.value = change.newKmh
-                ActiveTripRepository.route.value?.takeIf { it.points.size >= 2 }?.let { route ->
-                    signs.value = signApi.route(route.points)
-                }
+                ActiveTripRepository.route.value?.let { route -> loadRouteSigns(route) }
             }
         }
     }
@@ -1008,6 +1045,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val ANNOUNCE_MARKERS_M = intArrayOf(1000, 700, 500, 300, 200, 150, 100)
         // Live speed limit polling.
         const val LIMIT_MOVE_M = 40.0
+        /** Farther than this from the route, its limits are not the driver's. */
+        const val ROUTE_LIMIT_MAX_OFF_M = 30.0
         const val LIMIT_POLL_MS = 2_500L
         const val LIMIT_STALE_MS = 25_000L
         // Alert voice.
