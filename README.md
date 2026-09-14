@@ -27,14 +27,13 @@ Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + Po
 App Android ──HTTPS──▶ Tailscale Funnel ──▶ backend Node :8090 (systemd, user xradar)
    │                                              │
    ├─ tuiles carte : Stadia Maps (direct)          ├─ PostgreSQL/PostGIS « xradar »
-   └─ adresses : api-adresse.data.gouv.fr          │    ├─ schéma signs  : routes + panneaux (rebuild hebdo depuis OSM)
+   └─ adresses : api-adresse.data.gouv.fr          │    ├─ schéma signs  : routes + panneaux + services autour (rebuild hebdo depuis OSM)
                                                    │    └─ schéma crowd  : signalements + corrections de limite
                                                    ├─ data/accounts.json : comptes, stats, parrainage
                                                    ├─ data/avatars/      : photos de profil
                                                    ├─ data.gouv : radars fixes (téléchargé au démarrage + chaque jour)
-                                                   ├─ prix-carburants : flux officiel (toutes les 10 min)
-                                                   ├─ OpenRouteService (si ORS_API_KEY) sinon OSRM public : itinéraires
-                                                   └─ Overpass : recherche de lieux autour (stations, parkings…)
+                                                   ├─ prix-carburants : flux officiel, prix + horaires (toutes les 10 min)
+                                                   └─ OpenRouteService (si ORS_API_KEY) sinon OSRM public : itinéraires
 ```
 
 Positions live : mémoire seulement (90 s). Sessions (tokens) : mémoire seulement → un redémarrage déconnecte, l'app se reconnecte seule par son `deviceId` (compte rattaché au téléphone).
@@ -49,7 +48,8 @@ backend/
 │  ├─ config.js           TOUTE la config (env vars ci-dessous)
 │  ├─ db.js               pool PostgreSQL (socket local, auth peer)
 │  ├─ crowd/schema.sql    schéma crowd, appliqué à chaque démarrage (idempotent)
-│  ├─ accounts/ live/ places/ radars/ routing/ fuel/
+│  ├─ accounts/ live/ radars/ routing/ fuel/
+│  ├─ places/             services autour (PostGIS) + horaires (hours.js, lib opening_hours)
 │  ├─ reports/            signalements (anti-doublon, votes, score.js)
 │  ├─ speedlimits/        corrections de limitation
 │  └─ signs/postgis.js    limite sous le conducteur, panneaux du trajet
@@ -177,7 +177,8 @@ systemctl daemon-reload && systemctl restart xradar-backend
 | `ACCOUNT_TRIP_HISTORY_MAX` | trajets gardés par compte | 200 |
 | `RADAR_DATASET_API_URL` / `REFRESH_INTERVAL_MS` | dataset radars / refresh | data.gouv / 24 h |
 | `FUEL_FEED_URL` / `FUEL_REFRESH_INTERVAL_MS` | prix carburants | roulez-eco / 10 min |
-| `OVERPASS_URL` / `PLACE_USER_AGENT` | recherche de lieux | overpass-api.de / `x_radar/1.0 (+url)` |
+| `PLACE_USER_AGENT` | identité HTTP vers les données ouvertes | `x_radar/1.0 (+url)` |
+| `PLACE_TABLE` | services autour : `signs_next.place` = tester un build non publié (staging) | `signs.place` |
 
 Générer un secret : `openssl rand -hex 32`.
 
@@ -260,14 +261,20 @@ Seulement si la prod n'a pas encore de vraies données dans `crowd`. Arrêt : `p
 Chaîne `rebuild.sh` (cron hebdo) :
 
 1. **Téléchargement** `france-latest.osm.pbf` Geofabrik + contrôle md5 → `/var/lib/xradar-signs/`.
-2. **import.sh** : osmium garde routes voitures + nœuds de signalisation (~40 s), osm2pgsql (`style.lua`) charge le schéma `osm` (~2 min).
+2. **import.sh** : osmium garde routes voitures + nœuds de signalisation + services (stations, bornes, parkings, tabacs, garages, hôtels, distributeurs) + communes (~1 min), osm2pgsql (`style.lua`) charge le schéma `osm` (~2 min). Déjà écartés : accès privé, fermé, bornes vélo, boxes/garages privés.
 3. **build.sql** (~3 min) → schéma `signs_next` :
    - `road` : 5,8 M routes, limite **par sens** (`maxspeed`, `:forward`, `:backward`, `FR:urban`…, zone de rencontre = 20).
    - `sign` : ~2 M panneaux, chacun **rattaché à sa route**, **orienté** (tags de sens, sens unique, sinon vers le carrefour le plus proche), **dédoublonné** (même type + lieu + sens, taille max par type), **id stable**. Ronds-points reconstitués depuis les anneaux.
    - `meta` : date du build, date de l'extrait OSM, comptes.
-4. **checks.sql** : refuse si < 4 M routes, < 200 k stops, ou écart > 15 % sur un type vs version publiée.
-5. **publish.sql** : bascule atomique `signs` → `signs_prev`, `signs_next` → `signs`. Zéro coupure.
-6. Suppression du schéma `osm`.
+4. **places.sql** (~40 s) → `signs_next.place` : ~400 k services, un par lieu.
+   - Filtre : parkings de bord de rue ou minuscules (< 120 m², < 5 places), points de parking sans aucune info.
+   - **Dédoublonnage** : même type, proches (station 40 m, hôtel 30 m, distributeur 10 m, autres 20 m ; parking : point posé sur le polygone), noms compatibles (l'un vide, égaux ou l'un contient l'autre ; opérateur compté pour bornes et distributeurs). Deux stations à < 12 m = une seule quel que soit le nom. Tags fusionnés, le plus riche gagne. Position : plus grand polygone, sinon point le plus riche.
+   - Commune (polygones admin_level 8) pour l'adresse sans `addr:city`. Index KNN partiel par type.
+5. **checks.sql** : refuse si < 4 M routes, < 200 k stops, écart > 15 % sur un type de panneau ou de service vs version publiée, ou services sous leur plancher (parking 240 k, garage 16 k, hôtel 15 k, distributeur 14,5 k, borne 14 k, station 10 k, tabac 6,5 k).
+6. **publish.sql** : bascule atomique `signs` → `signs_prev`, `signs_next` → `signs` (panneaux et services ensemble). Zéro coupure.
+7. Suppression du schéma `osm`.
+
+Rejouer seulement les services sur un `signs_next` déjà construit : `runuser -u xradar -- psql -d xradar -f places.sql` (il nettoie un essai interrompu), puis `checks.sql`. Tester avant publication : instance staging avec `PLACE_TABLE=signs_next.place`.
 
 Échec à n'importe quelle étape = version publiée intacte.
 
@@ -487,6 +494,8 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 
 **Limite affichée** : route choisie par distance + écart de cap + sens unique + continuité (`way`). En navigation : lue sur le trajet, sans requête.
 
+**Services autour** : backend = 60 plus proches (KNN PostGIS, ~5 ms), horaires lus à l'heure de Paris (lib `opening_hours`, jours fériés FR). Station : horaires officiels (automate 24/24 ou créneaux déclarés) prioritaires sur OSM. Distributeur dans une banque : horaires de la banque ignorés. App (`NearbyPicker`) : ouverts + horaires inconnus d'abord, du plus proche au plus loin (carburant : station avec prix frais peut passer devant en ville, `FuelStationPicker`), 20 max ; puis « Fermés en ce moment » (8 max, seulement ceux plus proches que le dernier ouvert). « Ferme bientôt » à 30 min de la fermeture.
+
 ---
 
 ## 12. API
@@ -501,7 +510,7 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 | GET/POST/PATCH/DELETE | `/api/admin/accounts[/:id]` | ADMIN_TOKEN |
 | GET | `/api/radars/near` `/bbox` · POST `/api/radars/route` | radars fixes |
 | GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways` | ORS ou OSRM |
-| GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm` | + prix carburants |
+| GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm[&limit][&pool=1]` | plus proches d'abord (20, `pool=1` : 60) ; `hours` (état, créneaux du jour, prochain changement), `charging`, `parking`, `stars`, `brand` ; station : prix + horaires officiels |
 | POST/GET | `/api/live/position` · `/api/live/near` | positions live |
 | GET | `/api/signs/limit?lat&lon&bearing&way` | `{v, way}` |
 | POST | `/api/signs/route {coordinates}` | panneaux + changements de limite du trajet |
