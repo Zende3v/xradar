@@ -15,11 +15,10 @@ Environment=NODE_ENV=production
 # Port local (change-le s'il est déjà pris — ex. 8080 souvent occupé).
 Environment=PORT=8090
 Environment=HOST=127.0.0.1
-# Persisted data (reports + accounts). The dir must be writable — see ReadWritePaths.
-Environment=REPORTS_FILE=/opt/xradar-backend/data/reports.json
+# Accounts and avatars live under data/ (reports and speed limits are in PostgreSQL).
 Environment=ACCOUNTS_FILE=/opt/xradar-backend/data/accounts.json
-# Admin API token — CHANGE THIS to a long random string; the CLI must use the same.
-Environment=ADMIN_TOKEN=change-me-to-a-long-random-secret
+# Secrets (ADMIN_TOKEN, ORS_API_KEY, SMTP_*) go in drop-ins under
+# /etc/systemd/system/xradar-backend.service.d/ — see deploy/setup-admin.sh and README.md.
 
 # Lightweight hardening. The app only writes under data/, which we open up below.
 NoNewPrivileges=true
