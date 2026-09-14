@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,8 +61,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xradar.app.R
 import com.xradar.app.core.model.FuelPrice
-import com.xradar.app.core.model.FuelStationPicker
 import com.xradar.app.core.model.FuelType
+import com.xradar.app.core.model.NearbyLabels
+import com.xradar.app.core.model.NearbyPicker
+import com.xradar.app.core.model.NearbyResults
 import com.xradar.app.core.model.Place
 import com.xradar.app.core.model.PlaceCategory
 import com.xradar.app.core.model.PlaceKind
@@ -114,6 +117,8 @@ fun SearchRoute(onBack: () -> Unit) {
     var category by remember { mutableStateOf<PlaceCategory?>(null) }
     var categoryPlaces by remember { mutableStateOf<List<Place>>(emptyList()) }
     var categoryLoading by remember { mutableStateOf(false) }
+    var categoryFailed by remember { mutableStateOf(false) }
+    var categoryAttempt by remember { mutableStateOf(0) }
 
     // Debounced live geocoding (French Base Adresse Nationale).
     LaunchedEffect(query) {
@@ -129,17 +134,23 @@ fun SearchRoute(onBack: () -> Unit) {
         loading = false
     }
 
-    // Nearest places of the chosen category — searched from the trip's start point.
-    LaunchedEffect(category, start) {
+    // Nearest places of the chosen category — searched from the trip's start point, else from
+    // the driver's position (as soon as there is one).
+    val hasFix = fix != null
+    LaunchedEffect(category, start, hasFix, categoryAttempt) {
         val cat = category ?: return@LaunchedEffect
+        categoryFailed = false
         val fromLat = start?.lat ?: fix?.latitude
         val fromLon = start?.lon ?: fix?.longitude
         if (fromLat == null || fromLon == null) {
             categoryPlaces = emptyList()
+            categoryLoading = true
             return@LaunchedEffect
         }
         categoryLoading = true
-        categoryPlaces = placesApi.near(cat, fromLat, fromLon)
+        val found = placesApi.near(cat, fromLat, fromLon)
+        categoryPlaces = found.orEmpty()
+        categoryFailed = found == null
         categoryLoading = false
     }
 
@@ -187,12 +198,15 @@ fun SearchRoute(onBack: () -> Unit) {
         category = category,
         categoryPlaces = categoryPlaces,
         categoryLoading = categoryLoading,
+        categoryFailed = categoryFailed,
+        waitingForPosition = start == null && !hasFix,
         preferredFuel = settings.preferredFuel,
         onFuelSelect = { fuel -> AppPreferences.updateSettings { it.copy(preferredFuel = fuel) } },
         onQueryChange = { query = it },
         onPick = ::pick,
         onCategory = { cat ->
-            category = if (category == cat) null else cat
+            // After a failed search, the same category again means "try again".
+            if (category == cat && categoryFailed) categoryAttempt++ else category = if (category == cat) null else cat
             categoryPlaces = emptyList()
         },
         onEditStart = { target = PickTarget.Start; query = "" },
@@ -228,6 +242,10 @@ fun SearchScreen(
     category: PlaceCategory?,
     categoryPlaces: List<Place>,
     categoryLoading: Boolean,
+    /** The nearby search could not reach the backend. */
+    categoryFailed: Boolean = false,
+    /** No trip start and no GPS fix yet: nothing to search around. */
+    waitingForPosition: Boolean = false,
     onQueryChange: (String) -> Unit,
     onPick: (Place) -> Unit,
     onCategory: (PlaceCategory) -> Unit,
@@ -290,7 +308,14 @@ fun SearchScreen(
                 query.trim().length >= MIN_QUERY && loading -> XRadarLoadingState(label = "Recherche…")
                 query.trim().length >= MIN_QUERY && results.isEmpty() -> EmptyResults(query)
                 query.trim().length >= MIN_QUERY -> ResultList(results, onPick)
-                category != null && categoryLoading -> XRadarLoadingState(label = "Recherche autour de toi…")
+                category != null && categoryLoading -> XRadarLoadingState(
+                    label = if (waitingForPosition) "En attente de ta position…" else "Recherche autour de toi…",
+                )
+                category != null && categoryFailed -> XRadarMessageState(
+                    icon = XRadarIcons.Warning,
+                    title = "Recherche indisponible",
+                    message = "Le serveur ne répond pas. Vérifie ta connexion, puis touche à nouveau « ${category.label} ».",
+                )
                 category != null && categoryPlaces.isEmpty() -> XRadarMessageState(
                     icon = XRadarIcons.Search,
                     title = "Rien trouvé",
@@ -298,16 +323,12 @@ fun SearchScreen(
                 )
                 category != null -> {
                     val fuel = if (showPrices) preferredFuel else null
-                    // Fuel comes as a bigger pool: in a city the nearest stations that show a
-                    // price come first; anywhere else it is the nearest 20, as before.
+                    // Open places first, nearest first (in a city a station showing a price may
+                    // go ahead); those closed right now follow, marked.
                     val shown = remember(categoryPlaces, category, fuel) {
-                        if (category == PlaceCategory.Fuel) {
-                            FuelStationPicker.pick(categoryPlaces, fuel, System.currentTimeMillis())
-                        } else {
-                            categoryPlaces
-                        }
+                        NearbyPicker.pick(categoryPlaces, category, fuel, System.currentTimeMillis())
                     }
-                    ResultList(results = shown, onPick = onPick, fuel = fuel)
+                    NearbyList(results = shown, category = category, fuel = fuel, onPick = onPick)
                 }
                 else -> BlankState(
                     home = home,
@@ -616,19 +637,10 @@ private fun RowAction(
     )
 }
 
-/**
- * Places to pick, in the order they came. With [fuel] set (the "Carburant" search), the
- * stations that show a price for that fuel come first — each group still nearest first —
- * every station shows its official price on the right, and the list credits the source.
- */
+/** Addresses found by the text search, in the order they came. */
 @Composable
-private fun ResultList(results: List<Place>, onPick: (Place) -> Unit, fuel: FuelType? = null) {
+private fun ResultList(results: List<Place>, onPick: (Place) -> Unit) {
     val spacing = XRadarTheme.spacing
-    val now = remember(results, fuel) { System.currentTimeMillis() }
-    // A stable split of a list already sorted by distance: nothing moves inside a group.
-    val (priced, unpriced) = remember(results, fuel, now) {
-        if (fuel == null) results to emptyList() else results.partition { it.showsFuelPrice(fuel, now) }
-    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -638,54 +650,198 @@ private fun ResultList(results: List<Place>, onPick: (Place) -> Unit, fuel: Fuel
             bottom = spacing.xxxl,
         ),
     ) {
-        items(items = priced, key = { it.id }) { place ->
-            ResultRow(place = place, fuel = fuel, nowMillis = now, onPick = onPick)
-        }
-        if (unpriced.isNotEmpty()) {
-            if (priced.isNotEmpty()) {
-                item(key = "fuel-no-recent-price") {
-                    XRadarText(
-                        "Sans prix récent",
-                        style = XRadarTheme.typography.caption,
-                        color = XRadarTheme.colors.textTertiary,
-                        modifier = Modifier.padding(top = spacing.lg, bottom = spacing.xs),
-                    )
-                }
-            }
-            items(items = unpriced, key = { it.id }) { place ->
-                ResultRow(place = place, fuel = fuel, nowMillis = now, onPick = onPick)
-            }
-        }
-        if (fuel != null) {
-            item(key = "fuel-prices-source") {
-                XRadarText(
-                    "Prix officiels : prix-carburants.gouv.fr. Seuls les prix mis à jour depuis moins de 48 h sont affichés.",
-                    style = XRadarTheme.typography.footnote,
-                    color = XRadarTheme.colors.textTertiary,
-                    modifier = Modifier.padding(top = spacing.md),
-                )
-            }
+        items(items = results, key = { it.id }) { place ->
+            XRadarListRow(
+                title = place.name,
+                subtitle = place.subtitle,
+                leadingIcon = place.kind.icon(),
+                leadingTint = XRadarTheme.colors.accent,
+                onClick = { onPick(place) },
+            )
+            XRadarDivider(Modifier.padding(start = 58.dp))
         }
     }
 }
 
-/** One result line, with the official price on the right when [fuel] is set. */
+/**
+ * The nearby places, as [NearbyPicker] ranked them: open ones first — with [fuel] set, those
+ * showing a price for it, then "Sans prix récent" — and those closed right now under their
+ * own heading, dimmed. The sources are credited at the bottom.
+ */
 @Composable
-private fun ResultRow(place: Place, fuel: FuelType?, nowMillis: Long, onPick: (Place) -> Unit) {
-    val priceTag: (@Composable () -> Unit)? = if (fuel != null) {
-        { FuelPriceTag(place = place, fuel = fuel, nowMillis = nowMillis) }
-    } else {
-        null
+private fun NearbyList(results: NearbyResults, category: PlaceCategory, fuel: FuelType?, onPick: (Place) -> Unit) {
+    val spacing = XRadarTheme.spacing
+    val now = remember(results, fuel) { System.currentTimeMillis() }
+    // A stable split of a list already sorted by distance: nothing moves inside a group.
+    val (priced, unpriced) = remember(results, fuel, now) {
+        if (fuel == null) results.open to emptyList() else results.open.partition { it.showsFuelPrice(fuel, now) }
     }
-    XRadarListRow(
-        title = place.name,
-        subtitle = place.subtitle,
-        leadingIcon = place.kind.icon(),
-        leadingTint = XRadarTheme.colors.accent,
-        onClick = { onPick(place) },
-        trailing = priceTag,
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = spacing.md,
+            end = spacing.lg,
+            top = spacing.xs,
+            bottom = spacing.xxxl,
+        ),
+    ) {
+        items(items = priced, key = { it.id }) { place ->
+            NearbyRow(place, category, fuel, now, closed = false, onPick = onPick)
+        }
+        if (unpriced.isNotEmpty()) {
+            if (priced.isNotEmpty()) item(key = "fuel-no-recent-price") { SectionLabel("Sans prix récent") }
+            items(items = unpriced, key = { it.id }) { place ->
+                NearbyRow(place, category, fuel, now, closed = false, onPick = onPick)
+            }
+        }
+        if (results.closed.isNotEmpty()) {
+            item(key = "closed-now") { SectionLabel("Fermés en ce moment") }
+            items(items = results.closed, key = { it.id }) { place ->
+                NearbyRow(place, category, fuel, now, closed = true, onPick = onPick)
+            }
+        }
+        item(key = "nearby-sources") {
+            XRadarText(
+                if (fuel != null) {
+                    "Prix officiels : prix-carburants.gouv.fr. Seuls les prix mis à jour depuis moins de 48 h sont affichés. " +
+                        "Lieux et horaires : © contributeurs OpenStreetMap."
+                } else {
+                    "Lieux et horaires : © contributeurs OpenStreetMap."
+                },
+                style = XRadarTheme.typography.footnote,
+                color = XRadarTheme.colors.textTertiary,
+                modifier = Modifier.padding(start = spacing.sm, top = spacing.md),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    XRadarText(
+        text,
+        style = XRadarTheme.typography.caption,
+        color = XRadarTheme.colors.textTertiary,
+        modifier = Modifier.padding(start = XRadarTheme.spacing.sm, top = XRadarTheme.spacing.lg, bottom = XRadarTheme.spacing.xs),
     )
-    XRadarDivider(Modifier.padding(start = 58.dp))
+}
+
+/**
+ * One nearby place: its category square, its name, how far and where, whether it is open
+ * (with today's hours or when it opens), and what matters for its kind — power and connectors,
+ * fee and size, brand, stars. The official price sits on the right for fuel.
+ */
+@Composable
+private fun NearbyRow(
+    place: Place,
+    category: PlaceCategory,
+    fuel: FuelType?,
+    nowMillis: Long,
+    closed: Boolean,
+    onPick: (Place) -> Unit,
+) {
+    val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val background by animateColorAsState(
+        if (pressed) colors.surfaceHigh.copy(alpha = 0.5f) else Color.Transparent,
+        label = "nearbyRowBackground",
+    )
+    val status = remember(place, nowMillis) { NearbyLabels.status(place.nearby?.hours, nowMillis) }
+    val details = remember(place) { NearbyLabels.details(place) }
+    val where = remember(place) {
+        listOfNotNull(place.distanceMeters?.let(NearbyLabels::distance), place.subtitle.ifBlank { null }).joinToString(" · ")
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { alpha = if (closed) 0.6f else 1f }
+            .clip(XRadarTheme.shapes.md)
+            .background(background)
+            .clickable(interactionSource = interaction, indication = null) { onPick(place) }
+            .padding(horizontal = spacing.sm, vertical = spacing.md),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(spacing.md),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(XRadarTheme.shapes.md)
+                .background(categoryColor(category)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(categoryIcon(category)),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            XRadarText(
+                place.name,
+                style = XRadarTheme.typography.bodyStrong,
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (where.isNotEmpty()) {
+                XRadarText(
+                    where,
+                    style = XRadarTheme.typography.footnote,
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (status != null) StatusLine(status)
+            if (details.isNotEmpty()) {
+                XRadarText(
+                    details.joinToString(" · "),
+                    style = XRadarTheme.typography.footnote,
+                    color = colors.textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (fuel != null) FuelPriceTag(place = place, fuel = fuel, nowMillis = nowMillis)
+    }
+    XRadarDivider(Modifier.padding(start = 40.dp + spacing.md + spacing.sm))
+}
+
+/** "● Ouvert  07:00–21:00", "● Fermé  ouvre demain à 07:00" — the dot and word in the state's colour. */
+@Composable
+private fun StatusLine(status: NearbyLabels.Status) {
+    val colors = XRadarTheme.colors
+    val tint = when (status.tone) {
+        NearbyLabels.Tone.Positive -> colors.success
+        NearbyLabels.Tone.Warning -> colors.warning
+        NearbyLabels.Tone.Negative -> colors.danger
+        NearbyLabels.Tone.Neutral -> colors.textSecondary
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(tint))
+        XRadarText(
+            status.text,
+            style = XRadarTheme.typography.footnote.copy(fontWeight = FontWeight.SemiBold),
+            color = tint,
+            maxLines = 1,
+        )
+        status.detail?.let {
+            XRadarText(
+                it,
+                style = XRadarTheme.typography.footnote,
+                color = colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 /** Which fuel's price the stations show; the choice is remembered. */

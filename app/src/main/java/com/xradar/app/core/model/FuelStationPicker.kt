@@ -5,8 +5,8 @@ fun Place.showsFuelPrice(fuel: FuelType, nowMillis: Long): Boolean =
     this.fuel?.prices?.any { it.type == fuel && !it.outOfStock && it.isFresh(nowMillis) } == true
 
 /**
- * Which stations the "Carburant" search lists, out of the pool the backend sends (the
- * nearest stations of one Overpass answer, up to 60). Pure Kotlin.
+ * Which stations the "Carburant" search lists, out of the pool the backend sends (its 60
+ * nearest stations; [NearbyPicker] passes only those not closed right now). Pure Kotlin.
  *
  * In a city — the [LIMIT] nearest stations all within [DENSE_REACH_M] — the nearest
  * stations that show a price for the chosen fuel come first, as long as they stay within

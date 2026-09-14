@@ -15,4 +15,6 @@ data class Place(
     val fuel: StationFuel? = null,
     /** Distance from the search point, for places found by the nearby search; else null. */
     val distanceMeters: Int? = null,
+    /** Hours, charger, car park… for places found by the nearby search; else null. */
+    val nearby: NearbyInfo? = null,
 )
