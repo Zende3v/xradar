@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -676,8 +677,13 @@ private fun NearbyList(results: NearbyResults, category: PlaceCategory, fuel: Fu
     val (priced, unpriced) = remember(results, fuel, now) {
         if (fuel == null) results.open to emptyList() else results.open.partition { it.showsFuelPrice(fuel, now) }
     }
+    // Another fuel or category is another list: start it from the top. (A lazy list otherwise
+    // keeps the first visible station in view, wherever it moved to.)
+    val listState = rememberLazyListState()
+    LaunchedEffect(category, fuel) { listState.scrollToItem(0) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(
             start = spacing.md,
             end = spacing.lg,
