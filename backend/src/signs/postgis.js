@@ -236,6 +236,7 @@ export async function near(lat, lon, radiusM, limit) {
 
 /** When the published signalisation was built, from which OSM extract. */
 export async function meta() {
-  const { rows } = await db.query('SELECT built_at, osm_timestamp, roads, signs FROM signs.meta');
+  // Every column: builds since the nearby services also count their places.
+  const { rows } = await db.query('SELECT * FROM signs.meta');
   return rows[0] ?? null;
 }

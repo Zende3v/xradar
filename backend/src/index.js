@@ -7,6 +7,9 @@ import { radarStore } from './radars/store.js';
 import { reportStore } from './reports/store.js';
 import { speedLimitStore } from './speedlimits/store.js';
 
+// Opening hours are read on the French clock, whatever the host's timezone.
+process.env.TZ = 'Europe/Paris';
+
 // Load the radar dataset (and schedule refreshes), then start the HTTP server.
 radarStore.start();
 // Official fuel prices (refreshed every 10 min) — they only enrich the fuel search.

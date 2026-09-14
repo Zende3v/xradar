@@ -31,9 +31,6 @@ export const config = {
   orsApiKey: process.env.ORS_API_KEY || null,
   orsUrl: process.env.ORS_URL || 'https://api.openrouteservice.org',
 
-  // OpenStreetMap live queries (Overpass), for the nearby places search.
-  overpassUrl: process.env.OVERPASS_URL || 'https://overpass-api.de/api/interpreter',
-
   // PostgreSQL / PostGIS: the signalisation (schema "signs", rebuilt weekly by
   // signalisation/rebuild.sh) and the drivers' reports and speed-limit changes (schema "crowd").
   pgHost: process.env.PGHOST || '/var/run/postgresql',
@@ -62,13 +59,14 @@ export const config = {
   denseRadiusM: 40000,
   denseCountThreshold: 300,
 
-  // Nearby places (stations, bornes, parkings…) via Overpass. No fixed perimeter:
-  // the search widens through these rings until it has enough results.
-  placeRadiiM: [5000, 20000, 60000, 200000],
+  // Nearby places (stations, bornes, parkings…) from PostGIS (schema signs, table place,
+  // rebuilt weekly with the signalisation). No perimeter: the nearest ones, however far.
+  // signs_next.place lets a staging instance try a build before it is published.
+  placeTable: process.env.PLACE_TABLE === 'signs_next.place' ? 'signs_next.place' : 'signs.place',
   placeLimit: 20,
-  placeTimeoutS: 25,
-  placeCacheTtlMs: 10 * MIN,
-  // Overpass rejects anonymous clients (406): identify ourselves.
+  // Places sent to a client asking for a pool (?pool=1), which ranks them itself.
+  placePoolLimit: 60,
+  // Identifies us to the open-data servers we download from.
   placeUserAgent: process.env.PLACE_USER_AGENT || 'x_radar/1.0 (+https://debian.taila9954f.ts.net)',
 
   // Official fuel prices — prix-carburants.gouv.fr "flux instantané" (Licence Ouverte).
@@ -83,10 +81,6 @@ export const config = {
   fuelMatchMaxDistanceM: 200,
   // …unless a second one is nearly as close, in which case there is no match.
   fuelMatchAmbiguityM: 30,
-  // Fuel stations kept from the Overpass answer the search already made, for a client
-  // asking for a pool (?pool=1) to pick the nearest ones that show a price. No extra
-  // request: the ring that found 20 stations usually holds many more in a city.
-  fuelPoolLimit: 60,
 
   // Crowdsourced user reports (radar mobile, zone de contrôle, accident…), in PostGIS.
   /**

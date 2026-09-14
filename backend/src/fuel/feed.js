@@ -50,7 +50,8 @@ export function unzipSingle(zip) {
  * `<pdv id latitude longitude …>` blocks with `<prix nom id maj valeur/>` and
  * `<rupture id debut fin type/>`. Coordinates are degrees × 100 000, `maj` is French wall
  * clock time, prices are euros (older files wrote thousandths — divided back).
- * Only what the app needs is kept: id, position, prices and their update time.
+ * Only what the app needs is kept: id, position, prices and their update time, and the
+ * declared opening hours.
  */
 export function parseStations(xml, now = Date.now()) {
   const stations = [];
@@ -82,9 +83,56 @@ export function parseStations(xml, now = Date.now()) {
       });
     }
     prices.sort((a, b) => FUEL_ORDER[a.fuel] - FUEL_ORDER[b.fuel]);
-    stations.push({ id, lat, lon, prices });
+    stations.push({ id, lat, lon, prices, hours: parseHours(block) });
   }
   return stations;
+}
+
+const DAY_CODES = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']; // <jour id="1"> is Monday
+
+/**
+ * The declared hours as an OpenStreetMap opening_hours value, or null when they say nothing:
+ * `automate-24-24="1"` (card pumps around the clock) is "24/7"; otherwise one rule per day,
+ * "off" when `ferme="1"`, "unknown" when open without slots. A week without a single real slot (many stations send every day
+ * closed from 01.00 to 01.00, or no slot at all) is no information.
+ */
+export function parseHours(block) {
+  const horaires = /<horaires\b([^>]*)>([\s\S]*?)<\/horaires>/.exec(block);
+  if (!horaires) return null;
+  if (attr(horaires[1], 'automate-24-24') === '1') return '24/7';
+  const rules = [];
+  let slots = 0;
+  for (const day of horaires[2].matchAll(/<jour\b([^>]*?)(?:\/>|>([\s\S]*?)<\/jour>)/g)) {
+    const code = DAY_CODES[Number(attr(day[1], 'id')) - 1];
+    if (!code) continue;
+    if (attr(day[1], 'ferme') === '1') {
+      rules.push(`${code} off`);
+      continue;
+    }
+    const ranges = [];
+    for (const slot of (day[2] || '').match(/<horaire\b[^>]*>/g) || []) {
+      const from = clock(attr(slot, 'ouverture'));
+      let to = clock(attr(slot, 'fermeture'));
+      if (!from || !to || from === to) continue;
+      if (to === '00:00') to = '24:00';
+      ranges.push(`${from}-${to}`);
+    }
+    if (ranges.length > 0) {
+      rules.push(`${code} ${ranges.join(',')}`);
+      slots += ranges.length;
+    } else {
+      // Open that day, but at hours nobody declared.
+      rules.push(`${code} unknown`);
+    }
+  }
+  return slots > 0 ? rules.join('; ') : null;
+}
+
+/** "06.00" / "6.30" -> "06:00" / "06:30"; null if unreadable. */
+function clock(value) {
+  const m = /^(\d{1,2})[.:h](\d{2})$/.exec(String(value || '').trim());
+  if (!m || +m[1] > 24 || +m[2] > 59) return null;
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
 }
 
 function attr(tag, name) {
