@@ -63,6 +63,17 @@ object MediaRepository {
     /** The last of the three apps seen with a session, in memory only. */
     private var lastActiveApp: MusicApp? = null
 
+    /** The last player of any kind seen with a session, in memory only. */
+    private var lastActivePackage: String? = null
+
+    /**
+     * The last track shown and its player, in memory only. Many players (local files ones
+     * especially) hide their session or empty it on pause: the banner keeps this track,
+     * paused, instead of going blank until play.
+     */
+    internal var lastTrack: MediaPlaybackState.Active? = null
+    internal var lastTrackPackage: String? = null
+
     /** Opens a music app if a play with no session started nothing. */
     private var resumeFallback: Job? = null
 
@@ -133,6 +144,12 @@ object MediaRepository {
             delay(RESUME_FALLBACK_MS)
             val audio = context.getSystemService(AudioManager::class.java)
             if (controller != null || audio?.isMusicActive == true) return@launch
+            // The player of the track still on the banner (a local files one too) comes first.
+            val lastPlayer = lastActivePackage?.let { context.packageManager.getLaunchIntentForPackage(it) }
+            if (lastPlayer != null) {
+                runCatching { context.startActivity(lastPlayer.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                return@launch
+            }
             val installed = installedApps(context)
             val app = lastActiveApp?.takeIf { it in installed } ?: installed.firstOrNull()
             app?.let(::launch)
@@ -159,7 +176,8 @@ object MediaRepository {
 
     private fun initialState(): MediaPlaybackState {
         val context = appContext ?: return MediaPlaybackState.PermissionMissing
-        return if (hasAccess(context)) MediaPlaybackState.Idle(installedApps(context)) else MediaPlaybackState.PermissionMissing
+        if (!hasAccess(context)) return MediaPlaybackState.PermissionMissing
+        return lastTrack?.copy(isPlaying = false) ?: MediaPlaybackState.Idle(installedApps(context))
     }
 
     private fun sessions(): Flow<MediaPlaybackState> = callbackFlow {
@@ -177,6 +195,7 @@ object MediaRepository {
                 onController = { shown ->
                     controller = shown
                     if (shown != null) {
+                        lastActivePackage = shown.packageName
                         lastActiveApp = MusicApp.of(shown.packageName) ?: lastActiveApp
                         resumeFallback?.cancel()
                     }
@@ -295,20 +314,23 @@ private class SessionWatcher(
         }
     }
 
-    /** The session that plays, else the most recently active one, as a banner state. */
+    /**
+     * The session that plays, else the most recently active one with a track, as a banner
+     * state. When none has a track, the last track shown stays on the banner, paused.
+     */
     private fun publish() {
         if (!MediaRepository.hasAccess(context)) {
             revoked()
             return
         }
         val controllers = watched.values.map { it.first }
+        val lastUpdate = { c: MediaController -> c.playbackState?.lastPositionUpdateTime ?: Long.MIN_VALUE }
         val chosen = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
-            ?: controllers.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: Long.MIN_VALUE }
+            ?: controllers.filter { titleOf(it.metadata) != null }.maxByOrNull(lastUpdate)
+            ?: controllers.maxByOrNull(lastUpdate)
         val metadata = chosen?.metadata
         val description = metadata?.description
-        // Local players often fill only the display fields, and name the track after its file.
-        val title = (metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).nonBlank()
-            ?: description?.title?.toString().nonBlank())?.let(::withoutAudioExtension)
+        val title = titleOf(metadata)
         val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).nonBlank()
             ?: description?.subtitle?.toString().nonBlank()
         val playing = chosen?.playbackState?.state == PlaybackState.STATE_PLAYING
@@ -317,8 +339,11 @@ private class SessionWatcher(
             artJob?.cancel()
             artKey = null
             art = null
-            onController(null)
-            publishState(MediaPlaybackState.Idle(installed))
+            val remembered = MediaRepository.lastTrack
+            // The controls still reach that track's player while its session is there, even
+            // empty; without it, play goes out as a media key, which wakes the last player.
+            onController(chosen?.takeIf { remembered != null && it.packageName == MediaRepository.lastTrackPackage })
+            publishState(remembered?.copy(isPlaying = false) ?: MediaPlaybackState.Idle(installed))
             return
         }
         onController(chosen)
@@ -346,7 +371,12 @@ private class SessionWatcher(
                 }
             }
         }
-        publishState(MediaPlaybackState.Active(labelOf(chosen.packageName), title, artist, art, playing))
+        val active = MediaPlaybackState.Active(labelOf(chosen.packageName), title, artist, art, playing)
+        if (title != null) {
+            MediaRepository.lastTrack = active
+            MediaRepository.lastTrackPackage = chosen.packageName
+        }
+        publishState(active)
     }
 
     /** Player names already looked up, null included (an app Android keeps hidden). */
@@ -371,6 +401,11 @@ private class SessionWatcher(
 }
 
 private fun String?.nonBlank(): String? = this?.takeIf { it.isNotBlank() }
+
+/** The track's title. Local players often fill only the display fields, and name the track after its file. */
+private fun titleOf(metadata: MediaMetadata?): String? =
+    (metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).nonBlank()
+        ?: metadata?.description?.title?.toString().nonBlank())?.let(::withoutAudioExtension)
 
 /** A track named after its file ("Artiste - Titre.mp3") is shown without the extension. */
 private fun withoutAudioExtension(title: String): String = AUDIO_EXTENSION.replace(title, "").ifBlank { title }
