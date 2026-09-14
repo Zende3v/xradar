@@ -2,13 +2,16 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
 import { accountStore } from '../accounts/store.js';
+import { haversine } from '../radars/geo.js';
+import { reportStore } from '../reports/store.js';
 
 export const routeRouter = Router();
 
 /**
- * GET /api/route?from=lat,lon&to=lat,lon[&avoid=tolls,highways]
+ * GET /api/route?from=lat,lon&to=lat,lon[&avoid=tolls,highways,traffic]
  * Returns a normalized car route. Uses OpenRouteService when ORS_API_KEY is set
  * (better quality + avoid options), otherwise falls back to the OSRM demo.
+ * "traffic" keeps the route away from the traffic jams drivers reported (ORS only).
  */
 routeRouter.get('/', async (req, res) => {
   // An expired trial (or lapsed subscription) keeps the map, not the navigation.
@@ -54,12 +57,16 @@ async function routeViaORS(from, to, avoid) {
   };
   const avoidFeatures = avoid.map((a) => ORS_AVOID[a]).filter(Boolean);
   if (avoidFeatures.length) body.options = { avoid_features: avoidFeatures };
+  const jams = avoid.includes('traffic')
+    ? await trafficPolygons(from, to).catch((e) => {
+      console.warn('[route] traffic jams unavailable —', String(e.message || e));
+      return null;
+    })
+    : null;
 
-  const r = await fetch(`${config.orsUrl.replace(/\/$/, '')}/v2/directions/driving-car/geojson`, {
-    method: 'POST',
-    headers: { Authorization: config.orsApiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let r = await postORS(jams ? { ...body, options: { ...body.options, avoid_polygons: jams } } : body);
+  // A route squeezed out by the reported jams can be impossible: the trip matters more.
+  if (!r.ok && jams) r = await postORS(body);
   if (!r.ok) {
     const detail = await r.text().catch(() => '');
     return { error: `ORS ${r.status}`, status: 502, detail: detail.slice(0, 200) };
@@ -75,6 +82,54 @@ async function routeViaORS(from, to, avoid) {
     coordinates,
     steps: normalizeOrsSteps(feature.properties.segments || [], coordinates),
   };
+}
+
+function postORS(body) {
+  return fetch(`${config.orsUrl.replace(/\/$/, '')}/v2/directions/driving-car/geojson`, {
+    method: 'POST',
+    headers: { Authorization: config.orsApiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+// Traffic jams the route goes around: a square around each one reported live near the trip.
+/** Half the side of the square avoided around a jam. */
+const JAM_HALF_SIDE_M = 250;
+/** A jam this close to the start or the destination stays crossable: the trip must be possible. */
+const JAM_KEEP_CLEAR_M = 500;
+/** Jams farther than this outside the box of the trip do not matter. */
+const JAM_BOX_MARGIN_M = 10000;
+/** Enough for a long trip, far under ORS's area limit for avoided polygons (25 km²). */
+const JAM_MAX = 100;
+
+/** The jams to avoid between [from] and [to], as a GeoJSON MultiPolygon; null when there is none. */
+async function trafficPolygons(from, to) {
+  const padLat = JAM_BOX_MARGIN_M / 111320;
+  const padLon = padLat / Math.max(Math.cos(((from.lat + to.lat) / 2) * Math.PI / 180), 0.1);
+  const jams = await reportStore.liveInBox('traffic_jam', {
+    south: Math.min(from.lat, to.lat) - padLat,
+    north: Math.max(from.lat, to.lat) + padLat,
+    west: Math.min(from.lon, to.lon) - padLon,
+    east: Math.max(from.lon, to.lon) + padLon,
+  }, JAM_MAX);
+  const squares = jams
+    .filter((jam) => haversine(jam.lat, jam.lon, from.lat, from.lon) > JAM_KEEP_CLEAR_M
+      && haversine(jam.lat, jam.lon, to.lat, to.lon) > JAM_KEEP_CLEAR_M)
+    .map((jam) => square(jam.lat, jam.lon, JAM_HALF_SIDE_M));
+  return squares.length ? { type: 'MultiPolygon', coordinates: squares } : null;
+}
+
+/** A counter-clockwise square around a point, as one GeoJSON polygon ([lon, lat]). */
+function square(lat, lon, halfM) {
+  const dLat = halfM / 111320;
+  const dLon = halfM / (111320 * Math.max(Math.cos(lat * Math.PI / 180), 0.1));
+  return [[
+    [lon - dLon, lat - dLat],
+    [lon + dLon, lat - dLat],
+    [lon + dLon, lat + dLat],
+    [lon - dLon, lat + dLat],
+    [lon - dLon, lat - dLat],
+  ]];
 }
 
 /** ORS instruction type codes → OSRM-style {type, modifier} the app already parses. */

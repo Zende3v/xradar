@@ -181,6 +181,20 @@ class ReportStore {
     return zones.sort((a, b) => a.distanceM - b.distanceM);
   }
 
+  /** Live reports of [type] inside a lon/lat box, newest first, at most [limit]: their positions. */
+  async liveInBox(type, { south, west, north, east }, limit) {
+    const { rows } = await db.query(
+      `SELECT ST_Y(geom) AS lat, ST_X(geom) AS lon
+       FROM crowd.report
+       WHERE status = 'live' AND expires_at > now() AND type = $1
+         AND geom && ST_MakeEnvelope($2, $3, $4, $5, 4326)
+       ORDER BY created_at DESC
+       LIMIT $6`,
+      [type, west, south, east, north, limit],
+    );
+    return rows;
+  }
+
   get meta() {
     return { count: this.live };
   }

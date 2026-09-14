@@ -508,7 +508,7 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 | POST | `/api/accounts/avatar` | Bearer, base64 ≤ 4 Mo |
 | GET/POST/PATCH/DELETE | `/api/admin/accounts[/:id]` | ADMIN_TOKEN |
 | GET | `/api/radars/near` `/bbox` · POST `/api/radars/route` | radars fixes |
-| GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways` | ORS ou OSRM |
+| GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways,traffic` | ORS ou OSRM ; `traffic` (ORS) contourne les bouchons signalés en direct (carré de 500 m autour de chacun, 100 max, sauf à moins de 500 m du départ ou de l'arrivée ; recalcul sans eux si l'itinéraire devient impossible) |
 | GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm[&limit][&pool=1]` | plus proches d'abord (20, `pool=1` : 60) ; `hours` (état, créneaux du jour, prochain changement), `charging`, `parking`, `stars`, `brand` ; station : prix + horaires officiels |
 | POST/GET | `/api/live/position` · `/api/live/near` | positions live |
 | GET | `/api/signs/limit?lat&lon&bearing&way` | `{v, way}` |
