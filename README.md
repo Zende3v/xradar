@@ -172,6 +172,8 @@ systemctl daemon-reload && systemctl restart xradar-backend
 | `ACCOUNTS_FILE` / `AVATARS_DIR` | comptes / photos | `./data/accounts.json` / `./data/avatars` |
 | `GUEST_TRIAL_MS` | essai compte email | 7 j |
 | `GUEST_LIFETIME_MS` | durée de vie compte invité | 7 j |
+| `DEVICE_TRIALS_FILE` | fin du premier essai par téléphone | `./data/device-trials.json` |
+| `GUEST_REPORTS_PER_DAY` / `GUEST_TRIPS_PER_DAY` | limites invité par jour | 5 / 7 |
 | `REFERRAL_SUBSCRIPTION_MONTHS` | mois offerts par parrainage | 6 |
 | `ACCOUNT_TRIP_HISTORY_MAX` | trajets gardés par compte | 200 |
 | `RADAR_DATASET_API_URL` / `REFRESH_INTERVAL_MS` | dataset radars / refresh | data.gouv / 24 h |
@@ -455,6 +457,10 @@ Lien : `http://45.80.23.8:8087/` (HTTP clair, sans auth ; seuls des `.apk` dans 
 
 Purge auto (démarrage + chaque jour) : tout `guest` sans mot de passe + invités sans email > 7 jours. Copie `data/accounts.backup-<date>.json` avant la première suppression du jour. Restreint = pas de navigation, alertes, signalements (`403 subscription required`).
 
+Essai : **un par téléphone**. La fin du premier essai d'un invité inscrit sur un téléphone est gardée (`data/device-trials.json`, id d'appareil haché) : un invité purgé, supprimé ou recréé sur ce téléphone finit son essai à la même date.
+
+Limites `guest` (essai compris, jour à l'heure de Paris) : **5 signalements** (`429 daily report limit`) et **7 trajets** (`429 daily trip limit` ; nouveau trajet = destination à plus de 300 m de la précédente, recalcul gratuit). `client` / `admin` : aucune limite.
+
 ### CLI (sur le VPS, jeton lu dans le service)
 
 ```bash
@@ -503,18 +509,18 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 |---|---|---|
 | GET | `/health` | état complet (§7) |
 | POST | `/api/accounts/auth` `/guest` `/register` `/login` `/logout` `/verify` `/resend-verify` `/forgot` `/reset` | login : `identifier` (pseudo ou email) + `deviceId` |
-| GET/PATCH/DELETE | `/api/accounts/me` · GET `/api/accounts/username-available` | Bearer ; DELETE : suppression définitive par le titulaire (compte, stats, trajets, sessions, position live, avatar ; signalements et propositions de limitation gardés, anonymisés) |
+| GET/PATCH/DELETE | `/api/accounts/me` · GET `/api/accounts/username-available` | Bearer ; GET : `limits` `{reportsPerDay, reportsToday, tripsPerDay, tripsToday}` (null client/admin) ; DELETE : suppression définitive par le titulaire (compte, stats, trajets, sessions, position live, avatar ; signalements et propositions de limitation gardés, anonymisés) |
 | GET/POST | `/api/accounts/me/stats` `/me/trips` `/me/drive` · `/api/accounts/referrals` | Bearer (referrals : admin) |
 | POST | `/api/accounts/avatar` | Bearer, base64 ≤ 4 Mo |
 | GET/POST/PATCH/DELETE | `/api/admin/accounts[/:id]` | ADMIN_TOKEN |
 | GET | `/api/radars/near` `/bbox` · POST `/api/radars/route` | radars fixes |
-| GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways,traffic` | ORS ou OSRM ; `traffic` (ORS) contourne les bouchons signalés en direct (carré de 500 m autour de chacun, 100 max, sauf à moins de 500 m du départ ou de l'arrivée ; recalcul sans eux si l'itinéraire devient impossible) |
+| GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways,traffic` | compte obligatoire (401), restreint 403, limite du jour 429 ; ORS ou OSRM ; `traffic` (ORS) contourne les bouchons signalés en direct (carré de 500 m autour de chacun, 100 max, sauf à moins de 500 m du départ ou de l'arrivée ; recalcul sans eux si l'itinéraire devient impossible) |
 | GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm[&limit][&pool=1]` | plus proches d'abord (20, `pool=1` : 60) ; `hours` (état, créneaux du jour, prochain changement), `charging`, `parking`, `stars`, `brand` ; station : prix + horaires officiels |
 | POST/GET | `/api/live/position` · `/api/live/near` | positions live |
 | GET | `/api/signs/limit?lat&lon&bearing&way` | `{v, way}` |
 | POST | `/api/signs/route {coordinates}` | panneaux + changements de limite du trajet |
 | GET | `/api/signs/near` | panneaux autour |
-| POST | `/api/reports` | 201 nouveau / 200 `merged: true` |
+| POST | `/api/reports` | compte obligatoire (401), restreint 403, limite du jour 429 ; 201 nouveau / 200 `merged: true` |
 | GET | `/api/reports/near` | + zones voitures radar |
 | POST | `/api/reports/:id/confirm` · `/deny` | compte obligatoire |
 | DELETE | `/api/reports/:id` | admin |

@@ -16,13 +16,20 @@ export const routeRouter = Router();
 routeRouter.get('/', async (req, res) => {
   // An expired trial (or lapsed subscription) keeps the map, not the navigation.
   const account = authAccount(req);
-  if (account && !accountStore.accessFor(account).canNavigate) {
+  if (!account) return res.status(401).json({ error: 'account required' });
+  if (account.banned) return res.status(403).json({ error: 'banned' });
+  if (!accountStore.accessFor(account).canNavigate) {
     return res.status(403).json({ error: 'subscription required' });
   }
   const from = parseCoord(req.query.from);
   const to = parseCoord(req.query.to);
   if (!from || !to) {
     return res.status(400).json({ error: 'from and to are required as "lat,lon"' });
+  }
+  // A guest starts a limited number of trips a day; recalculations to the same place are free.
+  const trip = accountStore.tripCheck(account, to);
+  if (!trip.allowed) {
+    return res.status(429).json({ error: 'daily trip limit', limit: config.guestTripsPerDay });
   }
   const avoid = String(req.query.avoid || '')
     .split(',')
@@ -37,6 +44,7 @@ routeRouter.get('/', async (req, res) => {
       console.warn(`[route] ${route.error}${route.detail ? ' — ' + route.detail : ''}`);
       return res.status(route.status || 502).json({ error: route.error });
     }
+    if (trip.isNew) accountStore.countTrip(account, to);
     res.json(route);
   } catch (e) {
     console.warn('[route] unavailable —', String(e.message || e));

@@ -26,6 +26,8 @@ function selfView(a) {
     accessEndsAt: access.endsAt,
     referredByCode: a.referredByCode ?? null,
     trust: trustOf(stats),
+    // A guest's daily limits and today's use; null for clients and admins.
+    limits: accountStore.limitsFor(a),
   };
 }
 

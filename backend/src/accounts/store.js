@@ -1,7 +1,8 @@
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
+import { haversine } from '../radars/geo.js';
 
 export const ROLES = ['guest', 'client', 'admin'];
 
@@ -55,6 +56,16 @@ function trialEndsAt(createdAt) {
   const safeStart = Number.isFinite(start) ? start : Date.now();
   return new Date(safeStart + config.guestTrialMs).toISOString();
 }
+
+/** The day of [now] in France, "YYYY-MM-DD": daily limits start again at midnight, Paris time. */
+function parisDay(now) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(now);
+}
+
+/** A phone is remembered by a hash of its device id, never by the id itself. */
+function deviceKey(deviceId) {
+  return createHash('sha256').update(String(deviceId)).digest('hex');
+}
 /**
  * Account store. Device-based identity: each app install authenticates with a
  * deviceId and gets a `guest` account by default. Roles (client/admin) are
@@ -67,6 +78,7 @@ class AccountStore {
     this.byUsername = new Map(); // lowercase -> account
     this.byEmail = new Map(); // lowercase -> account
     this.sessions = new Map(); // token -> { accountId, expiresAt }
+    this.deviceTrials = new Map(); // hashed deviceId -> end of the first trial on that phone (ISO)
     this.saveTimer = null;
   }
 
@@ -81,6 +93,12 @@ class AccountStore {
   }
 
   async load() {
+    try {
+      const trials = JSON.parse(await readFile(config.deviceTrialsFile, 'utf8'));
+      for (const [key, endsAt] of Object.entries(trials ?? {})) this.deviceTrials.set(key, endsAt);
+    } catch (e) {
+      if (e.code !== 'ENOENT') console.error('[accounts] device trials load failed:', e.message);
+    }
     try {
       const raw = await readFile(config.accountsFile, 'utf8');
       const list = JSON.parse(raw);
@@ -110,6 +128,22 @@ class AccountStore {
     if (account.deviceId) this.byDevice.set(account.deviceId, account);
     if (account.usernameLower) this.byUsername.set(account.usernameLower, account);
     if (account.emailLower) this.byEmail.set(account.emailLower, account);
+    this.noteDeviceTrial(account);
+  }
+
+  /**
+   * A phone's free week is used once: the end of the first trial of a guest who finished
+   * onboarding on it is kept, even once that account is purged or deleted, and a later guest
+   * on the same phone ends its trial then too (see accessFor).
+   */
+  noteDeviceTrial(account) {
+    if (account.role !== 'guest' || !account.deviceId || !account.passwordHash) return;
+    const endsAt = account.trialEndsAt ?? trialEndsAt(account.createdAt);
+    const key = deviceKey(account.deviceId);
+    const known = this.deviceTrials.get(key);
+    if (known && Date.parse(known) <= Date.parse(endsAt)) return;
+    this.deviceTrials.set(key, endsAt);
+    this.scheduleSave();
   }
 
   unindex(account) {
@@ -131,6 +165,8 @@ class AccountStore {
   async save() {
     await mkdir(dirname(config.accountsFile), { recursive: true });
     await writeFile(config.accountsFile, JSON.stringify([...this.byId.values()], null, 2), 'utf8');
+    await mkdir(dirname(config.deviceTrialsFile), { recursive: true });
+    await writeFile(config.deviceTrialsFile, JSON.stringify(Object.fromEntries(this.deviceTrials)), 'utf8');
   }
 
   /** Auth by device: return the existing account (touch lastSeen) or create a guest. */
@@ -174,9 +210,67 @@ class AccountStore {
       if (!endsAt || Date.parse(endsAt) > Date.now()) return { status: 'active', canNavigate: true, endsAt };
       return { status: 'restricted', canNavigate: false, endsAt };
     }
-    const endsAt = account.trialEndsAt ?? trialEndsAt(account.createdAt);
+    // The trial ends with the first one this phone had, when that one ended earlier.
+    const own = account.trialEndsAt ?? trialEndsAt(account.createdAt);
+    const phone = account.deviceId ? this.deviceTrials.get(deviceKey(account.deviceId)) : null;
+    const endsAt = phone && Date.parse(phone) < Date.parse(own) ? phone : own;
     if (Date.parse(endsAt) > Date.now()) return { status: 'trial', canNavigate: true, endsAt };
     return { status: 'restricted', canNavigate: false, endsAt };
+  }
+
+  // ---- Daily limits (guests) ------------------------------------------------
+
+  /** A guest's counters for today (Paris day): reports posted, trips started, last trip's end. */
+  usageOf(account, now = Date.now()) {
+    const day = parisDay(now);
+    if (account.usage?.day !== day) account.usage = { day, reports: 0, trips: 0, lastTo: null };
+    return account.usage;
+  }
+
+  /** What a guest has used of today's limits; null for clients and admins, who have none. */
+  limitsFor(account) {
+    if (account.role !== 'guest') return null;
+    const usage = this.usageOf(account);
+    return {
+      day: usage.day, // counts are for this Paris day; a cached copy from another day is zero
+      reportsPerDay: config.guestReportsPerDay,
+      reportsToday: usage.reports,
+      tripsPerDay: config.guestTripsPerDay,
+      tripsToday: usage.trips,
+    };
+  }
+
+  canReport(account) {
+    return account.role !== 'guest' || this.usageOf(account).reports < config.guestReportsPerDay;
+  }
+
+  countReport(account) {
+    if (account.role !== 'guest') return;
+    this.usageOf(account).reports += 1;
+    this.scheduleSave();
+  }
+
+  /**
+   * A route towards [to] ({ lat, lon }) is a new trip, unless it heads where the day's last
+   * trip went (a recalculation, an avoid option changed). Not allowed once a guest started
+   * all of today's trips.
+   */
+  tripCheck(account, to) {
+    if (account.role !== 'guest') return { allowed: true, isNew: false };
+    const usage = this.usageOf(account);
+    const last = usage.lastTo;
+    if (last && haversine(last.lat, last.lon, to.lat, to.lon) <= config.tripSameDestinationM) {
+      return { allowed: true, isNew: false };
+    }
+    return { allowed: usage.trips < config.guestTripsPerDay, isNew: true };
+  }
+
+  countTrip(account, to) {
+    if (account.role !== 'guest') return;
+    const usage = this.usageOf(account);
+    usage.trips += 1;
+    usage.lastTo = { lat: to.lat, lon: to.lon };
+    this.scheduleSave();
   }
 
   statsFor(id) {
@@ -556,6 +650,7 @@ class AccountStore {
     if (account.deviceId) this.byDevice.delete(account.deviceId);
     account.deviceId = id;
     this.byDevice.set(id, account);
+    this.noteDeviceTrial(account);
   }
 
   setProfile(id, { username, avatarUrl, displayName }) {

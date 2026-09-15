@@ -239,6 +239,14 @@ export const config = {
   // A Guest gets the complete navigation experience for one week. Afterwards
   // the account stays signed in and can consult the map, but cannot start a trip.
   guestTrialMs: Number(process.env.GUEST_TRIAL_MS) || 7 * D,
+  // The free week is one per phone: the end of the first trial on a phone is kept (by a
+  // hash of its device id), so a guest purged or deleted does not start a new week there.
+  deviceTrialsFile: process.env.DEVICE_TRIALS_FILE || './data/device-trials.json',
+  // Guests are limited per day (Paris time), trial included; clients and admins are not.
+  guestReportsPerDay: Number(process.env.GUEST_REPORTS_PER_DAY) || 5,
+  guestTripsPerDay: Number(process.env.GUEST_TRIPS_PER_DAY) || 7,
+  // A route to within this of the day's last destination is the same trip (recalculation).
+  tripSameDestinationM: 300,
   // A referral code grants this much Client access. Payments will use the same
   // subscription end date when the payment portal is added.
   referralSubscriptionMonths: Number(process.env.REFERRAL_SUBSCRIPTION_MONTHS) || 6,

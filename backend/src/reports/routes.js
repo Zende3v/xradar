@@ -40,16 +40,20 @@ reportRouter.post('/', guarded(async (req, res) => {
   const lat = Number(req.body?.lat);
   const lon = Number(req.body?.lon);
   const account = authAccount(req); // Bearer token (preferred) or deviceId fallback
-  if (account?.banned) return res.status(403).json({ error: 'banned' });
-  if (account && !accountStore.accessFor(account).canNavigate) {
+  if (!account) return res.status(401).json({ error: 'account required' });
+  if (account.banned) return res.status(403).json({ error: 'banned' });
+  if (!accountStore.accessFor(account).canNavigate) {
     return res.status(403).json({ error: 'subscription required' });
   }
 
   const minRole = config.reportMinRole[type];
   if (!minRole) return res.status(400).json({ error: 'unknown report type' });
-  const role = account?.role ?? 'guest';
+  const role = account.role ?? 'guest';
   if ((ROLE_RANK[role] ?? 0) < (ROLE_RANK[minRole] ?? 0)) {
     return res.status(403).json({ error: `type "${type}" requires role ${minRole}` });
+  }
+  if (!accountStore.canReport(account)) {
+    return res.status(429).json({ error: 'daily report limit', limit: config.guestReportsPerDay });
   }
 
   const bearing = Number(req.body?.bearing);
@@ -57,7 +61,7 @@ reportRouter.post('/', guarded(async (req, res) => {
     type,
     lat,
     lon,
-    reporterId: account?.id ?? null,
+    reporterId: account.id,
     reporterRole: role,
     plate: req.body?.plate ? String(req.body.plate).trim() : null,
     street: req.body?.street ? String(req.body.street).trim() : null,
@@ -69,7 +73,8 @@ reportRouter.post('/', guarded(async (req, res) => {
   if (!result) {
     return res.status(400).json({ error: 'type (valid), lat and lon are required' });
   }
-  if (account) accountStore.recordReportStat(account.id, 'reportsDeclared');
+  accountStore.recordReportStat(account.id, 'reportsDeclared');
+  accountStore.countReport(account);
   // The first confirmation is what makes it a "really confirmed" report for its author.
   if (result.authorFirstConfirmed) accountStore.recordReportStat(result.authorFirstConfirmed, 'reportsConfirmed');
   res.status(result.merged ? 200 : 201).json({ report: result.report, merged: result.merged });
