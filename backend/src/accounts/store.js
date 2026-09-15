@@ -361,6 +361,16 @@ class AccountStore {
     return { removed: true, id };
   }
 
+  /** The owner deletes the account: gone with its stats and trips, and signed out everywhere. */
+  deleteAccount(id) {
+    const result = this.remove(id);
+    if (result.error) return result;
+    for (const [token, session] of this.sessions) {
+      if (session.accountId === id) this.sessions.delete(token);
+    }
+    return result;
+  }
+
   // ---- Usernames / auth -----------------------------------------------------
 
   usernameAvailable(username) {

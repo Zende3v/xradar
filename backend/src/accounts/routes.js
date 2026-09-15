@@ -1,5 +1,9 @@
+import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
 import { Router } from 'express';
 import { config } from '../config.js';
+import { transaction } from '../crowd/schema.js';
+import { liveStore } from '../live/store.js';
 import { authAccount, publicView } from './auth.js';
 import { accountStore } from './store.js';
 import { mailer } from '../mailer.js';
@@ -152,6 +156,38 @@ accountRouter.patch('/me', (req, res) => {
   if (result.error) return res.status(400).json({ error: result.error });
   res.json({ account: selfView(result.account) });
 });
+
+/**
+ * DELETE /api/accounts/me — the owner deletes the account, for good: the account with its
+ * statistics and trips, every session, the live position and the avatar. The reports and
+ * speed-limit proposals stay for the other drivers, no longer tied to anyone.
+ */
+accountRouter.delete('/me', async (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    await forgetInCrowd([account.id, account.deviceId].filter(Boolean));
+  } catch (e) {
+    console.error('[accounts] delete failed:', e.message);
+    return res.status(500).json({ error: 'could not delete account' });
+  }
+  liveStore.remove(account.id);
+  await Promise.all(['png', 'jpg', 'webp'].map((ext) => unlink(`${config.avatarsDir}/${account.id}.${ext}`).catch(() => {})));
+  accountStore.deleteAccount(account.id);
+  res.json({ deleted: true });
+});
+
+/** The crowd's data no longer points at these ids (account, device): each becomes a new anonymous id. */
+async function forgetInCrowd(ids) {
+  await transaction(async (client) => {
+    for (const id of ids) {
+      const anonymous = `deleted:${randomUUID()}`;
+      await client.query('UPDATE crowd.report SET reporter_id = NULL WHERE reporter_id = $1', [id]);
+      await client.query('UPDATE crowd.report_voice SET voter_id = $2 WHERE voter_id = $1', [id, anonymous]);
+      await client.query('UPDATE crowd.speed_limit_voice SET reporter_id = $2 WHERE reporter_id = $1', [id, anonymous]);
+    }
+  });
+}
 
 // ---- Statistics (everyone, server-side) -------------------------------------
 
