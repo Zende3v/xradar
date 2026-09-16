@@ -36,7 +36,7 @@ App Android ──HTTPS──▶ Tailscale Funnel ──▶ backend Node :8090 (
                                                    └─ OpenRouteService (si ORS_API_KEY) sinon OSRM public : itinéraires
 ```
 
-Positions live : mémoire seulement (90 s). Sessions (tokens) : mémoire seulement → un redémarrage déconnecte, l'app se reconnecte seule par son `deviceId` (compte rattaché au téléphone).
+Présence (app ouverte, en trajet ou non ; **aucune position**) : mémoire seulement (90 s), comptée dans `/health` (`live.online`, `live.inTrip`), montrée à personne. Sessions (tokens) : mémoire seulement → un redémarrage déconnecte, l'app se reconnecte seule par son `deviceId` (compte rattaché au téléphone).
 
 ### Arborescence utile
 
@@ -509,14 +509,14 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 |---|---|---|
 | GET | `/health` | état complet (§7) |
 | POST | `/api/accounts/auth` `/guest` `/register` `/login` `/logout` `/verify` `/resend-verify` `/forgot` `/reset` | login : `identifier` (pseudo ou email) + `deviceId` |
-| GET/PATCH/DELETE | `/api/accounts/me` · GET `/api/accounts/username-available` | Bearer ; GET : `limits` `{reportsPerDay, reportsToday, tripsPerDay, tripsToday}` (null client/admin) ; DELETE : suppression définitive par le titulaire (compte, stats, trajets, sessions, position live, avatar ; signalements et propositions de limitation gardés, anonymisés) |
+| GET/PATCH/DELETE | `/api/accounts/me` · GET `/api/accounts/username-available` | Bearer ; GET : `limits` `{reportsPerDay, reportsToday, tripsPerDay, tripsToday}` (null client/admin) ; DELETE : suppression définitive par le titulaire (compte, stats, trajets, sessions, présence, avatar ; signalements et propositions de limitation gardés, anonymisés) |
 | GET/POST | `/api/accounts/me/stats` `/me/trips` `/me/drive` · `/api/accounts/referrals` | Bearer (referrals : admin) |
 | POST | `/api/accounts/avatar` | Bearer, base64 ≤ 4 Mo |
 | GET/POST/PATCH/DELETE | `/api/admin/accounts[/:id]` | ADMIN_TOKEN |
 | GET | `/api/radars/near` `/bbox` · POST `/api/radars/route` | radars fixes |
 | GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways,traffic` | compte obligatoire (401), restreint 403, limite du jour 429 ; ORS ou OSRM ; `traffic` (ORS) contourne les bouchons signalés en direct (carré de 500 m autour de chacun, 100 max, sauf à moins de 500 m du départ ou de l'arrivée ; recalcul sans eux si l'itinéraire devient impossible) |
 | GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm[&limit][&pool=1]` | plus proches d'abord (20, `pool=1` : 60) ; `hours` (état, créneaux du jour, prochain changement), `charging`, `parking`, `stars`, `brand` ; station : prix + horaires officiels |
-| POST/GET | `/api/live/position` · `/api/live/near` | positions live |
+| POST | `/api/live/presence {inTrip}` | Bearer ; app ouverte (~30 s), compteur seulement. Anciennes apps : `/position` compte la présence (position ignorée), `/near` renvoie personne |
 | GET | `/api/signs/limit?lat&lon&bearing&way` | `{v, way}` |
 | POST | `/api/signs/route {coordinates}` | panneaux + changements de limite du trajet |
 | GET | `/api/signs/near` | panneaux autour |

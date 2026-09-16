@@ -275,9 +275,6 @@ export const config = {
   // Absolute base for avatar URLs the app loads (the public tunnel host).
   publicBaseUrl: (process.env.PUBLIC_BASE_URL || 'https://debian.taila9954f.ts.net').replace(/\/$/, ''),
 
-  // Live users on the road (shared position; visible by default, invisible mode available).
-  liveTtlMs: 90 * 1000, // a shared position is "live" for 90 s
-  liveDefaultRadiusM: 20000,
-  liveMaxRadiusM: 200000,
-  liveMaxResults: 200,
+  // Presence: an account counts as online (and on a trip or not) for 90 s after the app said so.
+  liveTtlMs: 90 * 1000,
 };

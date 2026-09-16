@@ -1,18 +1,17 @@
 import { config } from '../config.js';
-import { haversine } from '../radars/geo.js';
 
 /**
- * Live driver positions, in memory only (never persisted). A position is kept
- * for [liveTtlMs] then considered stale. Going invisible removes it at once.
+ * Who uses the app right now, in memory only (never persisted): per account, when the app last
+ * said it was open, and whether a trip was running. No position is kept, nothing is shown to
+ * other drivers: only the counts, in /health. An account not heard from for [liveTtlMs] is gone.
  */
 class LiveStore {
   constructor() {
-    this.byAccount = new Map(); // accountId -> { lat, lon, bearing, speedKmh, at, username, avatarUrl }
+    this.byAccount = new Map(); // accountId -> { at, inTrip }
   }
 
-  set(accountId, { lat, lon, bearing = null, speedKmh = null, username = null, avatarUrl = null }) {
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-    this.byAccount.set(accountId, { lat, lon, bearing, speedKmh, username, avatarUrl, at: Date.now() });
+  touch(accountId, inTrip = false) {
+    this.byAccount.set(accountId, { at: Date.now(), inTrip: Boolean(inTrip) });
   }
 
   remove(accountId) {
@@ -24,34 +23,12 @@ class LiveStore {
     for (const [id, p] of this.byAccount) if (p.at < cutoff) this.byAccount.delete(id);
   }
 
-  /** Other live drivers within [radiusM], nearest first (excludes [selfId]). */
-  near(selfId, lat, lon, radiusM) {
-    this.prune();
-    const out = [];
-    for (const [id, p] of this.byAccount) {
-      if (id === selfId) continue;
-      const distanceM = haversine(lat, lon, p.lat, p.lon);
-      if (distanceM <= radiusM) {
-        out.push({
-          id,
-          username: p.username,
-          avatarUrl: p.avatarUrl,
-          lat: p.lat,
-          lon: p.lon,
-          bearing: p.bearing,
-          speedKmh: p.speedKmh,
-          ageMs: Date.now() - p.at,
-          distanceM: Math.round(distanceM),
-        });
-      }
-    }
-    out.sort((a, b) => a.distanceM - b.distanceM);
-    return out.slice(0, config.liveMaxResults);
-  }
-
+  /** Accounts with the app open now, and how many of them are on a trip. */
   get meta() {
     this.prune();
-    return { live: this.byAccount.size };
+    let inTrip = 0;
+    for (const p of this.byAccount.values()) if (p.inTrip) inTrip += 1;
+    return { online: this.byAccount.size, inTrip };
   }
 }
 
