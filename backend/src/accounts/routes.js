@@ -161,7 +161,7 @@ accountRouter.patch('/me', (req, res) => {
 
 /**
  * DELETE /api/accounts/me — the owner deletes the account, for good: the account with its
- * statistics and trips, every session, the live position and the avatar. The reports and
+ * statistics and trips, every session, its presence and the avatar. The reports and
  * speed-limit proposals stay for the other drivers, no longer tied to anyone.
  */
 accountRouter.delete('/me', async (req, res) => {
@@ -201,7 +201,7 @@ accountRouter.get('/me/stats', (req, res) => {
   res.json({ ...stats, trust: trustOf(stats.totals) });
 });
 
-/** POST /api/accounts/me/trips  { id, startedAt, toLabel, distanceMeters, durationSeconds, alertsCount, topSpeedKmh } */
+/** POST /api/accounts/me/trips  { id, startedAt, toLabel, distanceMeters, durationSeconds, alertsCount, topSpeedKmh, plannedSeconds?, stops?, stoppedSeconds?, events? } */
 accountRouter.post('/me/trips', (req, res) => {
   const account = authAccount(req);
   if (!account) return res.status(401).json({ error: 'unauthorized' });

@@ -510,7 +510,7 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 | GET | `/health` | état complet (§7) |
 | POST | `/api/accounts/auth` `/guest` `/register` `/login` `/logout` `/verify` `/resend-verify` `/forgot` `/reset` | login : `identifier` (pseudo ou email) + `deviceId` |
 | GET/PATCH/DELETE | `/api/accounts/me` · GET `/api/accounts/username-available` | Bearer ; GET : `limits` `{reportsPerDay, reportsToday, tripsPerDay, tripsToday}` (null client/admin) ; DELETE : suppression définitive par le titulaire (compte, stats, trajets, sessions, présence, avatar ; signalements et propositions de limitation gardés, anonymisés) |
-| GET/POST | `/api/accounts/me/stats` `/me/trips` `/me/drive` · `/api/accounts/referrals` | Bearer (referrals : admin) |
+| GET/POST | `/api/accounts/me/stats` `/me/trips` `/me/drive` · `/api/accounts/referrals` | Bearer (referrals : admin) ; trajet : `plannedSeconds` (estimation, null inconnue), `stops` / `stoppedSeconds` (arrêts ≥ 10 s), `events` {radarFixed, radarMobile, controlZone, camera, hazard, accident, roadwork, radarCar : nombre} |
 | POST | `/api/accounts/avatar` | Bearer, base64 ≤ 4 Mo |
 | GET/POST/PATCH/DELETE | `/api/admin/accounts[/:id]` | ADMIN_TOKEN |
 | GET | `/api/radars/near` `/bbox` · POST `/api/radars/route` | radars fixes |

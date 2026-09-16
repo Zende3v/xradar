@@ -45,6 +45,20 @@ function statsShape(value) {
   }));
 }
 
+// The kinds of alerts a trip counts, as the app names them.
+const TRIP_EVENT_KINDS = ['radarFixed', 'radarMobile', 'controlZone', 'camera', 'hazard', 'accident', 'roadwork', 'radarCar'];
+
+/** A trip's alerts met, by kind: known kinds with a positive count only. */
+function tripEventsShape(value) {
+  const input = value && typeof value === 'object' ? value : {};
+  const out = {};
+  for (const kind of TRIP_EVENT_KINDS) {
+    const count = Math.round(Number(input[kind]));
+    if (Number.isFinite(count) && count > 0) out[kind] = Math.min(count, 10000);
+  }
+  return out;
+}
+
 function addMonths(iso, months) {
   const date = new Date(iso);
   date.setUTCMonth(date.getUTCMonth() + months);
@@ -292,6 +306,7 @@ class AccountStore {
     const durationSeconds = Number(trip?.durationSeconds);
     const alertsCount = Number(trip?.alertsCount) || 0;
     const topSpeedKmh = Number(trip?.topSpeedKmh) || 0;
+    const plannedSeconds = trip?.plannedSeconds == null ? NaN : Number(trip.plannedSeconds);
     const tripId = String(trip?.id || '').trim();
     if (!tripId || !Number.isFinite(startedAt) || !Number.isFinite(distanceMeters) || !Number.isFinite(durationSeconds)) {
       return { error: 'invalid trip' };
@@ -307,6 +322,12 @@ class AccountStore {
       durationSeconds: Math.max(0, Math.round(durationSeconds)),
       alertsCount: Math.max(0, Math.round(alertsCount)),
       topSpeedKmh: Math.max(0, Math.round(topSpeedKmh)),
+      // Trip details (apps from before them send none): the route's estimate, the stops of
+      // 10 s or more and their time, the alerts met by kind.
+      plannedSeconds: Number.isFinite(plannedSeconds) && plannedSeconds > 0 ? Math.round(plannedSeconds) : null,
+      stops: Math.max(0, Math.round(Number(trip?.stops) || 0)),
+      stoppedSeconds: Math.max(0, Math.round(Number(trip?.stoppedSeconds) || 0)),
+      events: tripEventsShape(trip?.events),
     };
     account.trips.unshift(record);
     account.trips = account.trips.slice(0, config.accountTripHistoryMax);
