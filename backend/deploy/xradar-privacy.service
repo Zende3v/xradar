@@ -1,0 +1,16 @@
+[Unit]
+Description=x_radar - politique de confidentialite (port 9020)
+After=network.target
+
+[Service]
+User=xradar
+Group=xradar
+ExecStart=/usr/bin/python3 -m http.server 9020 --bind 0.0.0.0 --directory /opt/xradar-backend/privacy
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
