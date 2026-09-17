@@ -3,7 +3,6 @@ package com.xradar.app.feature.drive
 import com.xradar.app.core.model.GeoPoint
 import com.xradar.app.core.model.GpsSignal
 import com.xradar.app.core.model.GuidanceInstruction
-import com.xradar.app.core.model.LiveUser
 import com.xradar.app.core.model.LocationSample
 import com.xradar.app.core.model.Radar
 import com.xradar.app.core.model.RadarZone
@@ -33,8 +32,6 @@ data class DriveUiState(
     val reports: List<UserReport> = emptyList(),
     /** Probable radar-car zones (circles) around the driver. */
     val zones: List<RadarZone> = emptyList(),
-    /** Other drivers sharing their position nearby. */
-    val liveUsers: List<LiveUser> = emptyList(),
     /** OSM road signs near the driver. */
     val signs: List<com.xradar.app.core.model.RoadSign> = emptyList(),
     /** Active route polyline, if navigating to a destination. */

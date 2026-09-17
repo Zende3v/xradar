@@ -20,21 +20,12 @@ data class AlertPreferences(
     val vibration: Boolean = true,
     /** Spoken (TTS) alert & maneuver announcements. */
     val voice: Boolean = true,
-    /** Share my position with nearby drivers (visible by default). */
-    val liveVisible: Boolean = true,
-    /** Radius (km) to see other live drivers (1..200). */
-    val liveRadiusKm: Int = 20,
 ) {
     /** Whether reports of [type] reach the driver. */
     fun shows(type: ReportType): Boolean = type !in hiddenReports
 
     fun toggled(type: ReportType): AlertPreferences =
         copy(hiddenReports = if (type in hiddenReports) hiddenReports - type else hiddenReports + type)
-
-    companion object {
-        const val MIN_LIVE_KM = 1
-        const val MAX_LIVE_KM = 200
-    }
 }
 
 /** How the app picks its color scheme. */
@@ -78,9 +69,6 @@ object AppPreferences {
             sound = p.getBoolean("sound", true),
             vibration = p.getBoolean("vibration", true),
             voice = p.getBoolean("voice", true),
-            liveVisible = p.getBoolean("liveVisible", true),
-            liveRadiusKm = p.getInt("liveRadiusKm", 20)
-                .coerceIn(AlertPreferences.MIN_LIVE_KM, AlertPreferences.MAX_LIVE_KM),
         )
         _settings.value = AppSettings(
             themeMode = enumOrDefault(p.getString("themeMode", null), ThemeMode.Dark),
@@ -140,8 +128,6 @@ object AppPreferences {
             putBoolean("sound", updated.sound)
             putBoolean("vibration", updated.vibration)
             putBoolean("voice", updated.voice)
-            putBoolean("liveVisible", updated.liveVisible)
-            putInt("liveRadiusKm", updated.liveRadiusKm)
             apply()
         }
     }

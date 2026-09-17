@@ -143,7 +143,6 @@ fun DriveScreen(
             radars = state.radars,
             reports = state.reports,
             zones = state.zones,
-            liveUsers = state.liveUsers,
             signs = state.signs,
             routePoints = state.routePoints,
             following = following,

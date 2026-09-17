@@ -9,26 +9,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xradar.app.R
-import com.xradar.app.data.preferences.AlertPreferences
 import com.xradar.app.data.preferences.AppPreferences
 import com.xradar.app.data.preferences.MapStyle
 import com.xradar.app.data.preferences.ThemeMode
@@ -37,7 +32,6 @@ import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarListGroup
 import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarScreenScaffold
-import com.xradar.app.designsystem.component.XRadarSwitch
 import com.xradar.app.designsystem.component.XRadarText
 import com.xradar.app.designsystem.foundation.XRadarIcons
 import com.xradar.app.designsystem.theme.XRadarTheme
@@ -59,7 +53,6 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenDiagnostic: () -> Unit,
 ) {
-    val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
     val account by com.xradar.app.data.account.AccountRepository.account.collectAsStateWithLifecycle()
 
@@ -77,10 +70,6 @@ fun SettingsScreen(
                 ThemeSetting()
                 RowDivider()
                 MapStyleSetting()
-            }
-
-            XRadarListGroup(title = "Communauté") {
-                LiveSettings()
             }
 
             if (account?.role == com.xradar.app.core.model.Role.Admin) {
@@ -166,49 +155,6 @@ private fun <T> Segmented(
             Spacer(Modifier.height(spacing.xs))
             XRadarText(hint, style = XRadarTheme.typography.footnote, color = colors.textTertiary)
         }
-    }
-}
-
-@Composable
-private fun LiveSettings() {
-    val colors = XRadarTheme.colors
-    val spacing = XRadarTheme.spacing
-    val prefs by AppPreferences.alerts.collectAsStateWithLifecycle()
-    XRadarListRow(
-        title = "Visible par les autres",
-        leadingIcon = XRadarIcons.User,
-        glow = true,
-        onClick = { AppPreferences.updateAlerts { it.copy(liveVisible = !it.liveVisible) } },
-        trailing = {
-            XRadarSwitch(
-                checked = prefs.liveVisible,
-                onCheckedChange = { AppPreferences.updateAlerts { p -> p.copy(liveVisible = it) } },
-            )
-        },
-    )
-    Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            XRadarText("Rayon des usagers", style = XRadarTheme.typography.body, color = colors.textPrimary)
-            XRadarText("${prefs.liveRadiusKm} km", style = XRadarTheme.typography.callout, color = colors.accent)
-        }
-        Slider(
-            value = prefs.liveRadiusKm.toFloat(),
-            onValueChange = { v ->
-                AppPreferences.updateAlerts {
-                    it.copy(liveRadiusKm = v.toInt().coerceIn(AlertPreferences.MIN_LIVE_KM, AlertPreferences.MAX_LIVE_KM))
-                }
-            },
-            valueRange = AlertPreferences.MIN_LIVE_KM.toFloat()..AlertPreferences.MAX_LIVE_KM.toFloat(),
-            colors = SliderDefaults.colors(
-                thumbColor = colors.accent,
-                activeTrackColor = colors.accent,
-                inactiveTrackColor = colors.surfaceHigh,
-            ),
-        )
     }
 }
 

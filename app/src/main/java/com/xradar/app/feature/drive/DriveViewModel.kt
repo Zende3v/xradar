@@ -75,7 +75,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val radars = MutableStateFlow<List<Radar>>(emptyList())
     private val reports = MutableStateFlow<List<UserReport>>(emptyList())
     private val zones = MutableStateFlow<List<RadarZone>>(emptyList())
-    private val liveUsers = MutableStateFlow<List<com.xradar.app.core.model.LiveUser>>(emptyList())
     private val signApi = com.xradar.app.data.signs.SignApi()
     private val signs = MutableStateFlow<List<com.xradar.app.core.model.RoadSign>>(emptyList())
     private val guidance = MutableStateFlow<GuidanceInstruction?>(null)
@@ -197,8 +196,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.combine(guidance) { state, instruction ->
         state.copy(guidance = instruction)
-    }.combine(liveUsers) { state, users ->
-        state.copy(liveUsers = users)
     }.combine(signs) { state, s ->
         state.copy(signs = s)
     }.combine(routeError) { state, failed ->
@@ -285,19 +282,14 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 delay(REPORT_REFRESH_MS)
             }
         }
-        // Live users: share my position (unless invisible) and fetch nearby drivers.
+        // Presence: the app says it is open, and whether a trip runs. Counted by the backend,
+        // shown to nobody, no position sent.
         viewModelScope.launch {
             while (true) {
-                val token = AccountRepository.token
-                val fix = LocationRepository.location.value
-                val prefs = AppPreferences.alerts.value
-                if (token != null && fix != null) {
-                    liveApi.share(token, fix.latitude, fix.longitude, fix.bearingDeg, (fix.speedKmh ?: 0f).roundToInt(), prefs.liveVisible)
-                    liveUsers.value = liveApi.near(token, fix.latitude, fix.longitude, prefs.liveRadiusKm * 1000)
-                } else {
-                    liveUsers.value = emptyList()
+                AccountRepository.token?.let { token ->
+                    liveApi.presence(token, inTrip = ActiveTripRepository.destination.value != null)
                 }
-                delay(LIVE_REFRESH_MS)
+                delay(PRESENCE_MS)
             }
         }
         // On the route, the limit is read from the route's own limit changes at the driver's
@@ -1085,7 +1077,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val RADAR_RING_REFRESH_M = 5_000.0
         const val RADAR_RETRY_MS = 20_000L
         const val REPORT_REFRESH_MS = 25_000L
-        const val LIVE_REFRESH_MS = 8_000L
+        /** The app tells the backend it is open this often (the backend forgets it after 90 s). */
+        const val PRESENCE_MS = 30_000L
         const val NAV_ALERT_RADIUS_M = 15000.0
         /** Spacing of the route corridor samples — well under the radius above. */
         const val CORRIDOR_STEP_M = 2_000.0

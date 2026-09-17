@@ -83,7 +83,6 @@ import androidx.compose.ui.unit.dp
 import com.xradar.app.R
 import com.xradar.app.core.geo.RoutePath
 import com.xradar.app.core.geo.SunClock
-import com.xradar.app.core.model.LiveUser
 import com.xradar.app.core.model.RadarZone
 import com.xradar.app.core.model.RoadSign
 import com.xradar.app.designsystem.foundation.XRadarIcons
@@ -102,7 +101,6 @@ fun DriveMap(
     radars: List<Radar>,
     reports: List<UserReport>,
     zones: List<RadarZone>,
-    liveUsers: List<LiveUser>,
     signs: List<RoadSign>,
     routePoints: List<GeoPoint>,
     following: Boolean,
@@ -178,7 +176,6 @@ fun DriveMap(
         Triple("Accident", rememberVectorPainter(XRadarIcons.Accident), colors.hazard),
         Triple("Roadwork", rememberVectorPainter(XRadarIcons.Construction), colors.controlZone),
     )
-    val livePainter = rememberVectorPainter(XRadarIcons.Navigation)
 
     // Smooth device heading (rotation-vector sensor), anchored to the GPS bearing
     // so the camera rotates naturally through turns regardless of phone mounting.
@@ -334,19 +331,6 @@ fun DriveMap(
             val signBadgeW = registerBadge(style, context, R.drawable.cluster_sign, CLUSTER_SIGN_IMAGE, clusterSignPx)
             val alertOffsetEm = badgeOffsetEm(alertBadgeW, density)
             val signOffsetEm = badgeOffsetEm(signBadgeW, density)
-            // Other live drivers (distinct violet marker).
-            style.addImage(LIVE_IMAGE, markerBitmap(livePainter, markerPx, ComposeColor(0xFF8B7CF6), density))
-            style.addSource(GeoJsonSource(LIVE_SOURCE))
-            style.addLayer(
-                SymbolLayer(LIVE_LAYER, LIVE_SOURCE).withProperties(
-                    PropertyFactory.iconImage(LIVE_IMAGE),
-                    PropertyFactory.iconRotate(Expression.get("bearing")),
-                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.iconSize(0.8f),
-                ),
-            )
             // OSM road signs — real drawn traffic signs, a bit larger than alerts.
             val signPx = (markerPx * 1.25f).toInt()
             com.xradar.app.core.model.SignType.entries
@@ -424,7 +408,6 @@ fun DriveMap(
             setReports(style, reports)
             setControlZones(style, reports)
             setZones(style, zones)
-            setLive(style, liveUsers)
             setRoute(style, routePoints)
             styleReady = true
         }
@@ -452,13 +435,6 @@ fun DriveMap(
         val current = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         current.style?.let { setZones(it, zones) }
-    }
-
-    // Update live users when they change.
-    LaunchedEffect(map, styleReady, liveUsers) {
-        val current = map ?: return@LaunchedEffect
-        if (!styleReady) return@LaunchedEffect
-        current.style?.let { setLive(it, liveUsers) }
     }
 
     // Update road signs when they change.
@@ -952,15 +928,6 @@ private fun speedSignBitmap(v: Int, sizePx: Int): Bitmap {
     return bmp
 }
 
-private fun setLive(style: Style, users: List<LiveUser>) {
-    val features = users.map {
-        Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)).apply {
-            addNumberProperty("bearing", it.bearingDeg ?: 0f)
-        }
-    }
-    style.getSourceAs<GeoJsonSource>(LIVE_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(features))
-}
-
 private fun setZones(style: Style, zones: List<RadarZone>) {
     val features = zones.map { Feature.fromGeometry(circlePolygon(it.lat, it.lon, it.radiusMeters)) }
     style.getSourceAs<GeoJsonSource>(ZONE_SOURCE)
@@ -1035,9 +1002,6 @@ private const val SIGN_SOURCE = "xr-signs"
 private const val SIGN_LAYER = "xr-signs-dot"
 private const val SIGN_CLUSTER = "xr-signs-cluster"
 private const val MARKER_MIN_ZOOM = 9.5f
-private const val LIVE_SOURCE = "xr-live"
-private const val LIVE_LAYER = "xr-live-dot"
-private const val LIVE_IMAGE = "m-live"
 private const val ZONE_SOURCE = "xr-zones"
 private const val ZONE_FILL = "xr-zones-fill"
 private const val ZONE_LINE = "xr-zones-line"
