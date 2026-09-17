@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.xradar.app.feature.diagnostic.DiagnosticRoute
 import com.xradar.app.feature.drive.DriveRoute
+import com.xradar.app.feature.menu.LegalRoute
 import com.xradar.app.feature.menu.MenuRoute
 import com.xradar.app.feature.menu.ReferralRoute
 import com.xradar.app.feature.menu.StatsRoute
@@ -51,6 +52,7 @@ fun XRadarNavHost(modifier: Modifier = Modifier) {
                 onOpenStats = { navController.navigate(Routes.STATS) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenReferral = { navController.navigate(Routes.REFERRAL) },
+                onOpenLegal = { navController.navigate(Routes.LEGAL) },
             )
         }
         composable(Routes.ACCOUNT) {
@@ -67,6 +69,9 @@ fun XRadarNavHost(modifier: Modifier = Modifier) {
         }
         composable(Routes.REFERRAL) {
             ReferralRoute(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.LEGAL) {
+            LegalRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.DIAGNOSTIC) {
             DiagnosticRoute(onBack = { navController.popBackStack() })

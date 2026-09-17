@@ -1,9 +1,9 @@
 package com.xradar.app.feature.profile
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,12 +13,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,39 +28,43 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xradar.app.BuildConfig
 import com.xradar.app.core.model.Account
 import com.xradar.app.core.model.Role
 import com.xradar.app.data.account.AccountRepository
 import com.xradar.app.data.stats.TripHistoryRepository
-import com.xradar.app.data.stats.TripStats
 import com.xradar.app.designsystem.component.XRadarBadge
 import com.xradar.app.designsystem.component.XRadarCard
-import com.xradar.app.designsystem.component.XRadarDivider
-import com.xradar.app.designsystem.component.XRadarIcon
+import com.xradar.app.designsystem.component.XRadarConfirmDialog
 import com.xradar.app.designsystem.component.XRadarListGroup
 import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarScreenScaffold
 import com.xradar.app.designsystem.component.XRadarText
-import com.xradar.app.designsystem.foundation.XRadarIcons
 import com.xradar.app.designsystem.theme.XRadarTheme
+import kotlinx.coroutines.launch
 
 @Composable
 fun ProfileRoute(onBack: () -> Unit) {
-    val context = LocalContext.current
     val account by AccountRepository.account.collectAsStateWithLifecycle()
-    val stats = remember { TripHistoryRepository(context).stats() }
-    ProfileScreen(account = account, stats = stats, onBack = onBack)
+    ProfileScreen(account = account, onBack = onBack)
 }
 
+/**
+ * "Mon compte": name, role and photo (members change it), access status, email verification,
+ * the guest's trial note, the app version, and the deletion of the account.
+ */
 @Composable
 fun ProfileScreen(
     account: Account?,
-    stats: TripStats,
     onBack: () -> Unit,
 ) {
+    val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var confirmDelete by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
     ) { uri ->
@@ -77,7 +82,7 @@ fun ProfileScreen(
             Header(account, onPickAvatar)
             AccessCard(account)
 
-            if (account?.email != null && account?.emailVerified == false) {
+            if (account?.email != null && account.emailVerified == false) {
                 VerifyEmailCard()
             }
 
@@ -89,13 +94,52 @@ fun ProfileScreen(
                 XRadarListRow(
                     title = "Version",
                     trailing = {
-                        XRadarText("0.1.0", style = XRadarTheme.typography.callout, color = XRadarTheme.colors.textTertiary)
+                        XRadarText(BuildConfig.VERSION_NAME, style = XRadarTheme.typography.callout, color = colors.textTertiary)
                     },
                 )
             }
 
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(XRadarTheme.shapes.lg)
+                        .border(BorderStroke(1.dp, colors.danger), XRadarTheme.shapes.lg)
+                        .clickable(enabled = !deleting) { confirmDelete = true }
+                        .padding(vertical = spacing.md),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    XRadarText(
+                        if (deleting) "Suppression…" else "Supprimer mon compte",
+                        style = XRadarTheme.typography.bodyStrong,
+                        color = colors.danger,
+                    )
+                }
+                deleteError?.let { XRadarText(it, style = XRadarTheme.typography.footnote, color = colors.danger) }
+            }
 
             Spacer(Modifier.height(spacing.xxl))
+        }
+
+        if (confirmDelete) {
+            XRadarConfirmDialog(
+                title = "Supprimer ton compte ?",
+                message = "Ton compte, ta photo, tes statistiques et tes trajets sont effacés pour de bon. " +
+                    "Tes signalements restent pour les autres conducteurs, sans ton nom.",
+                confirmLabel = "Supprimer définitivement",
+                onCancel = { confirmDelete = false },
+                onConfirm = {
+                    confirmDelete = false
+                    deleting = true
+                    deleteError = null
+                    scope.launch {
+                        // On success the account is gone: the app goes back to onboarding by itself.
+                        val error = AccountRepository.deleteAccount()
+                        if (error == null) TripHistoryRepository(context).removeAll() else deleteError = error
+                        deleting = false
+                    }
+                },
+            )
         }
     }
 }
@@ -115,43 +159,10 @@ private fun Header(account: Account?, onPickAvatar: (() -> Unit)?) {
         }
         Column(verticalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.xs)) {
             XRadarText(name, style = XRadarTheme.typography.titleLarge, color = colors.textPrimary)
-            XRadarBadge(role.label, color = roleColor(role))
+            XRadarBadge(role.label, glow = true)
             if (onPickAvatar != null) {
                 XRadarText("Changer la photo", style = XRadarTheme.typography.caption, color = colors.accent)
             }
-        }
-    }
-}
-
-@Composable
-private fun roleColor(role: Role) = when (role) {
-    Role.Admin -> XRadarTheme.colors.accent
-    Role.Client -> XRadarTheme.colors.radarFixed
-    Role.Guest -> XRadarTheme.colors.textSecondary
-}
-
-@Composable
-private fun Stats(stats: TripStats) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.md),
-    ) {
-        StatTile(stats.trips.toString(), "Trajets", Modifier.weight(1f))
-        StatTile(grouped(stats.kilometers), "km", Modifier.weight(1f))
-        StatTile(grouped(stats.alerts), "Alertes", Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun StatTile(value: String, label: String, modifier: Modifier = Modifier) {
-    XRadarCard(modifier = modifier) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.xs),
-        ) {
-            XRadarText(value, style = XRadarTheme.typography.title, color = XRadarTheme.colors.textPrimary)
-            XRadarText(label.uppercase(), style = XRadarTheme.typography.caption, color = XRadarTheme.colors.textTertiary)
         }
     }
 }
@@ -182,9 +193,9 @@ private fun AccessCard(account: Account?) {
 @Composable
 private fun VerifyEmailCard() {
     val colors = XRadarTheme.colors
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var code by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    var msg by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    var code by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf<String?>(null) }
     XRadarCard {
         Column(verticalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.sm)) {
             XRadarText("Email non vérifié", style = XRadarTheme.typography.headline, color = colors.textPrimary)
@@ -236,17 +247,12 @@ private fun GuestNote() {
     }
 }
 
-/** 3240 -> "3 240" (French thousands). */
-private fun grouped(value: Int): String =
-    value.toString().reversed().chunked(3).joinToString(" ").reversed()
-
 @Preview(name = "Profil · dark", showBackground = true, backgroundColor = 0xFF06070A, widthDp = 380, heightDp = 800)
 @Composable
 private fun ProfileScreenPreview() {
     XRadarTheme(darkTheme = true) {
         ProfileScreen(
             account = Account(id = "x", role = Role.Admin, username = "Arthur", displayName = "Arthur", avatarUrl = null, email = "a@b.com", banned = false),
-            stats = TripStats(trips = 128, kilometers = 3240, alerts = 512),
             onBack = {},
         )
     }

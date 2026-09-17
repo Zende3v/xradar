@@ -20,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
@@ -42,8 +41,9 @@ import com.xradar.app.designsystem.theme.XRadarTheme
 import com.xradar.app.feature.profile.AsyncAvatar
 
 /**
- * "Menu" — the first page: who you are (avatar, email, trust stars), then the three
- * sections, the admin-only referral page, and sign-out at the bottom.
+ * "Menu" — the first page: who you are (avatar, email, trust stars), then the sections, the
+ * admin-only referral page, the legal notices, and sign-out at the bottom. Its icons and the
+ * access badge glow white on dark tiles.
  */
 @Composable
 fun MenuRoute(
@@ -52,6 +52,7 @@ fun MenuRoute(
     onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenReferral: () -> Unit,
+    onOpenLegal: () -> Unit,
 ) {
     val account by AccountRepository.account.collectAsStateWithLifecycle()
     // The access status moves on its own (trial ending, referral applied): refresh.
@@ -63,6 +64,7 @@ fun MenuRoute(
         onOpenStats = onOpenStats,
         onOpenSettings = onOpenSettings,
         onOpenReferral = onOpenReferral,
+        onOpenLegal = onOpenLegal,
         onLogout = { AccountRepository.logout() },
     )
 }
@@ -75,6 +77,7 @@ fun MenuScreen(
     onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenReferral: () -> Unit,
+    onOpenLegal: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val colors = XRadarTheme.colors
@@ -90,15 +93,19 @@ fun MenuScreen(
             Identity(account)
 
             XRadarListGroup {
-                Section("Mon compte", ImageVector.vectorResource(R.drawable.ic_account), colors.accent, onOpenAccount)
+                Section("Mon compte", ImageVector.vectorResource(R.drawable.ic_account), onOpenAccount)
                 XRadarDivider(Modifier.padding(start = 58.dp))
-                Section("Statistiques", ImageVector.vectorResource(R.drawable.ic_stats), colors.radarMobile, onOpenStats)
+                Section("Statistiques", ImageVector.vectorResource(R.drawable.ic_stats), onOpenStats)
                 XRadarDivider(Modifier.padding(start = 58.dp))
-                Section("Réglages", ImageVector.vectorResource(R.drawable.ic_settings), colors.textSecondary, onOpenSettings)
+                Section("Réglages", ImageVector.vectorResource(R.drawable.ic_settings), onOpenSettings)
                 if (account?.role == Role.Admin) {
                     XRadarDivider(Modifier.padding(start = 58.dp))
-                    Section("Parrainage", ImageVector.vectorResource(R.drawable.ic_referral), colors.controlZone, onOpenReferral)
+                    Section("Parrainage", ImageVector.vectorResource(R.drawable.ic_referral), onOpenReferral)
                 }
+            }
+
+            XRadarListGroup {
+                Section("Mentions légales", XRadarIcons.Info, onOpenLegal)
             }
 
             Spacer(Modifier.height(spacing.xl))
@@ -107,12 +114,12 @@ fun MenuScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(XRadarTheme.shapes.lg)
-                    .border(BorderStroke(1.dp, colors.hazard), XRadarTheme.shapes.lg)
+                    .border(BorderStroke(1.dp, colors.danger), XRadarTheme.shapes.lg)
                     .clickable(onClick = onLogout)
                     .padding(vertical = spacing.md),
                 contentAlignment = Alignment.Center,
             ) {
-                XRadarText("Se déconnecter", style = XRadarTheme.typography.bodyStrong, color = colors.hazard)
+                XRadarText("Se déconnecter", style = XRadarTheme.typography.bodyStrong, color = colors.danger)
             }
         }
     }
@@ -138,7 +145,7 @@ private fun Identity(account: Account?) {
                 maxLines = 1,
             )
             TrustStars(account?.trust ?: 2.5)
-            XRadarBadge(accessLabel(account), color = accessColor(account))
+            XRadarBadge(accessLabel(account), glow = true)
         }
     }
 }
@@ -175,11 +182,11 @@ fun TrustStars(score: Double) {
 }
 
 @Composable
-private fun Section(title: String, icon: ImageVector, tint: Color, onClick: () -> Unit) {
+private fun Section(title: String, icon: ImageVector, onClick: () -> Unit) {
     XRadarListRow(
         title = title,
         leadingIcon = icon,
-        leadingTint = tint,
+        glow = true,
         onClick = onClick,
         trailing = {
             XRadarIcon(XRadarIcons.ChevronRight, contentDescription = null, tint = XRadarTheme.colors.textTertiary, size = 20.dp)
@@ -196,18 +203,6 @@ fun accessLabel(account: Account?): String {
         account.access == Access.Trial -> "Essai gratuit · ${daysLeft(account.accessEndsAt)}"
         account.accessEndsAt != null -> "Membre · jusqu'au ${shortDate(account.accessEndsAt)}"
         else -> "Membre"
-    }
-}
-
-@Composable
-private fun accessColor(account: Account?): Color {
-    val colors = XRadarTheme.colors
-    return when {
-        account == null -> colors.textSecondary
-        account.role == Role.Admin -> colors.accent
-        account.access == Access.Restricted || !account.canNavigate -> colors.hazard
-        account.access == Access.Trial -> colors.warning
-        else -> colors.success
     }
 }
 

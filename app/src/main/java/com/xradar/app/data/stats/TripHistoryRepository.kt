@@ -55,6 +55,11 @@ class TripHistoryRepository(context: Context) {
         prefs.edit().putString(KEY, array.toString()).apply()
     }
 
+    /** The account is deleted: its trips go with it. */
+    fun removeAll() {
+        prefs.edit().remove(KEY).apply()
+    }
+
     /** Aggregate stats over all local trips. */
     fun stats(): TripStats {
         val trips = all()

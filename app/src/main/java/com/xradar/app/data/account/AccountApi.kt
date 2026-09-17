@@ -282,6 +282,19 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
     private fun errorRaw(body: String?): String =
         runCatching { JSONObject(body ?: "").optString("error").ifBlank { "Erreur" } }.getOrDefault("Erreur")
 
+    /** Deletes the account for good; null on success, else a message the driver can read. */
+    suspend fun deleteAccount(token: String): String? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/me"))
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
+        try {
+            client.newCall(req).execute().use { r -> if (r.isSuccessful) null else friendly(errorRaw(r.body?.string())) }
+        } catch (e: Exception) {
+            "Réseau indisponible"
+        }
+    }
+
     suspend fun forgot(email: String): Unit = withContext(Dispatchers.IO) {
         postSimple("/api/accounts/forgot", JSONObject().put("email", email)); Unit
     }

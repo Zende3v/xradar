@@ -12,4 +12,5 @@ object Routes {
     const val SETTINGS = "settings"
     const val REFERRAL = "referral"
     const val DIAGNOSTIC = "diagnostic"
+    const val LEGAL = "legal"
 }

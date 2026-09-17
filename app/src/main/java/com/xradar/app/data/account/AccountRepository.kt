@@ -137,6 +137,17 @@ object AccountRepository {
         _account.value?.email?.let { api.resendVerify(it) }
     }
 
+    /**
+     * Deletes the account on the server, then forgets the session here (the phone keeps its id).
+     * Null on success, else a message the driver can read.
+     */
+    suspend fun deleteAccount(): String? {
+        val t = token ?: return "Non connecté"
+        api.deleteAccount(t)?.let { return it }
+        logout()
+        return null
+    }
+
     fun logout() {
         setToken(null)
         _account.value = null

@@ -39,6 +39,8 @@ fun XRadarListRow(
     trailing: @Composable (() -> Unit)? = null,
     /** Pass one in to drive an outer animation from this row's presses. */
     interactionSource: MutableInteractionSource? = null,
+    /** The leading icon white and glowing on a dark tile (the Menu's look) instead of tinted. */
+    glow: Boolean = false,
 ) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
@@ -65,7 +67,9 @@ fun XRadarListRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(spacing.md),
     ) {
-        if (leadingIcon != null) {
+        if (leadingIcon != null && glow) {
+            XRadarGlowTile(leadingIcon)
+        } else if (leadingIcon != null) {
             Box(
                 modifier = Modifier
                     .size(30.dp)

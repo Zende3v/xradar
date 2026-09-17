@@ -53,7 +53,7 @@ fun SettingsRoute(
     )
 }
 
-/** Réglages : compte + infos app. Les alertes se configurent depuis le menu « Options » du HUD. */
+/** Réglages : apparence et diagnostic admin. Les alertes se configurent depuis le menu « Options » du HUD. */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -85,12 +85,7 @@ fun SettingsScreen(
 
             if (account?.role == com.xradar.app.core.model.Role.Admin) {
                 XRadarListGroup(title = "Développeur") {
-                    NavRow(
-                        "Diagnostic backend",
-                        ImageVector.vectorResource(R.drawable.ic_diagnostic),
-                        colors.accent,
-                        onOpenDiagnostic,
-                    )
+                    NavRow("Diagnostic backend", ImageVector.vectorResource(R.drawable.ic_diagnostic), onOpenDiagnostic)
                 }
             }
 
@@ -182,7 +177,7 @@ private fun LiveSettings() {
     XRadarListRow(
         title = "Visible par les autres",
         leadingIcon = XRadarIcons.User,
-        leadingTint = colors.accent,
+        glow = true,
         onClick = { AppPreferences.updateAlerts { it.copy(liveVisible = !it.liveVisible) } },
         trailing = {
             XRadarSwitch(
@@ -218,11 +213,11 @@ private fun LiveSettings() {
 }
 
 @Composable
-private fun NavRow(title: String, icon: ImageVector, tint: Color, onClick: () -> Unit) {
+private fun NavRow(title: String, icon: ImageVector, onClick: () -> Unit) {
     XRadarListRow(
         title = title,
         leadingIcon = icon,
-        leadingTint = tint,
+        glow = true,
         onClick = onClick,
         trailing = {
             XRadarIcon(
