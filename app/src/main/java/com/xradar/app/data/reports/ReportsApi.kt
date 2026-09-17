@@ -4,6 +4,8 @@ import com.xradar.app.BuildConfig
 import com.xradar.app.core.model.RadarZone
 import com.xradar.app.core.model.ReportType
 import com.xradar.app.core.model.UserReport
+import com.xradar.app.data.account.AccessDenial
+import com.xradar.app.data.account.AccessDeniedException
 import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,6 +62,11 @@ class ReportsApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }
     }
 
+    /**
+     * The report as the backend kept it (a new one, or the one it joined); null when refused.
+     * Throws [AccessDeniedException] when the account may not report now (trial over, today's
+     * reports used).
+     */
     suspend fun create(report: NewReport, token: String?, deviceId: String?): UserReport? = withContext(Dispatchers.IO) {
         val payload = JSONObject()
             .put("type", report.type.wire)
@@ -79,8 +86,9 @@ class ReportsApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         if (token != null) builder.header("Authorization", "Bearer $token")
         val request = builder.build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@use null
-            val body = response.body?.string() ?: return@use null
+            val body = response.body?.string()
+            AccessDenial.of(response.code, body)?.let { throw AccessDeniedException(it) }
+            if (!response.isSuccessful || body == null) return@use null
             JSONObject(body).optJSONObject("report")?.let(::toReport)
         }
     }

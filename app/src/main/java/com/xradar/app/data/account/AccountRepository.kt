@@ -187,6 +187,17 @@ object AccountRepository {
         put("canNavigate", a.canNavigate)
         put("accessEndsAt", a.accessEndsAt)
         put("trust", a.trust)
+        a.limits?.let { l ->
+            put(
+                "limits",
+                JSONObject()
+                    .put("day", l.day)
+                    .put("reportsPerDay", l.reportsPerDay)
+                    .put("reportsToday", l.reportsToday)
+                    .put("tripsPerDay", l.tripsPerDay)
+                    .put("tripsToday", l.tripsToday),
+            )
+        }
     }
 
     private fun accountFromJson(o: JSONObject) = Account(
@@ -202,6 +213,7 @@ object AccountRepository {
         canNavigate = if (o.has("canNavigate")) o.optBoolean("canNavigate") else true,
         accessEndsAt = o.optString("accessEndsAt").ifBlank { null }.takeUnless { o.isNull("accessEndsAt") },
         trust = o.optDouble("trust", 2.5),
+        limits = o.optJSONObject("limits")?.let(AccountApi::parseLimits),
     )
 
     private const val KEY_DEVICE = "device_id"

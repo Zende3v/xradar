@@ -16,6 +16,7 @@ import com.xradar.app.feature.menu.StatsRoute
 import com.xradar.app.feature.profile.ProfileRoute
 import com.xradar.app.feature.search.SearchRoute
 import com.xradar.app.feature.settings.SettingsRoute
+import com.xradar.app.feature.subscription.SubscriptionRoute
 
 private const val TRANSITION_MS = 300
 
@@ -49,6 +50,7 @@ fun XRadarNavHost(modifier: Modifier = Modifier) {
             MenuRoute(
                 onBack = { navController.popBackStack() },
                 onOpenAccount = { navController.navigate(Routes.ACCOUNT) },
+                onOpenSubscription = { navController.navigate(Routes.SUBSCRIPTION) },
                 onOpenStats = { navController.navigate(Routes.STATS) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenReferral = { navController.navigate(Routes.REFERRAL) },
@@ -69,6 +71,9 @@ fun XRadarNavHost(modifier: Modifier = Modifier) {
         }
         composable(Routes.REFERRAL) {
             ReferralRoute(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SUBSCRIPTION) {
+            SubscriptionRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.LEGAL) {
             LegalRoute(onBack = { navController.popBackStack() })

@@ -34,7 +34,11 @@ import com.xradar.app.data.radar.RadarRepository
 import com.xradar.app.data.reports.NewReport
 import com.xradar.app.data.reports.ReportsRepository
 import com.xradar.app.data.routing.ActiveTripRepository
+import com.xradar.app.data.routing.RouteAnswer
 import com.xradar.app.data.routing.RoutingRepository
+import com.xradar.app.data.account.AccessDeniedException
+import com.xradar.app.feature.subscription.OffersPrompt
+import com.xradar.app.feature.subscription.PaywallReason
 import com.xradar.app.data.speedlimits.NewSpeedLimitReport
 import com.xradar.app.data.speedlimits.SpeedLimitRepository
 import com.xradar.app.data.stats.TripHistoryRepository
@@ -352,7 +356,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         GeoPoint(fix.latitude, fix.longitude),
                         GeoPoint(destination.lat, destination.lon),
                         avoidOptions(),
-                    )?.let { ActiveTripRepository.setRoute(it) }
+                    ).routeOrNull?.let { ActiveTripRepository.setRoute(it) }
                 }
         }
         // Compute the route whenever a destination is chosen; track the trip session.
@@ -372,28 +376,41 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     ?: fix?.let { GeoPoint(it.latitude, it.longitude) }
                     ?: return@collect
                 // Silent retries: a connection dropping for a few seconds should not kill the trip.
-                var route = routingRepository.route(
+                var answer = routingRepository.route(
                     from,
                     GeoPoint(destination.lat, destination.lon),
                     avoidOptions(),
                 )
                 for (wait in ROUTE_RETRY_MS) {
-                    if (route != null) break
+                    if (answer !is RouteAnswer.Failed) break
                     delay(wait)
                     if (ActiveTripRepository.destination.value != destination) break
                     val again = if (simulated != null) from else {
                         LocationRepository.location.value
                             ?.let { GeoPoint(it.latitude, it.longitude) } ?: from
                     }
-                    route = routingRepository.route(
+                    answer = routingRepository.route(
                         again,
                         GeoPoint(destination.lat, destination.lon),
                         avoidOptions(),
                     )
                 }
                 if (ActiveTripRepository.destination.value != destination) return@collect
+                if (answer is RouteAnswer.Denied) {
+                    // Trial over, or today's trips used: no trip, the offers show.
+                    routeError.value = false
+                    ActiveTripRepository.clear()
+                    OffersPrompt.show(PaywallReason.of(answer.denial))
+                    viewModelScope.launch { AccountRepository.reload() }
+                    return@collect
+                }
+                val route = answer.routeOrNull
                 routeError.value = route == null
                 ActiveTripRepository.setRoute(route)
+                // A guest's count of the day moved on.
+                if (route != null && AccountRepository.account.value?.limits != null) {
+                    viewModelScope.launch { AccountRepository.reload() }
+                }
             }
         }
         // Accumulate distance/top-speed/arrival while a trip is active.
@@ -471,7 +488,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         GeoPoint(sample.latitude, sample.longitude),
                         GeoPoint(destination.lat, destination.lon),
                         avoidOptions(),
-                    )?.let { ActiveTripRepository.setRoute(it) }
+                    ).routeOrNull?.let { ActiveTripRepository.setRoute(it) }
                 }
             }
         }
@@ -796,23 +813,32 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val lat = fix.latitude
         val lon = fix.longitude
         viewModelScope.launch {
-            val created = reportsRepository.create(
-                NewReport(
-                    draft.type,
-                    lat,
-                    lon,
-                    plate = draft.plate,
-                    direction = draft.direction,
-                    bearingDeg = fix?.bearingDeg?.toDouble(),
-                ),
-                AccountRepository.token,
-                AccountRepository.deviceId,
-            )
+            val created = try {
+                reportsRepository.create(
+                    NewReport(
+                        draft.type,
+                        lat,
+                        lon,
+                        plate = draft.plate,
+                        direction = draft.direction,
+                        bearingDeg = fix.bearingDeg?.toDouble(),
+                    ),
+                    AccountRepository.token,
+                    AccountRepository.deviceId,
+                )
+            } catch (e: AccessDeniedException) {
+                // Trial over, or today's reports used: the offers show instead.
+                OffersPrompt.show(PaywallReason.of(e.denial))
+                AccountRepository.reload()
+                return@launch
+            }
             // Radar cars appear as zones, not points → refetch to get the new zone. A report the
             // backend merged into one already there comes back as that one: replaced, not doubled.
             if (created != null && draft.type != ReportType.VoitureRadar) {
                 reports.value = reports.value.filterNot { it.id == created.id } + created
             }
+            // A guest's count of the day moved on.
+            if (created != null && AccountRepository.account.value?.limits != null) AccountRepository.reload()
             refreshReports(lat, lon)
         }
     }

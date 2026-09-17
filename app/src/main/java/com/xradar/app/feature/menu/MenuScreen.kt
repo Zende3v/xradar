@@ -49,6 +49,7 @@ import com.xradar.app.feature.profile.AsyncAvatar
 fun MenuRoute(
     onBack: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenSubscription: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenReferral: () -> Unit,
@@ -61,6 +62,7 @@ fun MenuRoute(
         account = account,
         onBack = onBack,
         onOpenAccount = onOpenAccount,
+        onOpenSubscription = onOpenSubscription,
         onOpenStats = onOpenStats,
         onOpenSettings = onOpenSettings,
         onOpenReferral = onOpenReferral,
@@ -74,6 +76,7 @@ fun MenuScreen(
     account: Account?,
     onBack: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenSubscription: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenReferral: () -> Unit,
@@ -94,6 +97,8 @@ fun MenuScreen(
 
             XRadarListGroup {
                 Section("Mon compte", ImageVector.vectorResource(R.drawable.ic_account), onOpenAccount)
+                XRadarDivider(Modifier.padding(start = 58.dp))
+                Section("Abonnement", XRadarIcons.Star, onOpenSubscription)
                 XRadarDivider(Modifier.padding(start = 58.dp))
                 Section("Statistiques", ImageVector.vectorResource(R.drawable.ic_stats), onOpenStats)
                 XRadarDivider(Modifier.padding(start = 58.dp))

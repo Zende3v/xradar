@@ -7,14 +7,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.xradar.app.data.account.AccountRepository
 import com.xradar.app.data.preferences.AppPreferences
 import com.xradar.app.feature.onboarding.OnboardingRoute
 import com.xradar.app.feature.permission.LocationPermissionRoute
+import com.xradar.app.feature.subscription.OffersPrompt
 import com.xradar.app.location.LocationServiceController
 import com.xradar.app.navigation.XRadarNavHost
 
@@ -29,6 +33,19 @@ fun XRadarApp() {
     AccountRepository.restore(context)
     LaunchedEffect(Unit) { AccountRepository.refresh(context) }
     val account by AccountRepository.account.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    // A blocked account sees the offers each time the app comes to the front, and as soon as it
+    // gets blocked (the driving screen shows them).
+    LifecycleStartEffect(Unit) {
+        val job = scope.launch {
+            AccountRepository.reload()
+            OffersPrompt.offerIfRestricted()
+        }
+        onStopOrDispose { job.cancel() }
+    }
+    LaunchedEffect(account?.isRestricted) {
+        if (account?.isRestricted == true) OffersPrompt.offerIfRestricted()
+    }
     var proceed by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(

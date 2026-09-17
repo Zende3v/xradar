@@ -55,6 +55,8 @@ data class Account(
     val accessEndsAt: String? = null,
     /** "Note de confiance", 0..5 — how often this driver's reports get confirmed. */
     val trust: Double = 2.5,
+    /** A guest's daily limits and today's use; null for clients and admins, who have none. */
+    val limits: DailyLimits? = null,
 ) {
     /** A finished onboarding = has a chosen username. */
     val isOnboarded: Boolean get() = !username.isNullOrBlank()
@@ -63,4 +65,7 @@ data class Account(
     val canEditProfile: Boolean get() = role == Role.Client || role == Role.Admin
 
     val isRestricted: Boolean get() = access == Access.Restricted || !canNavigate
+
+    /** A client whose subscription runs, or an admin. */
+    val isSubscriber: Boolean get() = (role == Role.Client || role == Role.Admin) && !isRestricted
 }

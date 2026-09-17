@@ -1,5 +1,10 @@
 package com.xradar.app.feature.drive
 
+import com.xradar.app.core.model.Account
+import com.xradar.app.core.model.DailyLimits
+import com.xradar.app.feature.subscription.OffersPrompt
+import com.xradar.app.feature.subscription.OffersSheet
+import com.xradar.app.feature.subscription.PaywallReason
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -71,6 +76,7 @@ fun DriveRoute(
     val dismissedAlerts by viewModel.dismissedAlerts.collectAsStateWithLifecycle()
     val votedReports by viewModel.votedReports.collectAsStateWithLifecycle()
     val account by com.xradar.app.data.account.AccountRepository.account.collectAsStateWithLifecycle()
+    val offers by OffersPrompt.reason.collectAsStateWithLifecycle()
     // Back from Android's settings (or anywhere else): notification access may have changed.
     LifecycleStartEffect(viewModel) {
         viewModel.onHudStarted()
@@ -84,6 +90,12 @@ fun DriveRoute(
         onReport = viewModel::report,
         isAdmin = account?.role == com.xradar.app.core.model.Role.Admin,
         restricted = account?.isRestricted == true,
+        isGuest = account?.role == com.xradar.app.core.model.Role.Guest,
+        limits = account?.limits,
+        account = account,
+        offers = offers,
+        onBlocked = OffersPrompt::show,
+        onCloseOffers = OffersPrompt::dismiss,
         onDeleteReport = viewModel::deleteReport,
         dismissedAlerts = dismissedAlerts,
         onDismissAlert = viewModel::dismissAlert,
@@ -109,6 +121,15 @@ fun DriveScreen(
     isAdmin: Boolean = false,
     /** Trial over / subscription lapsed: map only — no navigation, no reporting. */
     restricted: Boolean = false,
+    /** Guests: no music shortcut, limits of the day ([limits]). */
+    isGuest: Boolean = false,
+    limits: DailyLimits? = null,
+    account: Account? = null,
+    /** The offers shown over the map, and why; null when hidden. */
+    offers: PaywallReason? = null,
+    /** A blocked action (account blocked, a guest's limit, a members' feature): the offers show. */
+    onBlocked: (PaywallReason) -> Unit = {},
+    onCloseOffers: () -> Unit = {},
     onDeleteReport: (String) -> Unit = {},
     /** Keys of the alerts the driver swiped away; kept off the HUD for now. */
     dismissedAlerts: Set<String> = emptySet(),
@@ -128,7 +149,6 @@ fun DriveScreen(
     var reportOpen by remember { mutableStateOf(false) }
     var limitReportOpen by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
-    var paywall by remember { mutableStateOf(false) }
     var dockOpen by remember { mutableStateOf(false) }
 
     val topMode = when {
@@ -173,7 +193,13 @@ fun DriveScreen(
                             GuidanceBanner(instruction = it, modifier = Modifier.fillMaxWidth())
                         }
                         TopMode.Search -> HudSearchBar(
-                            onClick = { if (restricted) paywall = true else onOpenSearch() },
+                            onClick = {
+                                when {
+                                    restricted -> onBlocked(PaywallReason.Restricted)
+                                    limits?.tripsLeft() == 0 -> onBlocked(PaywallReason.TripLimit)
+                                    else -> onOpenSearch()
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         TopMode.None -> Unit
@@ -290,7 +316,7 @@ fun DriveScreen(
             // "E3": the drop-up dock — speed + live limit, red-light timer, and the
             // options one drag away. Replaces the old ETA pill / speed / Options row.
             // Its limit sign opens the speed-limit sheet (a position is needed to report).
-            val openLimitReport: () -> Unit = { if (restricted) paywall = true else limitReportOpen = true }
+            val openLimitReport: () -> Unit = { if (restricted) onBlocked(PaywallReason.Restricted) else limitReportOpen = true }
             DriveDock(
                 speedKmh = state.speedKmh,
                 limitKmh = state.speedLimitKmh,
@@ -324,11 +350,18 @@ fun DriveScreen(
                         size = MAP_CONTROL_SIZE,
                     )
                 }
-                // Music: opens the mini-player under the search bar; a second tap closes it.
+                // Music: opens the mini-player under the search bar; a second tap closes it. The
+                // shortcut is for members; an open banner can always be closed.
                 XRadarIconButton(
                     icon = ImageVector.vectorResource(R.drawable.ic_music),
                     contentDescription = if (state.musicOpen) "Fermer la musique" else "Musique",
-                    onClick = { onMusic(MusicAction.ToggleBanner) },
+                    onClick = {
+                        when {
+                            state.musicOpen || (!restricted && !isGuest) -> onMusic(MusicAction.ToggleBanner)
+                            restricted -> onBlocked(PaywallReason.Restricted)
+                            else -> onBlocked(PaywallReason.Music)
+                        }
+                    },
                     tint = colors.textPrimary,
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),
@@ -338,7 +371,13 @@ fun DriveScreen(
                 XRadarIconButton(
                     icon = ImageVector.vectorResource(R.drawable.ic_report),
                     contentDescription = "Signaler",
-                    onClick = { if (restricted) paywall = true else reportOpen = true },
+                    onClick = {
+                        when {
+                            restricted -> onBlocked(PaywallReason.Restricted)
+                            limits?.reportsLeft() == 0 -> onBlocked(PaywallReason.ReportLimit)
+                            else -> reportOpen = true
+                        }
+                    },
                     tint = colors.hazard,
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),
@@ -368,9 +407,6 @@ fun DriveScreen(
             )
         }
 
-        if (paywall) {
-            SubscriptionRequired(onClose = { paywall = false })
-        }
 
         pendingDelete?.let { id ->
             DeleteConfirm(
@@ -378,6 +414,8 @@ fun DriveScreen(
                 onConfirm = { onDeleteReport(id); pendingDelete = null },
             )
         }
+
+        offers?.let { reason -> OffersSheet(reason, account, onClose = onCloseOffers) }
     }
 }
 
@@ -429,44 +467,6 @@ private fun VoiceButton() {
         border = BorderStroke(1.dp, colors.border),
         size = 48.dp,
     )
-}
-
-/** Shown when a restricted account tries to navigate or report. */
-@Composable
-private fun SubscriptionRequired(onClose: () -> Unit) {
-    val colors = XRadarTheme.colors
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.scrim)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose),
-        contentAlignment = Alignment.Center,
-    ) {
-        XRadarSurface(
-            modifier = Modifier.padding(XRadarTheme.spacing.xxl),
-            shape = XRadarTheme.shapes.xl,
-            color = colors.surfaceElevated,
-            border = BorderStroke(1.dp, colors.border),
-        ) {
-            Column(
-                modifier = Modifier.padding(XRadarTheme.spacing.lg),
-                verticalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.md),
-            ) {
-                XRadarText("Abonnement requis", style = XRadarTheme.typography.headline, color = colors.textPrimary)
-                XRadarText(
-                    "Ton essai gratuit est terminé. La carte reste disponible ; la navigation, " +
-                        "les alertes et les signalements reviennent avec un abonnement membre.",
-                    style = XRadarTheme.typography.subhead,
-                    color = colors.textSecondary,
-                )
-                Box(
-                    Modifier.fillMaxWidth().clip(XRadarTheme.shapes.lg).background(colors.accent)
-                        .clickable(onClick = onClose).padding(vertical = XRadarTheme.spacing.md),
-                    contentAlignment = Alignment.Center,
-                ) { XRadarText("Compris", style = XRadarTheme.typography.bodyStrong, color = colors.onAccent) }
-            }
-        }
-    }
 }
 
 @Composable

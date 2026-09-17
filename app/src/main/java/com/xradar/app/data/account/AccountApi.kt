@@ -3,6 +3,7 @@ package com.xradar.app.data.account
 import com.xradar.app.BuildConfig
 import com.xradar.app.core.model.Access
 import com.xradar.app.core.model.Account
+import com.xradar.app.core.model.DailyLimits
 import com.xradar.app.core.model.Role
 import com.xradar.app.core.model.TripRecord
 import com.xradar.app.data.network.FallbackDns
@@ -267,6 +268,7 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         canNavigate = if (o.has("canNavigate")) o.optBoolean("canNavigate") else true,
         accessEndsAt = o.optString("accessEndsAt").ifBlank { null }.takeUnless { o.isNull("accessEndsAt") },
         trust = o.optDouble("trust", 2.5),
+        limits = o.optJSONObject("limits")?.let(::parseLimits),
     )
 
     /** POST returning {ok}/{error}: null on success, else a friendly message. */
@@ -328,7 +330,16 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         else -> err.replaceFirstChar { it.uppercase() }
     }
 
-    private companion object {
-        val JSON = "application/json; charset=utf-8".toMediaType()
+    companion object {
+        private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /** A guest's daily limits, as `/me` sends them (and as the account is cached). */
+        fun parseLimits(o: JSONObject) = DailyLimits(
+            day = o.optString("day"),
+            reportsPerDay = o.optInt("reportsPerDay"),
+            reportsToday = o.optInt("reportsToday"),
+            tripsPerDay = o.optInt("tripsPerDay"),
+            tripsToday = o.optInt("tripsToday"),
+        )
     }
 }

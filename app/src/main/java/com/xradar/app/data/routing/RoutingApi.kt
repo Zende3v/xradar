@@ -4,6 +4,8 @@ import com.xradar.app.BuildConfig
 import com.xradar.app.core.model.GeoPoint
 import com.xradar.app.core.model.Route
 import com.xradar.app.core.model.RouteStep
+import com.xradar.app.data.account.AccessDenial
+import com.xradar.app.data.account.AccessDeniedException
 import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,7 +23,11 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    /** [avoid] holds "tolls" and/or "highways"; the backend maps them to ORS features. */
+    /**
+     * [avoid] holds "tolls", "highways" and/or "traffic"; the backend maps them to ORS features.
+     * A restricted account, or a guest past today's trips, is refused: that throws
+     * [AccessDeniedException]; null is a route not obtained.
+     */
     suspend fun route(
         from: GeoPoint,
         to: GeoPoint,
@@ -35,8 +41,9 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             com.xradar.app.data.account.AccountRepository.token?.let { header("Authorization", "Bearer $it") }
         }.build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@use null
-            val body = response.body?.string() ?: return@use null
+            val body = response.body?.string()
+            AccessDenial.of(response.code, body)?.let { throw AccessDeniedException(it) }
+            if (!response.isSuccessful || body == null) return@use null
             parse(body)
         }
     }

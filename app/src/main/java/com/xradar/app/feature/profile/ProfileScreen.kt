@@ -41,6 +41,8 @@ import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarScreenScaffold
 import com.xradar.app.designsystem.component.XRadarText
 import com.xradar.app.designsystem.theme.XRadarTheme
+import com.xradar.app.feature.subscription.OffersSheet
+import com.xradar.app.feature.subscription.PaywallReason
 import kotlinx.coroutines.launch
 
 @Composable
@@ -65,6 +67,7 @@ fun ProfileScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var offers by remember { mutableStateOf<PaywallReason?>(null) }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
     ) { uri ->
@@ -79,7 +82,7 @@ fun ProfileScreen(
                 .padding(horizontal = spacing.lg, vertical = spacing.md),
             verticalArrangement = Arrangement.spacedBy(spacing.xl),
         ) {
-            Header(account, onPickAvatar)
+            Header(account, onPickAvatar, onPhotoOffers = { offers = PaywallReason.Photo })
             AccessCard(account)
 
             if (account?.email != null && account.emailVerified == false) {
@@ -87,7 +90,7 @@ fun ProfileScreen(
             }
 
             if (account?.role == Role.Guest) {
-                GuestNote()
+                GuestNote(account)
             }
 
             XRadarListGroup {
@@ -121,6 +124,8 @@ fun ProfileScreen(
             Spacer(Modifier.height(spacing.xxl))
         }
 
+        offers?.let { reason -> OffersSheet(reason, account, onClose = { offers = null }) }
+
         if (confirmDelete) {
             XRadarConfirmDialog(
                 title = "Supprimer ton compte ?",
@@ -145,7 +150,7 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun Header(account: Account?, onPickAvatar: (() -> Unit)?) {
+private fun Header(account: Account?, onPickAvatar: (() -> Unit)?, onPhotoOffers: () -> Unit) {
     val colors = XRadarTheme.colors
     val role = account?.role ?: Role.Guest
     val name = account?.displayName?.takeIf { it.isNotBlank() } ?: role.label
@@ -153,16 +158,20 @@ private fun Header(account: Account?, onPickAvatar: (() -> Unit)?) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.md),
     ) {
-        val avatar = Modifier.let { m -> if (onPickAvatar != null) m.clickable(onClick = onPickAvatar) else m }
+        // Members change their photo; for the others it is one of the membership's features.
+        val avatar = Modifier.clickable(onClick = onPickAvatar ?: onPhotoOffers)
         Box(avatar, contentAlignment = Alignment.Center) {
             AsyncAvatar(url = account?.avatarUrl, initial = name, size = 64.dp)
         }
         Column(verticalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.xs)) {
             XRadarText(name, style = XRadarTheme.typography.titleLarge, color = colors.textPrimary)
             XRadarBadge(role.label, glow = true)
-            if (onPickAvatar != null) {
-                XRadarText("Changer la photo", style = XRadarTheme.typography.caption, color = colors.accent)
-            }
+            XRadarText(
+                if (onPickAvatar != null) "Changer la photo" else "Photo réservée aux membres",
+                style = XRadarTheme.typography.caption,
+                color = colors.accent,
+                modifier = Modifier.clickable(onClick = onPickAvatar ?: onPhotoOffers),
+            )
         }
     }
 }
@@ -237,10 +246,13 @@ private fun VerifyEmailCard() {
 }
 
 @Composable
-private fun GuestNote() {
+private fun GuestNote(account: Account) {
+    val reports = account.limits?.reportsPerDay ?: 5
+    val trips = account.limits?.tripsPerDay ?: 7
     XRadarCard {
         XRadarText(
-            "Compte invité : 7 jours d'essai gratuit, puis la navigation est réservée aux membres.",
+            "Compte invité : 7 jours d'essai gratuit, $reports signalements et $trips trajets par jour. " +
+                "Ensuite, la carte seule sans abonnement.",
             style = XRadarTheme.typography.subhead,
             color = XRadarTheme.colors.textSecondary,
         )
