@@ -15,6 +15,8 @@ data class LocationSample(
     val accuracyM: Float?,
     /** Elapsed-realtime timestamp in millis. */
     val timeMs: Long,
+    /** Margin of error of [speedMps], in metres/second, or null when the fix has none. */
+    val speedAccuracyMps: Float? = null,
 ) {
     val speedKmh: Float get() = (speedMps ?: 0f) * 3.6f
 }

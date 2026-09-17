@@ -34,16 +34,16 @@ class SignApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }.getOrDefault(emptyList())
     }
 
-    /** All signs along the whole route ([points] as the polyline). */
-    suspend fun route(points: List<GeoPoint>): List<RoadSign> = withContext(Dispatchers.IO) {
+    /** All signs along the whole route ([points] as the polyline); null when the request failed. */
+    suspend fun route(points: List<GeoPoint>): List<RoadSign>? = withContext(Dispatchers.IO) {
         if (points.size < 2) return@withContext emptyList()
         val coords = JSONArray()
         points.forEach { coords.put(JSONArray().put(it.lon).put(it.lat)) }
         val body = JSONObject().put("coordinates", coords).toString().toRequestBody(JSON)
         runCatching {
             client.newCall(Request.Builder().url(url("/api/signs/route")).post(body).build())
-                .execute().use { r -> parse(r.body?.string()) }
-        }.getOrDefault(emptyList())
+                .execute().use { r -> if (r.isSuccessful) parse(r.body?.string()) else null }
+        }.getOrNull()
     }
 
     /**

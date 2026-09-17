@@ -368,15 +368,15 @@ private fun ReportTile(type: ReportType, onClick: () -> Unit, modifier: Modifier
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(XRadarTheme.spacing.sm, Alignment.CenterVertically),
     ) {
-        // Every category on the same disc; the icon in orange with a soft glow.
+        // Every category on the same disc; the icon in white with a soft glow.
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .background(colors.reportTile, CircleShape),
+                .background(colors.glowTile, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             if (painter != null) {
-                XRadarGlowIcon(painter = painter, contentDescription = null, tint = colors.reportIcon, size = 30.dp)
+                XRadarGlowIcon(painter = painter, contentDescription = null, tint = colors.glowIcon, size = 30.dp)
             }
         }
         XRadarText(

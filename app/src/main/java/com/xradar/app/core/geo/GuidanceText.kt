@@ -17,7 +17,8 @@ object GuidanceText {
         "arrive" -> Maneuver.Arrive
         "roundabout", "rotary", "roundabout turn" -> Maneuver.Roundabout
         "merge" -> Maneuver.Merge
-        "on ramp", "off ramp" -> Maneuver.Ramp
+        // The ramp arrow points right: a ramp on the left gets a left arrow.
+        "on ramp", "off ramp" -> if (step.modifier?.contains("left") == true) Maneuver.SlightLeft else Maneuver.Ramp
         "fork" -> when {
             step.modifier?.contains("left") == true -> Maneuver.ForkLeft
             step.modifier?.contains("right") == true -> Maneuver.ForkRight

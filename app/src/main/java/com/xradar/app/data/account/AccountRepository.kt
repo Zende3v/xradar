@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.xradar.app.core.model.Account
 import com.xradar.app.core.model.Role
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,12 +51,18 @@ object AccountRepository {
         }
     }
 
-    /** Refresh from the backend: validate the token, else restore a device session. */
+    /** Refresh from the backend: validate the token, else restore a device session. Offline, the cached session stays. */
     suspend fun refresh(context: Context) {
         val id = ensureDeviceId(context)
         val t = token
         if (t != null) {
-            val fresh = api.me(t)
+            val fresh = try {
+                api.me(t)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return
+            }
             if (fresh != null) {
                 store(fresh, t)
                 return
@@ -63,6 +70,15 @@ object AccountRepository {
             setToken(null) // token no longer valid
         }
         api.authDevice(id)?.let { store(it.account, it.token) }
+    }
+
+    /** The account behind the token, or null when it could not be read (offline, server error, invalid). */
+    private suspend fun meOrNull(t: String): Account? = try {
+        api.me(t)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     suspend fun usernameAvailable(username: String): Boolean = api.usernameAvailable(username)
@@ -88,7 +104,7 @@ object AccountRepository {
     /** Re-read the account (access status can change: trial ending, referral…). */
     suspend fun reload() {
         val t = token ?: return
-        api.me(t)?.let { store(it, t) }
+        meOrNull(t)?.let { store(it, t) }
     }
 
     /** Email (member) or username (guest), and the password; the account then sticks to this phone. */
@@ -113,7 +129,7 @@ object AccountRepository {
     suspend fun verifyEmail(code: String): String? {
         val email = _account.value?.email ?: return "Aucun email"
         val err = api.verify(email, code)
-        if (err == null) token?.let { t -> api.me(t)?.let { store(it, t) } } // refresh emailVerified
+        if (err == null) token?.let { t -> meOrNull(t)?.let { store(it, t) } } // refresh emailVerified
         return err
     }
 

@@ -8,8 +8,9 @@ import com.xradar.app.core.model.UserReport
  */
 class ReportsRepository(private val api: ReportsApi = ReportsApi()) {
 
-    suspend fun near(lat: Double, lon: Double, radiusM: Int): NearReports =
-        runCatching { api.near(lat, lon, radiusM) }.getOrDefault(NearReports())
+    /** Null when the reports could not be loaded (keep the ones shown). */
+    suspend fun near(lat: Double, lon: Double, radiusM: Int): NearReports? =
+        runCatching { api.near(lat, lon, radiusM) }.getOrNull()
 
     suspend fun create(report: NewReport, token: String?, deviceId: String?): UserReport? =
         runCatching { api.create(report, token, deviceId) }.getOrNull()

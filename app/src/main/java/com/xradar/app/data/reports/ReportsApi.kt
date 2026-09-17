@@ -43,11 +43,12 @@ class ReportsApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    suspend fun near(lat: Double, lon: Double, radiusM: Int): NearReports = withContext(Dispatchers.IO) {
+    /** Null when the backend did not answer properly: not "no reports", so the caller keeps its list. */
+    suspend fun near(lat: Double, lon: Double, radiusM: Int): NearReports? = withContext(Dispatchers.IO) {
         val url = "${baseUrl.trimEnd('/')}/api/reports/near?lat=$lat&lon=$lon&radius=$radiusM"
         client.newCall(Request.Builder().url(url).build()).execute().use { response ->
-            if (!response.isSuccessful) return@use NearReports()
-            val body = response.body?.string() ?: return@use NearReports()
+            if (!response.isSuccessful) return@use null
+            val body = response.body?.string() ?: return@use null
             val root = JSONObject(body)
             val reports = root.optJSONArray("reports")?.let { arr ->
                 (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(::toReport) }

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.xradar.app.core.geo.Geo
+import com.xradar.app.core.geo.GuidanceSides
 import com.xradar.app.core.geo.GuidanceText
 import com.xradar.app.core.geo.RoutePath
 import com.xradar.app.core.model.GeoPoint
@@ -17,6 +18,7 @@ import com.xradar.app.core.model.RadarZone
 import com.xradar.app.core.model.ReportType
 import com.xradar.app.core.model.RoadAlert
 import com.xradar.app.core.model.Route
+import com.xradar.app.core.model.RouteStep
 import com.xradar.app.core.model.SignType
 import com.xradar.app.core.model.SpeedLimitChange
 import com.xradar.app.core.model.SpeedLimitSource
@@ -40,6 +42,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -109,6 +112,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     // Active route as a measurable polyline + each maneuver's distance along it.
     private var path: RoutePath? = null
     private var stepAlong: DoubleArray = DoubleArray(0)
+    /** The route's steps, each turn's side checked against the road's own bend. */
+    private var guidanceSteps: List<RouteStep> = emptyList()
     // The route thinned to one point every couple of km, plus its padded bounding box:
     // enough to ask "is this alert on my trip?" thousands of times without cost.
     private var corridor: List<GeoPoint> = emptyList()
@@ -320,7 +325,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     lastWayId = result?.wayId ?: lastWayId
                     val v = result?.kmh
                     val now = System.currentTimeMillis()
-                    if (v != null) {
+                    if (result == null) {
+                        // No answer: the sign shown stays, and the next poll asks again.
+                        lastLat = Double.NaN
+                    } else if (v != null) {
                         osmLimit.value = v
                         lastHitAt = now
                     } else if (now - lastHitAt > LIMIT_STALE_MS) {
@@ -363,14 +371,16 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 val from = simulated?.let { GeoPoint(it.lat, it.lon) }
                     ?: fix?.let { GeoPoint(it.latitude, it.longitude) }
                     ?: return@collect
-                // One silent retry: a single dropped request should not kill the trip.
+                // Silent retries: a connection dropping for a few seconds should not kill the trip.
                 var route = routingRepository.route(
                     from,
                     GeoPoint(destination.lat, destination.lon),
                     avoidOptions(),
                 )
-                if (route == null) {
-                    delay(ROUTE_RETRY_MS)
+                for (wait in ROUTE_RETRY_MS) {
+                    if (route != null) break
+                    delay(wait)
+                    if (ActiveTripRepository.destination.value != destination) break
                     val again = if (simulated != null) from else {
                         LocationRepository.location.value
                             ?.let { GeoPoint(it.latitude, it.longitude) } ?: from
@@ -381,6 +391,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         avoidOptions(),
                     )
                 }
+                if (ActiveTripRepository.destination.value != destination) return@collect
                 routeError.value = route == null
                 ActiveTripRepository.setRoute(route)
             }
@@ -443,7 +454,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Road signs belong to the trip: the whole route at once, nothing at all when simply
         // driving around.
         viewModelScope.launch {
-            ActiveTripRepository.route.collect { route -> loadRouteSigns(route) }
+            ActiveTripRepository.route.collectLatest { route -> loadRouteSigns(route) }
         }
         // Reset the turn-by-turn cursor whenever the route changes (new trip or recalc).
         viewModelScope.launch {
@@ -453,6 +464,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 announcedNear = false
                 path = route?.points?.takeIf { it.size >= 2 }?.let { RoutePath(it) }
                 stepAlong = buildStepAlong(path, route)
+                guidanceSteps = GuidanceSides.checked(route?.steps.orEmpty(), stepAlong, path)
                 buildCorridor(route)
                 if (route == null || route.steps.size < 2) {
                     guidance.value = null
@@ -474,7 +486,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
      * line, and every spoken number is a real marker crossed at the moment it is said.
      */
     private fun updateGuidance(sample: LocationSample?, route: Route?) {
-        val steps = route?.steps ?: emptyList()
+        val raw = route?.steps ?: emptyList()
+        val steps = if (guidanceSteps.size == raw.size) guidanceSteps else raw
         if (sample == null || steps.size < 2) {
             guidance.value = null
             return
@@ -487,9 +500,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             ?.takeIf { it.offRouteMeters <= ON_ROUTE_M }?.alongMeters
 
         if (driverAlong != null) {
-            // We know exactly how far along the road we are: a maneuver is behind us
-            // as soon as we pass its point, no guessing from straight-line distances.
-            while (stepIndex < steps.size - 1 && driverAlong >= stepAlong[stepIndex] - STEP_REACHED_M) {
+            // We know exactly how far along the road we are: a maneuver is behind us once we are
+            // STEP_PASSED_M past its point, so the banner keeps the turn being made until it is
+            // done instead of already showing the next one.
+            while (stepIndex < steps.size - 1 && driverAlong >= stepAlong[stepIndex] + STEP_PASSED_M) {
                 stepIndex++
                 announcedFar = false
                 announcedNear = false
@@ -500,7 +514,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 val curDist = Geo.haversine(sample.latitude, sample.longitude, cur.location.lat, cur.location.lon)
                 val next = steps[stepIndex + 1]
                 val nextDist = Geo.haversine(sample.latitude, sample.longitude, next.location.lat, next.location.lon)
-                if (curDist < STEP_REACHED_M || nextDist < curDist) {
+                if (curDist < STEP_PASSED_M || nextDist < curDist) {
                     stepIndex++
                     announcedFar = false
                     announcedNear = false
@@ -658,7 +672,21 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadRouteSigns(route: Route?) {
         val points = route?.points?.takeIf { it.size >= 2 }
         val rp = points?.let { RoutePath(it) }
-        val list = if (points != null) signApi.route(points) else emptyList()
+        val list = if (points == null) {
+            emptyList()
+        } else {
+            // Without an answer the signs already shown stay, and the route asks again, less and
+            // less often, until it gets them or is replaced.
+            var answer = signApi.route(points)
+            var wait = SIGNS_RETRY_MS
+            while (answer == null) {
+                delay(wait)
+                if (ActiveTripRepository.route.value !== route) return
+                wait = (wait * 2).coerceAtMost(SIGNS_RETRY_MAX_MS)
+                answer = signApi.route(points)
+            }
+            answer
+        }
         signs.value = list
         routeLimits = if (rp == null) {
             emptyList()
@@ -722,7 +750,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun refreshReports(lat: Double, lon: Double) {
-        val near = reportsRepository.near(lat, lon, radiusM())
+        // A failed reload keeps the reports already shown: a dropped connection is not an empty road.
+        val near = reportsRepository.near(lat, lon, radiusM()) ?: return
         reports.value = near.reports.filterNot { it.id in deniedReports }
         zones.value = near.zones
     }
@@ -1039,9 +1068,13 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val AHEAD_CONE_DEG = 75.0
         const val OFF_ROUTE_M = 45.0
         const val RECALC_COOLDOWN_MS = 2_500L
-        const val ROUTE_RETRY_MS = 1_200L
+        /** A trip's first route: asked again after these pauses before giving up. */
+        val ROUTE_RETRY_MS = longArrayOf(1_200L, 3_000L, 6_000L)
+        /** Route signs not loaded: asked again after 3 s, then less often, up to every 30 s. */
+        const val SIGNS_RETRY_MS = 3_000L
+        const val SIGNS_RETRY_MAX_MS = 30_000L
         // Turn-by-turn thresholds.
-        const val STEP_REACHED_M = 25.0
+        const val STEP_PASSED_M = 12.0
         const val NEAR_ANNOUNCE_M = 45
         const val NEAR_ANNOUNCE_S = 4.0
         const val FAR_MIN_M = 150.0

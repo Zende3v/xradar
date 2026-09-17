@@ -188,12 +188,16 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         outcome("/api/accounts/login", payload)
     }
 
-    /** Refresh the account from a session token; null if the token is invalid. */
+    /**
+     * The account behind a session token; null when the token is no longer valid. A server or
+     * tunnel error throws, like a lost connection: the session must not be dropped over it.
+     */
     suspend fun me(token: String): Account? = withContext(Dispatchers.IO) {
         val req = Request.Builder().url(url("/api/accounts/me")).header("Authorization", "Bearer $token").build()
         client.newCall(req).execute().use { r ->
-            if (!r.isSuccessful) return@use null
-            val body = r.body?.string() ?: return@use null
+            if (r.code == 401 || r.code == 403) return@use null
+            if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code}")
+            val body = r.body?.string() ?: throw java.io.IOException("empty answer")
             JSONObject(body).optJSONObject("account")?.let(::parseAccount)
         }
     }

@@ -46,4 +46,5 @@ internal fun Location.toSample(): LocationSample = LocationSample(
     bearingDeg = if (hasBearing()) bearing else null,
     accuracyM = if (hasAccuracy()) accuracy else null,
     timeMs = time,
+    speedAccuracyMps = if (hasSpeedAccuracy()) speedAccuracyMetersPerSecond else null,
 )

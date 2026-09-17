@@ -99,9 +99,9 @@ data class XRadarColors(
     val radarMobile: Color,
     val controlZone: Color,
     val hazard: Color,
-    // Report picker: every category on the same disc, its icon in orange with a soft glow.
-    val reportTile: Color = Palette.ReportDisc,
-    val reportIcon: Color = Palette.OrangeD,
+    // Report picker and Menu: a white icon with a soft glow on a dark tile, same in both themes.
+    val glowTile: Color = Palette.ReportDisc,
+    val glowIcon: Color = Color.White,
 )
 
 val XRadarDarkColors = XRadarColors(
@@ -131,8 +131,8 @@ val XRadarDarkColors = XRadarColors(
     radarMobile = Palette.OrangeD,
     controlZone = Palette.IndigoD,
     hazard = Palette.YellowD,
-    reportTile = Palette.ReportDisc,
-    reportIcon = Palette.OrangeD,
+    glowTile = Palette.ReportDisc,
+    glowIcon = Color.White,
 )
 
 val XRadarLightColors = XRadarColors(
@@ -162,6 +162,6 @@ val XRadarLightColors = XRadarColors(
     radarMobile = Palette.OrangeL,
     controlZone = Palette.IndigoL,
     hazard = Palette.YellowL,
-    reportTile = Palette.ReportDisc,
-    reportIcon = Palette.OrangeL,
+    glowTile = Palette.ReportDisc,
+    glowIcon = Color.White,
 )
