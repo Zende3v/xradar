@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xradar.app.core.model.ReportType
 import com.xradar.app.core.model.SpeedStatus
 import com.xradar.app.core.model.TripInfo
 import com.xradar.app.data.preferences.AppPreferences
@@ -415,7 +416,7 @@ private fun Cluster(value: String, label: String, valueColor: Color, modifier: M
     }
 }
 
-/** Everything the old modal sheet held: alerts, voice, vibration, route options. */
+/** The alerts, one switch per category, and the route options. */
 @Composable
 private fun OptionsBody() {
     val colors = XRadarTheme.colors
@@ -428,21 +429,11 @@ private fun OptionsBody() {
         Toggle("Radar fixe", XRadarIcons.Radar, colors.radarFixed, prefs.radarFixed) {
             AppPreferences.updateAlerts { it.copy(radarFixed = !it.radarFixed) }
         }
-        RowDivider()
-        Toggle("Radar mobile", XRadarIcons.Radar, colors.radarMobile, prefs.radarMobile) {
-            AppPreferences.updateAlerts { it.copy(radarMobile = !it.radarMobile) }
-        }
-        RowDivider()
-        Toggle("Caméra (voie publique)", XRadarIcons.Camera, colors.radarFixed, prefs.cameras) {
-            AppPreferences.updateAlerts { it.copy(cameras = !it.cameras) }
-        }
-        RowDivider()
-        Toggle("Zone de contrôle", XRadarIcons.Shield, colors.controlZone, prefs.controlZones) {
-            AppPreferences.updateAlerts { it.copy(controlZones = !it.controlZones) }
-        }
-        RowDivider()
-        Toggle("Danger & travaux", XRadarIcons.Warning, colors.hazard, prefs.hazards) {
-            AppPreferences.updateAlerts { it.copy(hazards = !it.hazards) }
+        ReportType.ALERT_OPTIONS.forEach { type ->
+            RowDivider()
+            Toggle(type.label, type.alertType.icon(), type.alertType.color(), prefs.shows(type)) {
+                AppPreferences.updateAlerts { it.toggled(type) }
+            }
         }
     }
 
@@ -453,6 +444,10 @@ private fun OptionsBody() {
         RowDivider()
         Toggle("Éviter les autoroutes", XRadarIcons.Navigation, colors.accent, settings.avoidHighways) {
             AppPreferences.updateSettings { it.copy(avoidHighways = !it.avoidHighways) }
+        }
+        RowDivider()
+        Toggle("Éviter les bouchons", XRadarIcons.Warning, colors.hazard, settings.avoidTraffic) {
+            AppPreferences.updateSettings { it.copy(avoidTraffic = !it.avoidTraffic) }
         }
     }
 }

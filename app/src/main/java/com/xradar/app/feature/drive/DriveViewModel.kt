@@ -1,8 +1,10 @@
 package com.xradar.app.feature.drive
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.xradar.app.core.drive.AlertBeeps
 import com.xradar.app.core.geo.Geo
 import com.xradar.app.core.geo.GuidanceSides
 import com.xradar.app.core.geo.GuidanceText
@@ -25,8 +27,8 @@ import com.xradar.app.core.model.SpeedLimitSource
 import com.xradar.app.core.model.TripInfo
 import com.xradar.app.core.model.TripRecord
 import com.xradar.app.core.model.UserReport
+import com.xradar.app.core.model.isEnforcement
 import com.xradar.app.data.account.AccountRepository
-import com.xradar.app.data.preferences.AlertPreferences
 import com.xradar.app.data.preferences.AppPreferences
 import com.xradar.app.data.radar.RadarRepository
 import com.xradar.app.data.reports.NewReport
@@ -36,6 +38,7 @@ import com.xradar.app.data.routing.RoutingRepository
 import com.xradar.app.data.speedlimits.NewSpeedLimitReport
 import com.xradar.app.data.speedlimits.SpeedLimitRepository
 import com.xradar.app.data.stats.TripHistoryRepository
+import com.xradar.app.feature.drive.component.key
 import com.xradar.app.location.LocationRepository
 import com.xradar.app.media.MediaRepository
 import kotlinx.coroutines.delay
@@ -86,6 +89,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** Set when a destination was chosen but routing came back empty. */
     private val routeError = MutableStateFlow(false)
     private val speaker = GuidanceSpeaker(application)
+    private val sounds = AlertSoundPlayer(application)
+    // Alert sounds: the alerts already announced by a sound, and those past their laser burst.
+    private val soundedAlerts = HashSet<String>()
+    private val burstAlerts = HashSet<String>()
     /** Music in the three supported apps. Only [uiState] reads it — see there. */
     private val media = MediaRepository.run {
         init(application)
@@ -153,11 +160,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Trial over: the map stays, the radars and alerts do not.
         val restricted = AccountRepository.account.value?.isRestricted == true
         val enabledRadars = if (restricted) emptyList() else radarList.filter {
-            (it.isSpeedRadar && prefs.radarFixed) || (!it.isSpeedRadar && prefs.cameras)
+            (it.isSpeedRadar && prefs.radarFixed) || (!it.isSpeedRadar && prefs.shows(ReportType.Camera))
         }
         // Everything the backend still serves is alive (it prunes under the minimum
         // score), so the only filter left here is what the driver asked to see.
-        val enabledReports = if (restricted) emptyList() else reportList.filter { reportEnabled(it.type, prefs) }
+        val enabledReports = if (restricted) emptyList() else reportList.filter { prefs.shows(it.type) }
         // While navigating, keep what is on the trip: within 15 km of the route itself
         // (so the whole itinerary stays visible when you zoom out) or of the driver.
         val here = sample
@@ -169,7 +176,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             else -> (sample?.speedKmh ?: 0f).roundToInt().coerceAtLeast(0)
         }
         val (radarAlerts, limit) = relevantAheadOf(shownRadars, sample, speedKmh)
-        val reportAlerts = reportsAhead(shownReports, sample, speedKmh)
+        // A traffic jam stays on the map but is no alert: the route can avoid it instead.
+        val reportAlerts = reportsAhead(shownReports.filter { it.type.raisesAlerts }, sample, speedKmh)
         // Every alert stays: the HUD stacks them. The nearest one still drives the voice
         // and the trip's alert count, exactly as before.
         val alerts = (radarAlerts + reportAlerts).sortedBy { it.distanceMeters }
@@ -342,7 +350,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Toll / motorway preferences: recompute the live route as soon as they change.
         viewModelScope.launch {
             AppPreferences.settings
-                .map { it.avoidTolls to it.avoidHighways }
+                .map { Triple(it.avoidTolls, it.avoidHighways, it.avoidTraffic) }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
@@ -421,12 +429,36 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 if (present && tripActive) tripAlerts++
             }
         }
-        // Voice announcements for radars/reports (distance steps) + overspeed.
+        // Sounds as alerts show up; voice announcements for radars/reports (distance steps) + overspeed.
         viewModelScope.launch {
             driveState.collect { s ->
-                if (!AppPreferences.alerts.value.voice) return@collect
+                val prefs = AppPreferences.alerts.value
+                if (prefs.sound) soundNewAlerts(s.alerts, prefs.vibration)
+                if (!prefs.voice) return@collect
                 announceAlert(s.alert)
                 announceOverspeed(s.speedKmh, s.speedLimitKmh)
+            }
+        }
+        // Radarbot's approach: beeps faster and faster toward the nearest speed enforcement
+        // ahead, then the laser burst at it. Quiet while the voice speaks or the car waits.
+        viewModelScope.launch {
+            var lastBeepAt = 0L
+            while (true) {
+                delay(BEEP_TICK_MS)
+                val prefs = AppPreferences.alerts.value
+                val s = driveState.value
+                val nearest = s.alert ?: continue
+                if (!prefs.sound || speaker.isSpeaking || !nearest.type.isEnforcement) continue
+                if (s.speedKmh < AlertBeeps.MIN_SPEED_KMH) continue
+                if (nearest.distanceMeters <= AlertBeeps.BURST_METERS) {
+                    if (burstAlerts.add(nearest.key)) sounds.play(AlertSound.Laser, prefs.vibration)
+                    continue
+                }
+                val interval = AlertBeeps.intervalMs(nearest.distanceMeters) ?: continue
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastBeepAt < interval) continue
+                lastBeepAt = now
+                sounds.play(AlertSound.Beep, prefs.vibration)
             }
         }
         // Recompute the route if the driver leaves it (off-route detection).
@@ -626,6 +658,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         speaker.shutdown()
+        sounds.release()
         super.onCleared()
     }
 
@@ -709,6 +742,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         return buildList {
             if (s.avoidTolls) add("tolls")
             if (s.avoidHighways) add("highways")
+            if (s.avoidTraffic) add("traffic")
         }
     }
 
@@ -921,13 +955,18 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         speaker.speak("Vous dépassez la limite de $limitKmh.")
     }
 
-    private fun reportEnabled(type: ReportType, prefs: AlertPreferences): Boolean = when (type) {
-        ReportType.RadarMobile -> prefs.radarMobile
-        ReportType.Camera -> prefs.cameras
-        ReportType.ControlZone -> prefs.controlZones
-        ReportType.VoitureRadar -> true
-        // Everything else is a road hazard, under the same toggle.
-        else -> prefs.hazards
+    /**
+     * A sound as each alert shows up: the detector's chirps for speed enforcement, a chime for a
+     * road hazard. One sound for several alerts appearing together.
+     */
+    private fun soundNewAlerts(alerts: List<RoadAlert>, vibrate: Boolean) {
+        if (soundedAlerts.size > 300) {
+            soundedAlerts.clear()
+            burstAlerts.clear()
+        }
+        val fresh = alerts.filter { soundedAlerts.add(it.key) }
+        if (fresh.isEmpty()) return
+        sounds.play(if (fresh.any { it.type.isEnforcement }) AlertSound.Detector else AlertSound.Hazard, vibrate)
     }
 
     /** Every report ahead still worth an alert for this driver → [RoadAlert]s, nearest first. */
@@ -1100,6 +1139,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val VOICE_NEAR_M = 200
         const val OVERSPEED_MARGIN = 5
         const val OVERSPEED_COOLDOWN_MS = 60_000L
+        /** How often the proximity beeps check the nearest alert. */
+        const val BEEP_TICK_MS = 100L
         // An alert swiped off the HUD stays hidden this long, then shows again if still live.
         const val ALERT_DISMISS_MS = 2 * 60_000L
     }

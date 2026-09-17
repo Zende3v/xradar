@@ -33,8 +33,31 @@ enum class ReportType(
     /** Can an account with [role] create this report type? */
     fun allowedFor(role: Role): Boolean = role.ordinal >= minRole.ordinal
 
+    /** Alerts for this category reach the driver (shown ahead, spoken, sounded). */
+    val raisesAlerts: Boolean get() = this != TrafficJam
+
     companion object {
         fun fromWire(value: String?): ReportType? = entries.firstOrNull { it.wire == value }
+
+        /**
+         * The categories the driver turns off one by one in the HUD's "Options", in that order.
+         * A traffic jam is no alert (the route can avoid it instead); the legacy hazard has no switch.
+         */
+        val ALERT_OPTIONS: List<ReportType> = listOf(
+            RadarMobile,
+            Camera,
+            ControlZone,
+            VoitureRadar,
+            StoppedVehicle,
+            Accident,
+            ObjectOnRoad,
+            DamagedRoad,
+            Roadworks,
+            SlipperyRoad,
+            LowVisibility,
+            RoadCrew,
+            WrongWay,
+        )
 
         /** What the report sheet offers, in the order it is shown (6 per page). */
         val PICKER: List<ReportType> = listOf(

@@ -44,6 +44,9 @@ class GuidanceSpeaker(context: Context) {
         e.speak(text, TextToSpeech.QUEUE_FLUSH, null, text.hashCode().toString())
     }
 
+    /** A phrase is being said: the proximity beeps wait. */
+    val isSpeaking: Boolean get() = engine?.isSpeaking == true
+
     fun stop() {
         engine?.stop()
     }

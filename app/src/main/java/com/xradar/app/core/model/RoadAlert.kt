@@ -3,6 +3,13 @@ package com.xradar.app.core.model
 /** Kind of road event. Colors and icons are assigned in the UI layer, not here. */
 enum class AlertType { RadarFixed, RadarMobile, ControlZone, Camera, Hazard, Accident, Roadwork, RadarCar }
 
+/** Speed enforcement: its approach sounds like a radar detector, the rest like a road hazard. */
+val AlertType.isEnforcement: Boolean
+    get() = when (this) {
+        AlertType.RadarFixed, AlertType.RadarMobile, AlertType.Camera, AlertType.ControlZone, AlertType.RadarCar -> true
+        AlertType.Hazard, AlertType.Accident, AlertType.Roadwork -> false
+    }
+
 /**
  * A single road event surfaced to the driver. Pure model — no Android/Compose
  * types — so the alert engine (Phase 5) and a future iOS port can reuse it as-is.
