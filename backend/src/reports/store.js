@@ -195,6 +195,36 @@ class ReportStore {
     return rows;
   }
 
+  /**
+   * Live reports of [type] within [bufferM] of a route ([line], a GeoJSON LineString): where,
+   * for which traffic, and how confirmed (routing weighs them).
+   */
+  async liveAlong(type, line, bufferM) {
+    const { rows } = await db.query(
+      `WITH line AS (SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 2154) AS g),
+       piece AS (SELECT ST_Subdivide(line.g, 64) AS g FROM line)
+       SELECT DISTINCT ON (r.id) r.id, ST_Y(r.geom) AS lat, ST_X(r.geom) AS lon, r.course,
+              r.reporters, r.confirmations, r.reporter_role
+       FROM piece JOIN crowd.report r ON ST_DWithin(r.geom_m, piece.g, $3)
+       WHERE r.status = 'live' AND r.expires_at > now() AND r.type = $2`,
+      [JSON.stringify(line), type, bufferM],
+    );
+    return rows;
+  }
+
+  /** Whether a live report of [type] lies within [radiusM] of a point, for traffic going [course]. */
+  async liveNear(type, lat, lon, radiusM, course, maxDeg) {
+    const { rows } = await db.query(
+      `SELECT 1 FROM crowd.report r
+       WHERE r.status = 'live' AND r.expires_at > now() AND r.type = $1
+         AND ST_DWithin(r.geom_m, ${at('$3', '$2')}, $4)
+         AND (r.course IS NULL OR crowd.angle_diff(r.course, $5::float8) <= $6)
+       LIMIT 1`,
+      [type, lat, lon, radiusM, course, maxDeg],
+    );
+    return rows.length > 0;
+  }
+
   get meta() {
     return { count: this.live };
   }

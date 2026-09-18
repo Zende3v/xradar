@@ -12,7 +12,7 @@ h1{font-size:26px}h2{font-size:19px;margin-top:28px}li{margin:4px 0}
 </head>
 <body>
 <h1>Politique de confidentialité — x_radar</h1>
-<p>Mise à jour : 16 septembre 2026.</p>
+<p>Mise à jour : 18 septembre 2026.</p>
 
 <h2>Responsable et contact</h2>
 <p>Éditeur de l'application x_radar. Contact pour toute question ou demande :
@@ -24,6 +24,7 @@ h1{font-size:26px}h2{font-size:19px;margin-top:28px}li{margin:4px 0}
 <li><b>Position</b> : utilisée pendant l'usage pour les alertes, la limitation de vitesse et l'itinéraire. Envoyée au serveur pour ces requêtes, non conservée, sauf l'emplacement des signalements que vous publiez.</li>
 <li><b>Présence</b> : le serveur sait qu'un compte a l'application ouverte et s'il est en trajet, sans aucune position. Oubliée après 90 secondes ; seuls des totaux sont utilisés. Personne ne voit les autres conducteurs.</li>
 <li><b>Signalements et votes</b> : type, position, sens, date.</li>
+<li><b>Ralentissements</b> (réglage « Partager les ralentissements », actif par défaut, désactivable dans Réglages) : quand l'application voit que vous roulez nettement sous la limitation d'une route à 70 km/h ou plus, elle envoie la position, le sens, la vitesse et la limitation de ce moment. Rangés sous un pseudonyme qui change chaque jour, sans lien avec votre compte, en mémoire seulement. Quand plusieurs conducteurs ralentissent au même endroit, un signalement « Bouchon » anonyme est créé.</li>
 <li><b>Statistiques de conduite</b> : trajets (arrivée, distance, durée), temps et distance de conduite, signalements déclarés et confirmés.</li>
 <li><b>Technique</b> : adresse IP et journaux du serveur.</li>
 </ul>
@@ -38,6 +39,7 @@ h1{font-size:26px}h2{font-size:19px;margin-top:28px}li{margin:4px 0}
 <h2>Destinataires</h2>
 <ul>
 <li>openrouteservice (HeiGIT, Allemagne) : points de départ et d'arrivée, pour calculer l'itinéraire.</li>
+<li>TomTom (Pays-Bas) : le tracé du trajet suivi, pour le trafic et la comparaison des itinéraires.</li>
 <li>Apple : cartes (Plans) et musique (Apple Music), selon les conditions d'Apple.</li>
 <li>Le prestataire d'envoi des emails de vérification et de mot de passe.</li>
 <li>Tailscale (États-Unis) : acheminement chiffré des connexions vers le serveur ; il voit les adresses IP, pas le contenu.</li>
@@ -48,6 +50,7 @@ h1{font-size:26px}h2{font-size:19px;margin-top:28px}li{margin:4px 0}
 <li>Compte invité : supprimé 7 jours après l'inscription.</li>
 <li>Compte membre : jusqu'à sa suppression. <b>Menu › Mon compte › Supprimer mon compte</b> efface le compte, la photo, les statistiques et les trajets ; les signalements restent, sans lien avec vous.</li>
 <li>Signalements clos : 90 jours.</li>
+<li>Ralentissements : 30 minutes au plus, en mémoire.</li>
 <li>Fin de l'essai gratuit par téléphone : conservée sous forme hachée, contre les abus.</li>
 </ul>
 

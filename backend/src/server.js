@@ -16,6 +16,7 @@ import { meta as signsMeta } from './signs/postgis.js';
 import { signRouter } from './signs/routes.js';
 import { speedLimitRouter } from './speedlimits/routes.js';
 import { speedLimitStore } from './speedlimits/store.js';
+import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
 
 /** Builds the Express app (kept separate from bootstrap for testability). */
@@ -42,7 +43,7 @@ export function createApp() {
       accounts: accountStore.meta,
       live: liveStore.meta,
       routing: { provider: config.orsApiKey ? 'ors' : 'osrm' },
-      traffic: { provider: config.tomtomApiKey ? 'tomtom' : null },
+      traffic: { provider: config.tomtomApiKey ? 'tomtom' : null, probes: probeStore.meta.count },
       signs: { published },
       speedLimits: speedLimitStore.meta,
       fuel: fuelStore.meta,

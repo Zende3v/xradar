@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { accountStore } from '../accounts/store.js';
 import { authAccount, isAdminRequest } from '../accounts/auth.js';
+import { probeStore } from '../traffic/probes.js';
 import { reportStore } from './store.js';
 
 export const reportRouter = Router();
@@ -30,10 +31,12 @@ reportRouter.delete('/:id', guarded(async (req, res) => {
 }));
 
 /**
- * POST /api/reports  { type, lat, lon, deviceId?, plate?, street?, side?, direction?, bearing? }
+ * POST /api/reports  { type, lat, lon, deviceId?, plate?, street?, side?, direction?, bearing?, prompted? }
  * Report an event. Role-gated per type: voiture_radar = client, camera = admin, the rest =
  * everyone. The same event already reported close by is not duplicated: the report joins it
- * as one more voice (200, merged: true) instead of creating a new one (201).
+ * as one more voice (200, merged: true) instead of creating a new one (201). A "Bouchon" sent
+ * as "Oui" to "Ralentissement du trafic ?" (`prompted`, the driver's own probe just nearby)
+ * does not use up a guest's reports of the day.
  */
 reportRouter.post('/', guarded(async (req, res) => {
   const { type } = req.body || {};
@@ -52,7 +55,8 @@ reportRouter.post('/', guarded(async (req, res) => {
   if ((ROLE_RANK[role] ?? 0) < (ROLE_RANK[minRole] ?? 0)) {
     return res.status(403).json({ error: `type "${type}" requires role ${minRole}` });
   }
-  if (!accountStore.canReport(account)) {
+  const prompted = type === 'traffic_jam' && req.body?.prompted === true && probeStore.sentNear(account.id, lat, lon);
+  if (!prompted && !accountStore.canReport(account)) {
     return res.status(429).json({ error: 'daily report limit', limit: config.guestReportsPerDay });
   }
 
@@ -74,7 +78,7 @@ reportRouter.post('/', guarded(async (req, res) => {
     return res.status(400).json({ error: 'type (valid), lat and lon are required' });
   }
   accountStore.recordReportStat(account.id, 'reportsDeclared');
-  accountStore.countReport(account);
+  if (!prompted) accountStore.countReport(account);
   // The first confirmation is what makes it a "really confirmed" report for its author.
   if (result.authorFirstConfirmed) accountStore.recordReportStat(result.authorFirstConfirmed, 'reportsConfirmed');
   res.status(result.merged ? 200 : 201).json({ report: result.report, merged: result.merged });

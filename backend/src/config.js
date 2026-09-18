@@ -56,6 +56,30 @@ export const config = {
   // Variants timed by TomTom per check, at most (one TomTom request each).
   rerouteMaxVariants: 3,
 
+  // Drivers' own traffic, besides TomTom (traffic/crowd.js). A "Bouchon" report weighs on
+  // routing once confirmed (2 drivers, an admin's, or made from probes): it covers
+  // crowdJamHalfLengthM each side and costs crowdJamDefaultDelayS unless probes measured it.
+  // On a route: within crowdOnRouteM, for its way (crowdSameWayDeg).
+  crowdJamHalfLengthM: 500,
+  crowdJamDefaultDelayS: 180,
+  crowdOnRouteM: 60,
+  crowdSameWayDeg: 60,
+  // Slowdown probes ("Partager les ralentissements", traffic/probes.js): anonymous, in memory,
+  // kept probeTtlMs, one per driver per probeMinIntervalMs. A probe reports a crawl under
+  // probeMaxSpeedRatio of a limit of probeMinLimitKmh or more. probeClusterMinDrivers
+  // different drivers within probeClusterWindowMs, probeClusterRadiusM and probeSameWayDeg
+  // make a "Bouchon" (once per probeAutoJamEveryMs per spot).
+  probeTtlMs: 30 * MIN,
+  probeMinIntervalMs: MIN,
+  probeMaxStored: 20_000,
+  probeMinLimitKmh: 70,
+  probeMaxSpeedRatio: 0.6,
+  probeClusterWindowMs: 10 * MIN,
+  probeClusterRadiusM: 1000,
+  probeSameWayDeg: 45,
+  probeClusterMinDrivers: 3,
+  probeAutoJamEveryMs: 5 * MIN,
+
   // PostgreSQL / PostGIS: the signalisation (schema "signs", rebuilt weekly by
   // signalisation/rebuild.sh) and the drivers' reports and speed-limit changes (schema "crowd").
   pgHost: process.env.PGHOST || '/var/run/postgresql',
