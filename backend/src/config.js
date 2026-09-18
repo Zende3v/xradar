@@ -302,4 +302,16 @@ export const config = {
 
   // Presence: an account counts as online (and on a trip or not) for 90 s after the app said so.
   liveTtlMs: 90 * 1000,
+
+  // "Changer de pseudo": a client with access changes it at most once per
+  // usernameChangeIntervalMs; the name left stays theirs usernameHoldMs (nobody else takes it
+  // meanwhile, so nobody passes for them). Reserved names (compared without "_", "." and
+  // digits, and anything starting with "xradar") belong to no driver; admins set them.
+  usernameChangeIntervalMs: 7 * D,
+  usernameHoldMs: 30 * D,
+  reservedUsernames: [
+    'admin', 'administrateur', 'administrator', 'moderateur', 'moderator', 'moderation', 'modo',
+    'support', 'staff', 'equipe', 'team', 'officiel', 'official', 'system', 'systeme', 'root',
+    'contact', 'aide', 'help', 'security', 'securite',
+  ],
 };

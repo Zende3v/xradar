@@ -26,6 +26,9 @@ function selfView(a) {
     accessEndsAt: access.endsAt,
     referredByCode: a.referredByCode ?? null,
     trust: trustOf(stats),
+    // "Changer de pseudo": who may, and when again (ISO, null = now).
+    canChangeUsername: accountStore.canChangeUsername(a),
+    usernameChangeableAt: accountStore.usernameChangeableAt(a),
     // A guest's daily limits and today's use; null for clients and admins.
     limits: accountStore.limitsFor(a),
   };
@@ -56,9 +59,13 @@ accountRouter.post('/auth', (req, res) => {
   res.json({ account: selfView(account), token });
 });
 
-/** GET /api/accounts/username-available?u=pseudo */
+/**
+ * GET /api/accounts/username-available?u=pseudo  (Bearer optional)
+ * Signed in, a name the driver left lately counts as theirs again.
+ */
 accountRouter.get('/username-available', (req, res) => {
-  const check = accountStore.usernameAvailable(String(req.query.u || ''));
+  const account = authAccount(req);
+  const check = accountStore.usernameAvailable(String(req.query.u || ''), { accountId: account?.id ?? null });
   res.json({ available: check.ok, reason: check.error ?? null });
 });
 
@@ -144,17 +151,22 @@ accountRouter.get('/me', (req, res) => {
   res.json({ account: selfView(account) });
 });
 
-/** PATCH /api/accounts/me  { username?, avatarUrl? } — client/admin only. */
+/**
+ * PATCH /api/accounts/me  { username?, avatarUrl? } — clients and admins; the username only for
+ * a client with access, once a week (429 + nextAt), to a free name (409 taken, 400 invalid or
+ * reserved). Nothing changes when the username is refused.
+ */
 accountRouter.patch('/me', (req, res) => {
   const account = authAccount(req);
   if (!account) return res.status(401).json({ error: 'unauthorized' });
   if (account.role === 'guest') {
     return res.status(403).json({ error: 'profile edits require a client account' });
   }
-  const result = accountStore.setProfile(account.id, {
-    username: req.body?.username !== undefined ? String(req.body.username).trim() : undefined,
-    avatarUrl: req.body?.avatarUrl,
-  });
+  if (req.body?.username !== undefined) {
+    const changed = accountStore.changeUsername(account.id, String(req.body.username).trim());
+    if (changed.error) return res.status(changed.status).json({ error: changed.error, nextAt: changed.nextAt ?? null });
+  }
+  const result = accountStore.setProfile(account.id, { avatarUrl: req.body?.avatarUrl });
   if (result.error) return res.status(400).json({ error: result.error });
   res.json({ account: selfView(result.account) });
 });

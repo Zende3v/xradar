@@ -23,6 +23,12 @@ function verifyPassword(password, stored) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
+/** Reserved: compared without "_", "." and digits ("Admin_2" is "admin"), and any "xradar…". */
+function isReservedUsername(lower) {
+  const stem = lower.replace(/[._\d]/g, '');
+  return stem.startsWith('xradar') || config.reservedUsernames.includes(stem);
+}
+
 function genCode() {
   return String(Math.floor(100000 + Math.random() * 900000)); // 6-digit code
 }
@@ -91,6 +97,7 @@ class AccountStore {
     this.byDevice = new Map();
     this.byUsername = new Map(); // lowercase -> account
     this.byEmail = new Map(); // lowercase -> account
+    this.heldUsernames = new Map(); // lowercase -> { accountId, until } (names just left)
     this.sessions = new Map(); // token -> { accountId, expiresAt }
     this.deviceTrials = new Map(); // hashed deviceId -> end of the first trial on that phone (ISO)
     this.saveTimer = null;
@@ -130,6 +137,9 @@ class AccountStore {
     if (account.trips.length > config.accountTripHistoryMax) account.trips = account.trips.slice(0, config.accountTripHistoryMax);
     account.stats = statsShape(account.stats);
     if (!Array.isArray(account.referralCodes)) account.referralCodes = [];
+    // Names left once, held for their owner a while: the lapsed ones go.
+    account.heldUsernames = (Array.isArray(account.heldUsernames) ? account.heldUsernames : [])
+      .filter((held) => held?.lower && Date.parse(held.until) > Date.now());
     if (account.role === 'guest' && !account.trialEndsAt) {
       account.trialEndsAt = trialEndsAt(account.createdAt);
     }
@@ -142,6 +152,7 @@ class AccountStore {
     if (account.deviceId) this.byDevice.set(account.deviceId, account);
     if (account.usernameLower) this.byUsername.set(account.usernameLower, account);
     if (account.emailLower) this.byEmail.set(account.emailLower, account);
+    for (const held of account.heldUsernames) this.heldUsernames.set(held.lower, { accountId: account.id, until: held.until });
     this.noteDeviceTrial(account);
   }
 
@@ -165,6 +176,9 @@ class AccountStore {
     if (account.deviceId) this.byDevice.delete(account.deviceId);
     if (account.usernameLower) this.byUsername.delete(account.usernameLower);
     if (account.emailLower) this.byEmail.delete(account.emailLower);
+    for (const held of account.heldUsernames ?? []) {
+      if (this.heldUsernames.get(held.lower)?.accountId === account.id) this.heldUsernames.delete(held.lower);
+    }
   }
 
   scheduleSave() {
@@ -430,7 +444,8 @@ class AccountStore {
     const e = email ? String(email).trim().toLowerCase() : null;
     if (e && this.byEmail.has(e)) return { error: 'email already registered' };
     if (username) {
-      const check = this.usernameAvailable(username);
+      // Admin tooling: reserved names allowed.
+      const check = this.usernameAvailable(username, { admin: true });
       if (!check.ok) return { error: `username ${check.error}` };
     }
     const now = new Date().toISOString();
@@ -488,10 +503,63 @@ class AccountStore {
 
   // ---- Usernames / auth -----------------------------------------------------
 
-  usernameAvailable(username) {
+  /**
+   * Whether [username] can be taken: well formed, nobody's (a name another driver left lately
+   * counts as taken, except for [accountId], its owner), and not reserved (unless [admin]).
+   */
+  usernameAvailable(username, { accountId = null, admin = false } = {}) {
     if (!USERNAME_RE.test(String(username || ''))) return { ok: false, error: 'invalid username' };
-    if (this.byUsername.has(String(username).toLowerCase())) return { ok: false, error: 'taken' };
+    const lower = String(username).toLowerCase();
+    const owner = this.byUsername.get(lower);
+    if (owner && owner.id !== accountId) return { ok: false, error: 'taken' };
+    const held = this.heldUsernames.get(lower);
+    if (held && held.accountId !== accountId && Date.parse(held.until) > Date.now()) return { ok: false, error: 'taken' };
+    if (!admin && isReservedUsername(lower)) return { ok: false, error: 'reserved' };
     return { ok: true };
+  }
+
+  /** Who may change their username now: a client whose access runs. */
+  canChangeUsername(account) {
+    return account?.role === 'client' && this.accessFor(account).canNavigate;
+  }
+
+  /** When [account] may change its username again (ISO); null when it may now. */
+  usernameChangeableAt(account, now = Date.now()) {
+    const last = Date.parse(account?.usernameChangedAt ?? '');
+    if (!Number.isFinite(last)) return null;
+    const next = last + config.usernameChangeIntervalMs;
+    return next > now ? new Date(next).toISOString() : null;
+  }
+
+  /**
+   * "Changer de pseudo": a client with access, once per usernameChangeIntervalMs, to a name
+   * nobody has. The name left stays held for this account usernameHoldMs. The account keeps
+   * its id: reports, votes, trips and sessions follow it. Returns { account } or
+   * { error, status, nextAt? }.
+   */
+  changeUsername(id, username, now = Date.now()) {
+    const account = this.byId.get(id);
+    if (!account) return { error: 'not found', status: 404 };
+    if (!this.canChangeUsername(account)) return { error: 'clients only', status: 403 };
+    if (username === account.username) return { account };
+    const nextAt = this.usernameChangeableAt(account, now);
+    if (nextAt) return { error: 'username change too soon', status: 429, nextAt };
+    const check = this.usernameAvailable(username, { accountId: id });
+    if (!check.ok) return { error: `username ${check.error}`, status: check.error === 'taken' ? 409 : 400 };
+    const lower = String(username).toLowerCase();
+    this.unindex(account);
+    const held = account.heldUsernames.filter((entry) => entry.lower !== lower);
+    if (account.usernameLower && account.usernameLower !== lower) {
+      held.push({ lower: account.usernameLower, until: new Date(now + config.usernameHoldMs).toISOString() });
+    }
+    account.heldUsernames = held;
+    account.username = username;
+    account.usernameLower = lower;
+    account.displayName = username;
+    account.usernameChangedAt = new Date(now).toISOString();
+    this.index(account);
+    this.scheduleSave();
+    return { account };
   }
 
   /**
@@ -674,18 +742,10 @@ class AccountStore {
     this.noteDeviceTrial(account);
   }
 
-  setProfile(id, { username, avatarUrl, displayName }) {
+  /** Photo and display name; the username changes through changeUsername only. */
+  setProfile(id, { avatarUrl, displayName }) {
     const account = this.byId.get(id);
     if (!account) return { error: 'not found' };
-    if (username !== undefined && String(username).toLowerCase() !== account.usernameLower) {
-      const check = this.usernameAvailable(username);
-      if (!check.ok) return { error: `username ${check.error}` };
-      this.unindex(account);
-      account.username = username;
-      account.usernameLower = String(username).toLowerCase();
-      account.displayName = username;
-      this.index(account);
-    }
     if (displayName !== undefined) account.displayName = displayName;
     if (avatarUrl !== undefined) account.avatarUrl = avatarUrl;
     this.scheduleSave();
