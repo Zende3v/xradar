@@ -4,6 +4,8 @@ import { authAccount } from '../accounts/auth.js';
 import { accountStore } from '../accounts/store.js';
 import { haversine } from '../radars/geo.js';
 import { reportStore } from '../reports/store.js';
+import { fasterRoute } from './faster.js';
+import { ORS_AVOID, normalizeOrsFeature, postORS, square } from './ors.js';
 
 export const routeRouter = Router();
 
@@ -52,9 +54,42 @@ routeRouter.get('/', async (req, res) => {
   }
 });
 
-// ---- OpenRouteService --------------------------------------------------------
+/**
+ * POST /api/route/faster  { coordinates: [[lon, lat], …], avoid?: ["tolls", "highways"], sinceRerouteS? }
+ * The rest of the route being followed (from the driver to the destination) against ORS
+ * variants around its big traffic jams, all timed by TomTom with today's traffic: a variant comes
+ * back (`better`) only when it saves enough time. See faster.js.
+ */
+routeRouter.post('/faster', async (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'account required' });
+  if (account.banned) return res.status(403).json({ error: 'banned' });
+  if (!accountStore.accessFor(account).canNavigate) {
+    return res.status(403).json({ error: 'subscription required' });
+  }
+  if (!config.orsApiKey || !config.tomtomApiKey) return res.status(503).json({ error: 'rerouting unavailable' });
+  const coords = req.body?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2 || coords.length > config.trafficMaxPoints) {
+    return res.status(400).json({ error: 'coordinates [[lon,lat],...] required' });
+  }
+  const points = [];
+  for (const c of coords) {
+    const lon = Number(c?.[0]);
+    const lat = Number(c?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return res.status(400).json({ error: 'invalid coordinate' });
+    points.push([lat, lon]);
+  }
+  const avoid = Array.isArray(req.body.avoid) ? req.body.avoid.map(String) : [];
+  const since = Number(req.body.sinceRerouteS);
+  try {
+    res.json(await fasterRoute(points, { avoid, sinceRerouteS: Number.isFinite(since) && since >= 0 ? since : null }));
+  } catch (e) {
+    console.warn('[faster] unavailable —', String(e.message || e));
+    res.status(502).json({ error: 'rerouting unavailable' });
+  }
+});
 
-const ORS_AVOID = { tolls: 'tollways', highways: 'highways', ferries: 'ferries' };
+// ---- OpenRouteService --------------------------------------------------------
 
 async function routeViaORS(from, to, avoid) {
   const body = {
@@ -82,22 +117,7 @@ async function routeViaORS(from, to, avoid) {
   const json = await r.json();
   const feature = json.features && json.features[0];
   if (!feature) return { error: 'no route found', status: 404 };
-  const summary = feature.properties.summary || {};
-  const coordinates = feature.geometry.coordinates; // [[lon, lat], ...]
-  return {
-    distanceM: Math.round(summary.distance ?? 0),
-    durationS: Math.round(summary.duration ?? 0),
-    coordinates,
-    steps: normalizeOrsSteps(feature.properties.segments || [], coordinates),
-  };
-}
-
-function postORS(body) {
-  return fetch(`${config.orsUrl.replace(/\/$/, '')}/v2/directions/driving-car/geojson`, {
-    method: 'POST',
-    headers: { Authorization: config.orsApiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  return normalizeOrsFeature(feature);
 }
 
 // Traffic jams the route goes around: a square around each one reported live near the trip.
@@ -125,47 +145,6 @@ async function trafficPolygons(from, to) {
       && haversine(jam.lat, jam.lon, to.lat, to.lon) > JAM_KEEP_CLEAR_M)
     .map((jam) => square(jam.lat, jam.lon, JAM_HALF_SIDE_M));
   return squares.length ? { type: 'MultiPolygon', coordinates: squares } : null;
-}
-
-/** A counter-clockwise square around a point, as one GeoJSON polygon ([lon, lat]). */
-function square(lat, lon, halfM) {
-  const dLat = halfM / 111320;
-  const dLon = halfM / (111320 * Math.max(Math.cos(lat * Math.PI / 180), 0.1));
-  return [[
-    [lon - dLon, lat - dLat],
-    [lon + dLon, lat - dLat],
-    [lon + dLon, lat + dLat],
-    [lon - dLon, lat + dLat],
-    [lon - dLon, lat - dLat],
-  ]];
-}
-
-/** ORS instruction type codes → OSRM-style {type, modifier} the app already parses. */
-const ORS_TYPE = {
-  0: ['turn', 'left'], 1: ['turn', 'right'], 2: ['turn', 'sharp left'], 3: ['turn', 'sharp right'],
-  4: ['turn', 'slight left'], 5: ['turn', 'slight right'], 6: ['continue', 'straight'],
-  7: ['roundabout', null], 8: ['continue', 'straight'], 9: ['turn', 'uturn'], 10: ['arrive', null],
-  11: ['depart', null], 12: ['fork', 'left'], 13: ['fork', 'right'],
-};
-
-function normalizeOrsSteps(segments, coordinates) {
-  const out = [];
-  for (const seg of segments) {
-    for (const s of seg.steps || []) {
-      const [type, modifier] = ORS_TYPE[s.type] || ['continue', 'straight'];
-      const at = Array.isArray(s.way_points) ? coordinates[s.way_points[0]] : null;
-      out.push({
-        type,
-        modifier,
-        location: s.maneuver?.location ?? at ?? null, // [lon, lat]
-        exit: s.exit_number ?? null,
-        name: s.name && s.name !== '-' ? s.name : '',
-        distanceM: Math.round(s.distance ?? 0),
-        durationS: Math.round(s.duration ?? 0),
-      });
-    }
-  }
-  return out;
 }
 
 // ---- OSRM (fallback) ---------------------------------------------------------

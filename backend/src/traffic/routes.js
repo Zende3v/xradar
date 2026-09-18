@@ -9,7 +9,8 @@ export const trafficRouter = Router();
  * POST /api/traffic/route  { coordinates: [[lon, lat], …] }  (Bearer)
  * The slowdowns on this very route, as TomTom sees them now: stretches in metres along the
  * polyline sent (`fromM`, `toM`, `level` slow | jam | heavy | closed, `delayS`, `speedKmh`),
- * with `totalM` its length. 503 without a TomTom key, 502 when TomTom does not answer.
+ * with `totalM` its length and `travelS` / `delayS` TomTom's time for it with traffic and the
+ * part lost to traffic. 503 without a TomTom key, 502 when TomTom does not answer.
  */
 trafficRouter.post('/route', async (req, res) => {
   const account = authAccount(req);

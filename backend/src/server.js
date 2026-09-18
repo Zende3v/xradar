@@ -29,6 +29,7 @@ export function createApp() {
   app.use('/api/signs/route', express.json({ limit: '3mb' }));
   app.use('/api/radars/route', express.json({ limit: '3mb' }));
   app.use('/api/traffic/route', express.json({ limit: '3mb' }));
+  app.use('/api/route/faster', express.json({ limit: '3mb' }));
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {

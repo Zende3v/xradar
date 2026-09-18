@@ -127,20 +127,14 @@ export async function trafficAlong(points) {
     if (section.sectionType !== 'TRAFFIC') continue;
     const level = levelOf(section);
     if (!level) continue;
+    // The section's pieces on our road: it splits where TomTom's road leaves ours.
+    const pieces = [];
     let run = [];
     const flush = () => {
       if (run.length >= 2) {
         const fromM = Math.min(...run);
         const toM = Math.max(...run);
-        if (toM - fromM >= MIN_STRETCH_M) {
-          stretches.push({
-            fromM: Math.round(fromM),
-            toM: Math.round(toM),
-            level,
-            delayS: section.delayInSeconds ?? null,
-            speedKmh: section.effectiveSpeedInKmh ?? null,
-          });
-        }
+        if (toM - fromM >= MIN_STRETCH_M) pieces.push([fromM, toM]);
       }
       run = [];
     };
@@ -149,10 +143,28 @@ export async function trafficAlong(points) {
       else run.push(alongs[j]);
     }
     flush();
+    // The time lost is shared between the pieces by length: summed along the route, it counts once.
+    const length = pieces.reduce((sum, [fromM, toM]) => sum + toM - fromM, 0);
+    for (const [fromM, toM] of pieces) {
+      stretches.push({
+        fromM: Math.round(fromM),
+        toM: Math.round(toM),
+        level,
+        delayS: section.delayInSeconds != null ? Math.round((section.delayInSeconds * (toM - fromM)) / length) : null,
+        speedKmh: section.effectiveSpeedInKmh ?? null,
+      });
+    }
   }
   stretches.sort((a, b) => a.fromM - b.fromM);
 
-  const value = { totalM: Math.round(cum[cum.length - 1]), updatedAt: new Date().toISOString(), sections: stretches };
+  const value = {
+    totalM: Math.round(cum[cum.length - 1]),
+    // TomTom's time for the whole route with today's traffic, and the part of it lost to traffic.
+    travelS: route.summary?.travelTimeInSeconds ?? null,
+    delayS: route.summary?.trafficDelayInSeconds ?? null,
+    updatedAt: new Date().toISOString(),
+    sections: stretches,
+  };
   cache.set(key, { at: Date.now(), value });
   if (cache.size > 200) cache.delete(cache.keys().next().value);
   return value;

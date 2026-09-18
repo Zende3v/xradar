@@ -41,6 +41,20 @@ export const config = {
   // Drivers on the same route share one answer this long.
   trafficCacheMs: 60 * 1000,
   trafficTimeoutMs: 12 * 1000,
+  // Smart rerouting around traffic (POST /api/route/faster). A variant replaces the route only
+  // when TomTom times it, with traffic, at least rerouteMinGainS and rerouteMinGainRatio of the
+  // time left faster. No new route within rerouteCooldownS of the last one, and twice the gain
+  // (rerouteStickyFactor) until rerouteStickyS: no back and forth between two routes.
+  rerouteMinGainS: 3 * 60,
+  rerouteMinGainRatio: 0.05,
+  rerouteCooldownS: 5 * 60,
+  rerouteStickyS: 15 * 60,
+  rerouteStickyFactor: 2,
+  // A slowdown worth going around on its own (sections closer than rerouteJamGapM make one).
+  rerouteJamMinDelayS: 60,
+  rerouteJamGapM: 1000,
+  // Variants timed by TomTom per check, at most (one TomTom request each).
+  rerouteMaxVariants: 3,
 
   // PostgreSQL / PostGIS: the signalisation (schema "signs", rebuilt weekly by
   // signalisation/rebuild.sh) and the drivers' reports and speed-limit changes (schema "crowd").
