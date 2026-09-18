@@ -2,6 +2,7 @@ package com.xradar.app.data.stats
 
 import android.content.Context
 import com.xradar.app.core.model.TripRecord
+import com.xradar.app.data.account.AccountApi
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -30,6 +31,11 @@ class TripHistoryRepository(context: Context) {
                     durationSeconds = o.getInt("durationSeconds"),
                     alertsCount = o.optInt("alertsCount"),
                     topSpeedKmh = o.optInt("topSpeedKmh"),
+                    // Absent from trips saved before these details were recorded.
+                    plannedSeconds = if (o.has("plannedSeconds") && !o.isNull("plannedSeconds")) o.optInt("plannedSeconds") else null,
+                    stops = o.optInt("stops"),
+                    stoppedSeconds = o.optInt("stoppedSeconds"),
+                    events = AccountApi.parseEvents(o.optJSONObject("events")),
                 )
             }.sortedByDescending { it.startedAt }
         }.getOrDefault(emptyList())
@@ -49,6 +55,10 @@ class TripHistoryRepository(context: Context) {
                     put("durationSeconds", t.durationSeconds)
                     put("alertsCount", t.alertsCount)
                     put("topSpeedKmh", t.topSpeedKmh)
+                    t.plannedSeconds?.let { put("plannedSeconds", it) }
+                    put("stops", t.stops)
+                    put("stoppedSeconds", t.stoppedSeconds)
+                    put("events", AccountApi.wireEvents(t))
                 },
             )
         }

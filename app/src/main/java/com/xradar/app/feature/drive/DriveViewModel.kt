@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.xradar.app.core.drive.AlertBeeps
+import com.xradar.app.core.drive.TripRecorder
 import com.xradar.app.core.geo.Geo
 import com.xradar.app.core.geo.GuidanceSides
 import com.xradar.app.core.geo.GuidanceText
@@ -138,14 +139,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private var announcedNear = false
 
     // Live accumulation of the trip in progress (saved locally when it ends).
-    private var tripActive = false
-    private var tripStartedAt = 0L
-    private var tripToLabel: String? = null
-    private var tripDistanceM = 0.0
-    private var tripTopSpeed = 0
-    private var tripAlerts = 0
-    private var lastTripLat = Double.NaN
-    private var lastTripLon = Double.NaN
+    private var trip: TripRecorder? = null
 
     /**
      * The driving state. The voice and trip collectors below keep it running for as long as
@@ -407,36 +401,30 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 val route = answer.routeOrNull
                 routeError.value = route == null
                 ActiveTripRepository.setRoute(route)
+                // The trip's estimate, for "temps réel vs temps prévu".
+                if (route != null) trip?.plan(route)
                 // A guest's count of the day moved on.
                 if (route != null && AccountRepository.account.value?.limits != null) {
                     viewModelScope.launch { AccountRepository.reload() }
                 }
             }
         }
-        // Accumulate distance/top-speed/arrival while a trip is active.
+        // Distance, speed and stops while a trip is active, and its arrival.
         viewModelScope.launch {
             LocationRepository.location.collect { sample ->
-                if (!tripActive || sample == null) return@collect
-                if (!lastTripLat.isNaN()) {
-                    val step = Geo.haversine(lastTripLat, lastTripLon, sample.latitude, sample.longitude)
-                    if (step in TRIP_MIN_STEP_M..TRIP_MAX_STEP_M) tripDistanceM += step
-                }
-                lastTripLat = sample.latitude
-                lastTripLon = sample.longitude
-                val kmh = (sample.speedKmh ?: 0f).roundToInt()
-                if (kmh > tripTopSpeed) tripTopSpeed = kmh
+                val current = trip ?: return@collect
+                if (sample == null) return@collect
+                current.add(sample)
                 // Auto-finish when we reach the destination.
                 ActiveTripRepository.destination.value?.let { dest ->
                     val toDest = Geo.haversine(sample.latitude, sample.longitude, dest.lat, dest.lon)
-                    if (toDest < ARRIVE_M && tripDistanceM >= MIN_TRIP_M) ActiveTripRepository.clear()
+                    if (toDest < ARRIVE_M && current.distanceMeters >= TripRecorder.MIN_METERS) ActiveTripRepository.clear()
                 }
             }
         }
-        // Count distinct alert encounters during the trip.
+        // The alerts the trip reaches, each once, for its history.
         viewModelScope.launch {
-            driveState.map { it.alert != null }.distinctUntilChanged().collect { present ->
-                if (present && tripActive) tripAlerts++
-            }
+            driveState.collect { s -> trip?.meet(s.alerts) }
         }
         // Sounds as alerts show up; voice announcements for radars/reports (distance steps) + overspeed.
         viewModelScope.launch {
@@ -671,40 +659,20 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
     }
 
+    /** A new destination starts a trip, or redirects the one running (a new estimate follows). */
     private fun startTrip(destination: Place) {
-        tripToLabel = destination.name
-        if (tripActive) return
-        tripActive = true
-        tripStartedAt = System.currentTimeMillis()
-        tripDistanceM = 0.0
-        tripTopSpeed = 0
-        tripAlerts = 0
-        lastTripLat = Double.NaN
-        lastTripLon = Double.NaN
+        val current = trip
+        if (current == null) trip = TripRecorder(destination.name) else current.retarget(destination.name)
     }
 
-    /** Save the finished trip locally if it's worth keeping. */
+    /** Save the finished trip if it is worth keeping, locally and on the server. */
     private fun finalizeTrip() {
-        if (!tripActive) return
-        val durationS = ((System.currentTimeMillis() - tripStartedAt) / 1000).toInt()
-        val distanceM = tripDistanceM.roundToInt()
-        if (distanceM >= MIN_TRIP_M && durationS >= MIN_TRIP_S) {
-            val record = TripRecord(
-                id = UUID.randomUUID().toString(),
-                startedAt = tripStartedAt,
-                fromLabel = "Ma position",
-                toLabel = tripToLabel ?: "Destination",
-                distanceMeters = distanceM,
-                durationSeconds = durationS,
-                alertsCount = tripAlerts,
-                topSpeedKmh = tripTopSpeed,
-            )
-            tripHistory.add(record)
-            // Statistics live on the server for everyone: survive a reinstall.
-            viewModelScope.launch { AccountRepository.postTrip(record) }
-        }
-        tripActive = false
-        tripToLabel = null
+        val finished = trip ?: return
+        trip = null
+        val record = finished.record(UUID.randomUUID().toString()) ?: return
+        tripHistory.add(record)
+        // Statistics live on the server for everyone: survive a reinstall.
+        viewModelScope.launch { AccountRepository.postTrip(record) }
     }
 
     /**
@@ -1110,8 +1078,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val CORRIDOR_STEP_M = 2_000.0
         // Trip recording.
         const val ARRIVE_M = 45.0
-        const val MIN_TRIP_M = 500
-        const val MIN_TRIP_S = 60
         const val TRIP_MIN_STEP_M = 1.0
         const val TRIP_MAX_STEP_M = 250.0
         // Drive-time accounting: moving above ~5 km/h, gaps over 10 s ignored, synced per minute.

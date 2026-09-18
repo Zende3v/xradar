@@ -25,6 +25,7 @@ import com.xradar.app.data.account.AccountRepository
 import com.xradar.app.data.account.AccountStats
 import com.xradar.app.designsystem.component.XRadarCard
 import com.xradar.app.designsystem.component.XRadarDivider
+import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarListGroup
 import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarLoadingState
@@ -43,6 +44,11 @@ import com.xradar.app.designsystem.theme.XRadarTheme
 fun StatsRoute(onBack: () -> Unit) {
     var stats by remember { mutableStateOf<AccountStats?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<TripRecord?>(null) }
+    selected?.let { trip ->
+        TripDetailScreen(trip, onBack = { selected = null })
+        return
+    }
     LaunchedEffect(Unit) {
         stats = AccountRepository.stats()
         loaded = true
@@ -56,13 +62,13 @@ fun StatsRoute(onBack: () -> Unit) {
                 title = "Statistiques indisponibles",
                 message = "Impossible de joindre le serveur. Réessaie plus tard.",
             )
-            else -> StatsContent(s)
+            else -> StatsContent(s, onOpenTrip = { selected = it })
         }
     }
 }
 
 @Composable
-private fun StatsContent(s: AccountStats) {
+private fun StatsContent(s: AccountStats, onOpenTrip: (TripRecord) -> Unit) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
     Column(
@@ -99,7 +105,7 @@ private fun StatsContent(s: AccountStats) {
                 XRadarListRow(title = "Aucun trajet pour l'instant")
             } else {
                 s.trips.take(MAX_TRIPS).forEachIndexed { i, trip ->
-                    TripRow(trip)
+                    TripRow(trip, onClick = { onOpenTrip(trip) })
                     if (i < s.trips.take(MAX_TRIPS).lastIndex) XRadarDivider(Modifier.padding(start = spacing.lg))
                 }
             }
@@ -133,14 +139,16 @@ private fun Figure(label: String, value: Int) {
 }
 
 @Composable
-private fun TripRow(trip: TripRecord) {
+private fun TripRow(trip: TripRecord, onClick: () -> Unit) {
     XRadarListRow(
         title = trip.toLabel,
         subtitle = "${trip.dateLabel} · ${trip.distanceLabel} · ${trip.durationLabel}",
+        onClick = onClick,
         trailing = {
-            if (trip.alertsCount > 0) {
-                XRadarText("${trip.alertsCount} alertes", style = XRadarTheme.typography.caption, color = XRadarTheme.colors.textTertiary)
+            trip.delayLabel?.let {
+                XRadarText(it, style = XRadarTheme.typography.caption, color = XRadarTheme.colors.textTertiary)
             }
+            XRadarIcon(XRadarIcons.ChevronRight, contentDescription = null, tint = XRadarTheme.colors.textTertiary, size = 20.dp)
         },
     )
 }

@@ -6,6 +6,8 @@ import com.xradar.app.core.model.Account
 import com.xradar.app.core.model.DailyLimits
 import com.xradar.app.core.model.Role
 import com.xradar.app.core.model.TripRecord
+import com.xradar.app.core.model.alertTypeFromWire
+import com.xradar.app.core.model.wireName
 import com.xradar.app.data.network.FallbackDns
 import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +109,10 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             .put("durationSeconds", trip.durationSeconds)
             .put("alertsCount", trip.alertsCount)
             .put("topSpeedKmh", trip.topSpeedKmh)
+            .put("stops", trip.stops)
+            .put("stoppedSeconds", trip.stoppedSeconds)
+            .put("events", wireEvents(trip))
+            .apply { trip.plannedSeconds?.let { put("plannedSeconds", it) } }
         authedPost(token, "/api/accounts/me/trips", body)
     }
 
@@ -170,6 +176,10 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                     durationSeconds = x.optInt("durationSeconds"),
                     alertsCount = x.optInt("alertsCount"),
                     topSpeedKmh = x.optInt("topSpeedKmh"),
+                    plannedSeconds = if (x.has("plannedSeconds") && !x.isNull("plannedSeconds")) x.optInt("plannedSeconds") else null,
+                    stops = x.optInt("stops"),
+                    stoppedSeconds = x.optInt("stoppedSeconds"),
+                    events = parseEvents(x.optJSONObject("events")),
                 )
             },
         )
@@ -332,6 +342,20 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /** A trip's events as the backend keeps them: counts by kind name. */
+        fun wireEvents(trip: TripRecord): JSONObject =
+            JSONObject().apply { trip.events.forEach { (type, count) -> put(type.wireName, count) } }
+
+        /** A trip's events read back; unknown kinds and empty counts are left out. */
+        fun parseEvents(o: JSONObject?): Map<com.xradar.app.core.model.AlertType, Int> {
+            if (o == null) return emptyMap()
+            return o.keys().asSequence().mapNotNull { name ->
+                val type = alertTypeFromWire(name) ?: return@mapNotNull null
+                val count = o.optInt(name)
+                if (count > 0) type to count else null
+            }.toMap()
+        }
 
         /** A guest's daily limits, as `/me` sends them (and as the account is cached). */
         fun parseLimits(o: JSONObject) = DailyLimits(
