@@ -2,11 +2,13 @@ package com.xradar.app.feature.drive.component
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,13 +35,22 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -170,14 +182,8 @@ fun DriveDock(
 
                 if (open > 0.02f) {
                     Spacer(Modifier.height(spacing.md))
-                    Column(
-                        modifier = Modifier
-                            .alpha(open)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(spacing.lg),
-                    ) {
+                    Column(Modifier.alpha(open)) {
                         OptionsBody()
-                        Spacer(Modifier.height(spacing.sm))
                     }
                 }
             }
@@ -416,16 +422,39 @@ private fun Cluster(value: String, label: String, valueColor: Color, modifier: M
     }
 }
 
-/** The alerts, one switch per category, and the route options. */
+/**
+ * Which alerts show, and the route options. The alerts card keeps its place: its rows scroll
+ * inside it, softly faded at an edge where some are hidden. Folded, it stops at "Accident"; the
+ * arrow under it unfolds the rest. The route options are served first (the card takes what
+ * is left), as on iOS.
+ */
 @Composable
-private fun OptionsBody() {
+private fun ColumnScope.OptionsBody() {
     val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
     val prefs by AppPreferences.alerts.collectAsStateWithLifecycle()
     val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val scroll = rememberScrollState()
+    var unfolded by remember { mutableStateOf(false) }
 
     val groupColor = colors.surface.copy(alpha = 0.45f)
+    val rows = 1 + ReportType.ALERT_OPTIONS.size
+    val shown = if (unfolded) rows else FOLDED_ROWS
+    val cardHeight by animateDpAsState(OPTION_ROW_HEIGHT * shown + OPTION_DIVIDER * (shown - 1), label = "alertsCard")
 
-    XRadarListGroup(title = "Alertes", color = groupColor, shadowElevation = 0.dp) {
+    OptionTitle("Alertes")
+    Spacer(Modifier.height(spacing.sm))
+    Column(
+        modifier = Modifier
+            .weight(1f, fill = false)
+            .heightIn(max = cardHeight)
+            .fillMaxWidth()
+            .clip(XRadarTheme.shapes.lg)
+            .background(groupColor)
+            .fadedEdges(scroll)
+            .verticalScroll(scroll),
+    ) {
         Toggle("Radar fixe", XRadarIcons.Radar, colors.radarFixed, prefs.radarFixed) {
             AppPreferences.updateAlerts { it.copy(radarFixed = !it.radarFixed) }
         }
@@ -436,7 +465,13 @@ private fun OptionsBody() {
             }
         }
     }
+    FoldArrow(unfolded) {
+        unfolded = !unfolded
+        // Folded, back to the top.
+        if (!unfolded) scope.launch { scroll.animateScrollTo(0) }
+    }
 
+    Spacer(Modifier.height(spacing.sm))
     XRadarListGroup(title = "Itinéraire", color = groupColor, shadowElevation = 0.dp) {
         Toggle("Éviter les péages", XRadarIcons.Toll, colors.controlZone, settings.avoidTolls) {
             AppPreferences.updateSettings { it.copy(avoidTolls = !it.avoidTolls) }
@@ -450,7 +485,61 @@ private fun OptionsBody() {
             AppPreferences.updateSettings { it.copy(avoidTraffic = !it.avoidTraffic) }
         }
     }
+    Spacer(Modifier.height(spacing.sm))
 }
+
+@Composable
+private fun OptionTitle(text: String) {
+    XRadarText(
+        text = text.uppercase(),
+        style = XRadarTheme.typography.caption,
+        color = XRadarTheme.colors.textTertiary,
+        modifier = Modifier.padding(start = XRadarTheme.spacing.md),
+    )
+}
+
+/** The small arrow under the alerts card: unfold the rest, or fold back. */
+@Composable
+private fun FoldArrow(unfolded: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(26.dp)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        XRadarIcon(
+            if (unfolded) XRadarIcons.ChevronUp else XRadarIcons.ChevronDown,
+            contentDescription = if (unfolded) "Replier les alertes" else "Afficher toutes les alertes",
+            tint = XRadarTheme.colors.textSecondary,
+            size = 16.dp,
+        )
+    }
+}
+
+/** Opaque in the middle, fading out at an edge only while rows hide beyond it. */
+private fun Modifier.fadedEdges(scroll: ScrollState): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val fade = OPTION_FADE.toPx()
+        if (scroll.canScrollBackward) {
+            drawRect(
+                Brush.verticalGradient(listOf(Color.Transparent, Color.Black), startY = 0f, endY = fade),
+                size = Size(size.width, fade),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+        if (scroll.canScrollForward) {
+            drawRect(
+                Brush.verticalGradient(listOf(Color.Black, Color.Transparent), startY = size.height - fade, endY = size.height),
+                topLeft = Offset(0f, size.height - fade),
+                size = Size(size.width, fade),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+    }
 
 @Composable
 private fun Toggle(title: String, icon: ImageVector, tint: Color, checked: Boolean, onToggle: () -> Unit) {
@@ -460,11 +549,19 @@ private fun Toggle(title: String, icon: ImageVector, tint: Color, checked: Boole
         leadingTint = tint,
         onClick = onToggle,
         trailing = { XRadarSwitch(checked = checked, onCheckedChange = { onToggle() }) },
+        // A fixed height, so the folded card ends exactly under a row.
+        modifier = Modifier.height(OPTION_ROW_HEIGHT),
     )
 }
 
 @Composable
 private fun RowDivider() = XRadarDivider(Modifier.padding(start = 58.dp))
+
+// The alerts card: row and line heights, folded after "Accident", faded edges.
+private val OPTION_ROW_HEIGHT = 56.dp
+private val OPTION_DIVIDER = 1.dp
+private val FOLDED_ROWS = 1 + ReportType.ALERT_OPTIONS.indexOf(ReportType.Accident) + 1
+private val OPTION_FADE = 10.dp
 
 private val DOCK_CARD_HEIGHT = 82.dp
 /** Exactly the handle + the cards (+ the trip line when there is one) — no dead strip. */

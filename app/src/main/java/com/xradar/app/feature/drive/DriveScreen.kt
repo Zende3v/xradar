@@ -367,9 +367,10 @@ fun DriveScreen(
                     border = BorderStroke(1.dp, colors.border),
                     size = MAP_CONTROL_SIZE,
                 )
-                // Primary crowdsourcing action: signal something on the road.
+                // Primary crowdsourcing action: signal something on the road. Neutral glass and a
+                // grey triangle, like the other controls (no orange, no glow).
                 XRadarIconButton(
-                    icon = ImageVector.vectorResource(R.drawable.ic_report),
+                    icon = XRadarIcons.Warning,
                     contentDescription = "Signaler",
                     onClick = {
                         when {
@@ -378,7 +379,7 @@ fun DriveScreen(
                             else -> reportOpen = true
                         }
                     },
-                    tint = colors.hazard,
+                    tint = colors.textSecondary,
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),
                     size = MAP_CONTROL_SIZE,

@@ -169,7 +169,13 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val here = sample
         val onTrip = route != null && here != null
         val shownRadars = if (onTrip) enabledRadars.filter { onTripRoute(it.lat, it.lon, here!!) } else enabledRadars
-        val shownReports = if (onTrip) enabledReports.filter { onTripRoute(it.lat, it.lon, here!!) } else enabledReports
+        // Off a trip, the reports within the radars' ring around the driver only: the whole of
+        // France on the map is no help, whoever reported (admins included).
+        val shownReports = when {
+            onTrip -> enabledReports.filter { onTripRoute(it.lat, it.lon, here!!) }
+            here != null -> enabledReports.filter { Geo.haversine(here.latitude, here.longitude, it.lat, it.lon) <= RADAR_RING_M }
+            else -> enabledReports
+        }
         val speedKmh = when (signal) {
             GpsSignal.Searching, GpsSignal.Lost -> 0
             else -> (sample?.speedKmh ?: 0f).roundToInt().coerceAtLeast(0)

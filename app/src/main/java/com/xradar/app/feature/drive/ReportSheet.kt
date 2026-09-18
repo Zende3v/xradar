@@ -385,6 +385,8 @@ private fun ReportTile(type: ReportType, onClick: () -> Unit, modifier: Modifier
             color = XRadarTheme.colors.textSecondary,
             textAlign = TextAlign.Center,
             maxLines = 2,
+            // Two lines kept for every name: a short one does not drop its icon lower.
+            minLines = 2,
         )
     }
 }

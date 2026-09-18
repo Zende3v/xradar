@@ -22,6 +22,8 @@ fun XRadarText(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
     textAlign: TextAlign? = null,
+    /** Room kept for this many lines even when the text takes fewer. */
+    minLines: Int = 1,
 ) {
     Text(
         text = text,
@@ -29,6 +31,7 @@ fun XRadarText(
         style = style,
         color = color,
         maxLines = maxLines,
+        minLines = minLines,
         overflow = overflow,
         textAlign = textAlign,
     )
