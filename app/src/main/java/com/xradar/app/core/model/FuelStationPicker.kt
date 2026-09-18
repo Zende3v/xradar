@@ -1,8 +1,11 @@
 package com.xradar.app.core.model
 
 /** A price for [fuel] is on show at this station: on sale, and updated within 48 h. */
-fun Place.showsFuelPrice(fuel: FuelType, nowMillis: Long): Boolean =
-    this.fuel?.prices?.any { it.type == fuel && !it.outOfStock && it.isFresh(nowMillis) } == true
+fun Place.showsFuelPrice(fuel: FuelType, nowMillis: Long): Boolean = shownFuelPrice(fuel, nowMillis) != null
+
+/** The price on show for [fuel] (see [showsFuelPrice]), in euros per litre; null when none. */
+fun Place.shownFuelPrice(fuel: FuelType, nowMillis: Long): Double? =
+    this.fuel?.prices?.firstOrNull { it.type == fuel && !it.outOfStock && it.isFresh(nowMillis) }?.euros
 
 /**
  * Which stations the "Carburant" search lists, out of the pool the backend sends (its 60
@@ -12,7 +15,9 @@ fun Place.showsFuelPrice(fuel: FuelType, nowMillis: Long): Boolean =
  * stations that show a price for the chosen fuel come first, as long as they stay within
  * [PRICED_STRETCH] times that reach; the list is then topped up with the nearest others.
  * Anywhere sparser (a small town, the countryside) it is simply the [LIMIT] nearest, as
- * before: no station is traded for a price there.
+ * before: no station is traded for a price there. With a fuel chosen, the list goes cheapest
+ * first (then the stations without a price, nearest first); without one ("Proche uniquement"),
+ * nearest first. Same rules as iOS.
  *
  * Measured on the official feed (Gazole): central Paris goes from 6 to 20 stations with a
  * price out of 20, Paris 15e from 9 to 19, Rennes from 16 to 19; Fougères (20th station at
@@ -31,9 +36,10 @@ object FuelStationPicker {
 
     fun pick(pool: List<Place>, fuel: FuelType?, nowMillis: Long): List<Place> {
         val nearest = pool.sortedBy { it.distanceMeters ?: Int.MAX_VALUE }
-        if (fuel == null || nearest.size <= LIMIT) return nearest.take(LIMIT)
-        val reach = nearest[LIMIT - 1].distanceMeters ?: return nearest.take(LIMIT)
-        if (reach > DENSE_REACH_M) return nearest.take(LIMIT)
+        if (fuel == null) return nearest.take(LIMIT)
+        if (nearest.size <= LIMIT) return cheapestFirst(nearest, fuel, nowMillis)
+        val reach = nearest[LIMIT - 1].distanceMeters ?: return cheapestFirst(nearest.take(LIMIT), fuel, nowMillis)
+        if (reach > DENSE_REACH_M) return cheapestFirst(nearest.take(LIMIT), fuel, nowMillis)
 
         val cap = reach.toLong() * PRICED_STRETCH
         val priced = nearest
@@ -41,6 +47,15 @@ object FuelStationPicker {
             .take(LIMIT)
         val pickedIds = priced.mapTo(HashSet()) { it.id }
         val others = nearest.filter { it.id !in pickedIds }.take(LIMIT - priced.size)
-        return (priced + others).sortedBy { it.distanceMeters ?: Int.MAX_VALUE }
+        return cheapestFirst(priced + others, fuel, nowMillis)
+    }
+
+    /** The stations showing a price for [fuel], cheapest first (the nearer on a tie), then those
+     *  without one, nearest first. */
+    private fun cheapestFirst(stations: List<Place>, fuel: FuelType, nowMillis: Long): List<Place> {
+        val nearest = stations.sortedBy { it.distanceMeters ?: Int.MAX_VALUE }
+        val (priced, unpriced) = nearest.partition { it.showsFuelPrice(fuel, nowMillis) }
+        // sortedBy is stable: on the same price, the nearer stays first.
+        return priced.sortedBy { it.shownFuelPrice(fuel, nowMillis) } + unpriced
     }
 }
