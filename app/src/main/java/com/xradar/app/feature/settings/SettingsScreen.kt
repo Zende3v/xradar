@@ -13,11 +13,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -31,10 +37,10 @@ import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarListGroup
 import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarScreenScaffold
-import com.xradar.app.designsystem.component.XRadarSwitch
 import com.xradar.app.designsystem.component.XRadarText
 import com.xradar.app.designsystem.foundation.XRadarIcons
 import com.xradar.app.designsystem.theme.XRadarTheme
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsRoute(
@@ -47,8 +53,9 @@ fun SettingsRoute(
     )
 }
 
-/** Réglages : apparence, dépassement de la limitation, partage des ralentissements et diagnostic admin.
- *  Les alertes affichées se configurent depuis le menu « Options » du HUD. */
+/** Réglages : apparence, dépassement de la limitation, les deux volumes et diagnostic admin.
+ *  Les alertes affichées se configurent depuis le menu « Options » du HUD ; ce que l'app garde et
+ *  partage, depuis Menu ▸ Confidentialité. */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -75,8 +82,17 @@ fun SettingsScreen(
                 OverspeedSetting()
             }
 
-            XRadarListGroup(title = "Trafic") {
-                ShareSlowdownsSetting()
+            XRadarListGroup(title = "Volume") {
+                val alerts by AppPreferences.alerts.collectAsStateWithLifecycle()
+                VolumeSetting("Volume Guidage", alerts.guidanceVolume) { v -> AppPreferences.updateAlerts { it.copy(guidanceVolume = v) } }
+                VolumeSetting("Volume alertes", alerts.alertVolume) { v -> AppPreferences.updateAlerts { it.copy(alertVolume = v) } }
+                XRadarText(
+                    "Guidage : les consignes de navigation. Alertes : les sons et les annonces des radars, des dangers et du " +
+                        "dépassement. Chacun indépendant de l'autre, dans la limite du volume du téléphone.",
+                    style = XRadarTheme.typography.footnote,
+                    color = XRadarTheme.colors.textTertiary,
+                    modifier = Modifier.padding(start = spacing.lg, end = spacing.lg, bottom = spacing.md),
+                )
             }
 
             if (account?.role == com.xradar.app.core.model.Role.Admin) {
@@ -124,30 +140,31 @@ private fun OverspeedSetting() {
     )
 }
 
-/** "Partager les ralentissements", anonymous; on by default. */
+/** A volume from 0 to 100 %, saved when the finger lets go (not at every step of the drag). */
 @Composable
-private fun ShareSlowdownsSetting() {
-    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+private fun VolumeSetting(title: String, stored: Float, onCommit: (Float) -> Unit) {
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
-    Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
+    var value by remember(stored) { mutableFloatStateOf(stored) }
+    Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.sm)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            XRadarText(
-                "Partager les ralentissements",
-                style = XRadarTheme.typography.body,
-                color = colors.textPrimary,
-                modifier = Modifier.weight(1f),
-            )
-            XRadarSwitch(
-                checked = settings.shareSlowdowns,
-                onCheckedChange = { on -> AppPreferences.updateSettings { it.copy(shareSlowdowns = on) } },
-            )
+            XRadarText(title, style = XRadarTheme.typography.body, color = colors.textPrimary, modifier = Modifier.weight(1f))
+            XRadarText("${(value * 100).roundToInt()} %", style = XRadarTheme.typography.callout, color = colors.textSecondary)
         }
-        Spacer(Modifier.height(spacing.xs))
-        XRadarText(
-            "Sur une route à 70 km/h ou plus, quand tu roules nettement moins vite que la limite, l'app envoie la position, le sens et la vitesse de ce moment, sans lien avec ton compte, effacés après 30 minutes. À plusieurs, cela signale un bouchon ; seul, l'app te demande « Ralentissement du trafic ? ».",
-            style = XRadarTheme.typography.footnote,
-            color = colors.textTertiary,
+        Slider(
+            value = value,
+            onValueChange = { value = it },
+            onValueChangeFinished = { onCommit(value) },
+            valueRange = 0f..1f,
+            // 5 % steps, as on iOS.
+            steps = 19,
+            colors = SliderDefaults.colors(
+                thumbColor = colors.accent,
+                activeTrackColor = colors.accent,
+                inactiveTrackColor = colors.surfaceHigh,
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
         )
     }
 }

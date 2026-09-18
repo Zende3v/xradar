@@ -33,6 +33,9 @@ class RecentsRepository(context: Context) {
     /** Drop one entry from the list (the ✕ on a row). */
     fun remove(id: String) = write(recents().filter { it.id != id })
 
+    /** "Suggestions de trajets" turned off: nothing is kept any more. */
+    fun clear() = write(emptyList())
+
     fun add(place: Place) {
         write((listOf(place) + recents().filter { it.id != place.id }).take(MAX))
     }

@@ -2,6 +2,7 @@ package com.xradar.app.feature.drive
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
@@ -49,16 +50,18 @@ class GuidanceSpeaker(context: Context) {
     }
 
     /**
-     * Speak now, interrupting any in-progress instruction, unless a phrase said [whole] is still
-     * going: then this one waits behind it.
+     * Speak now at [volume] (0..1: "Volume Guidage" or "Volume alertes", as the phrase is),
+     * interrupting any in-progress instruction, unless a phrase said [whole] is still going:
+     * then this one waits behind it.
      */
-    fun speak(text: String, whole: Boolean = false) {
+    fun speak(text: String, volume: Float, whole: Boolean = false) {
         val e = engine ?: return
         if (!ready || text.isBlank()) return
         val id = "${if (whole) "whole" else "say"}-${said++}"
         val mode = if (wholeId != null && e.isSpeaking) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
         if (whole) wholeId = id
-        e.speak(text, mode, null, id)
+        val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f)) }
+        e.speak(text, mode, params, id)
     }
 
     private fun ended(utteranceId: String?) {

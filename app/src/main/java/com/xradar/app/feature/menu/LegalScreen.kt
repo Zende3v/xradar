@@ -21,13 +21,13 @@ import com.xradar.app.designsystem.theme.XRadarTheme
 const val PRIVACY_POLICY_URL = "http://45.80.23.8:9020/"
 
 /**
- * Mentions légales: the privacy policy, and where the map, the places and the figures come from.
+ * "À propos": the privacy policy, and where the map, the places and the figures come from.
  * The map keeps MapLibre's own attribution button as well.
  */
 @Composable
 fun LegalRoute(onBack: () -> Unit) {
     val spacing = XRadarTheme.spacing
-    XRadarScreenScaffold(title = "Mentions légales", onBack = onBack) {
+    XRadarScreenScaffold(title = "À propos", onBack = onBack) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

@@ -158,7 +158,8 @@ fun SearchRoute(onBack: () -> Unit) {
     fun pick(place: Place) {
         when (target) {
             PickTarget.Destination -> {
-                recentsRepo.add(place)
+                // "Suggestions de trajets" (Confidentialité): only then is the destination kept.
+                if (settings.tripSuggestions) recentsRepo.add(place)
                 ActiveTripRepository.setDestination(place)
                 onBack()
             }
@@ -193,7 +194,7 @@ fun SearchRoute(onBack: () -> Unit) {
         home = home,
         work = work,
         favorites = favorites,
-        recents = recents,
+        recents = if (settings.tripSuggestions) recents else emptyList(),
         results = results,
         loading = loading,
         category = category,

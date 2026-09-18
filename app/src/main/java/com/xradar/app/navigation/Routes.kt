@@ -12,5 +12,6 @@ object Routes {
     const val REFERRAL = "referral"
     const val DIAGNOSTIC = "diagnostic"
     const val LEGAL = "legal"
+    const val PRIVACY = "privacy"
     const val SUBSCRIPTION = "subscription"
 }

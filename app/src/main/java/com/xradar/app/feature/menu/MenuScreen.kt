@@ -54,6 +54,7 @@ fun MenuRoute(
     onOpenSettings: () -> Unit,
     onOpenReferral: () -> Unit,
     onOpenLegal: () -> Unit,
+    onOpenPrivacy: () -> Unit,
 ) {
     val account by AccountRepository.account.collectAsStateWithLifecycle()
     // The access status moves on its own (trial ending, referral applied): refresh.
@@ -67,6 +68,7 @@ fun MenuRoute(
         onOpenSettings = onOpenSettings,
         onOpenReferral = onOpenReferral,
         onOpenLegal = onOpenLegal,
+        onOpenPrivacy = onOpenPrivacy,
         onLogout = { AccountRepository.logout() },
     )
 }
@@ -81,6 +83,7 @@ fun MenuScreen(
     onOpenSettings: () -> Unit,
     onOpenReferral: () -> Unit,
     onOpenLegal: () -> Unit,
+    onOpenPrivacy: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val colors = XRadarTheme.colors
@@ -103,6 +106,8 @@ fun MenuScreen(
                 Section("Statistiques", ImageVector.vectorResource(R.drawable.ic_stats), onOpenStats)
                 XRadarDivider(Modifier.padding(start = 58.dp))
                 Section("Réglages", ImageVector.vectorResource(R.drawable.ic_settings), onOpenSettings)
+                XRadarDivider(Modifier.padding(start = 58.dp))
+                Section("Confidentialité", XRadarIcons.Shield, onOpenPrivacy)
                 if (account?.role == Role.Admin) {
                     XRadarDivider(Modifier.padding(start = 58.dp))
                     Section("Parrainage", ImageVector.vectorResource(R.drawable.ic_referral), onOpenReferral)
@@ -110,7 +115,7 @@ fun MenuScreen(
             }
 
             XRadarListGroup {
-                Section("Mentions légales", XRadarIcons.Info, onOpenLegal)
+                Section("À propos", XRadarIcons.Info, onOpenLegal)
             }
 
             Spacer(Modifier.height(spacing.xl))

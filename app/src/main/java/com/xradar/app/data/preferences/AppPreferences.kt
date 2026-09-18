@@ -24,6 +24,10 @@ data class AlertPreferences(
     val voice: Boolean = true,
     /** What warns the driver over the speed limit. */
     val overspeed: OverspeedWarning = OverspeedWarning.Voice,
+    /** "Volume Guidage" (0..1): the spoken turn-by-turn and the trip's own announcements. */
+    val guidanceVolume: Float = 1f,
+    /** "Volume alertes" (0..1): the alert sounds and the spoken alerts (radars, dangers, overspeed). */
+    val alertVolume: Float = 1f,
 ) {
     /** Whether reports of [type] reach the driver. */
     fun shows(type: ReportType): Boolean = type !in hiddenReports
@@ -70,9 +74,17 @@ data class AppSettings(
     val preferredFuel: FuelType = FuelType.Gazole,
     /** "Proche uniquement" in the nearby "Carburant" search: the nearest open stations, no price. */
     val fuelNearestOnly: Boolean = false,
-    /** "Partager les ralentissements": a slowdown on a fast road is sent anonymously (and may
-     *  ask "Ralentissement du trafic ?"). */
-    val shareSlowdowns: Boolean = true,
+    // Confidentialité.
+    /** "Aide au trafic partagé": a slowdown on a fast road is sent anonymously to the shared
+     *  traffic (and may ask "Ralentissement du trafic ?"). Off: nothing of this driver feeds it. */
+    val sharedTraffic: Boolean = true,
+    /** "Suggestions de trajets": the destinations picked are kept on the phone and offered again
+     *  in the search ("Récents"). */
+    val tripSuggestions: Boolean = true,
+    /** "Statistiques de conduite": trips and driving time are recorded and sent to the account. */
+    val drivingStats: Boolean = true,
+    /** "Présence anonyme": the backend counts the app open and a trip running (no position). */
+    val presence: Boolean = true,
 )
 
 /** App-scoped preferences, backed by SharedPreferences. Init once from a Context. */
@@ -97,6 +109,8 @@ object AppPreferences {
             vibration = p.getBoolean("vibration", true),
             voice = p.getBoolean("voice", true),
             overspeed = enumOrDefault(p.getString("overspeed", null), OverspeedWarning.Voice),
+            guidanceVolume = p.getFloat("guidanceVolume", 1f).coerceIn(0f, 1f),
+            alertVolume = p.getFloat("alertVolume", 1f).coerceIn(0f, 1f),
         )
         _settings.value = AppSettings(
             theme = enumOrDefault(p.getString("theme", null), legacyTheme(p)),
@@ -105,7 +119,11 @@ object AppPreferences {
             avoidTraffic = p.getBoolean("avoidTraffic", false),
             preferredFuel = enumOrDefault(p.getString("preferredFuel", null), FuelType.Gazole),
             fuelNearestOnly = p.getBoolean("fuelNearestOnly", false),
-            shareSlowdowns = p.getBoolean("shareSlowdowns", true),
+            // Stored under its first name: the choice made before the rename stays.
+            sharedTraffic = p.getBoolean("shareSlowdowns", true),
+            tripSuggestions = p.getBoolean("tripSuggestions", true),
+            drivingStats = p.getBoolean("drivingStats", true),
+            presence = p.getBoolean("presence", true),
         )
     }
 
@@ -150,7 +168,10 @@ object AppPreferences {
             putBoolean("avoidTraffic", updated.avoidTraffic)
             putString("preferredFuel", updated.preferredFuel.name)
             putBoolean("fuelNearestOnly", updated.fuelNearestOnly)
-            putBoolean("shareSlowdowns", updated.shareSlowdowns)
+            putBoolean("shareSlowdowns", updated.sharedTraffic)
+            putBoolean("tripSuggestions", updated.tripSuggestions)
+            putBoolean("drivingStats", updated.drivingStats)
+            putBoolean("presence", updated.presence)
             apply()
         }
     }
@@ -169,6 +190,8 @@ object AppPreferences {
             putBoolean("vibration", updated.vibration)
             putBoolean("voice", updated.voice)
             putString("overspeed", updated.overspeed.name)
+            putFloat("guidanceVolume", updated.guidanceVolume)
+            putFloat("alertVolume", updated.alertVolume)
             apply()
         }
     }

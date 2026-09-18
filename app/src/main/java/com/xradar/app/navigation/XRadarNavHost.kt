@@ -22,6 +22,7 @@ import com.xradar.app.feature.diagnostic.DiagnosticRoute
 import com.xradar.app.feature.drive.DriveRoute
 import com.xradar.app.feature.menu.LegalRoute
 import com.xradar.app.feature.menu.MenuRoute
+import com.xradar.app.feature.menu.PrivacyRoute
 import com.xradar.app.feature.menu.ReferralRoute
 import com.xradar.app.feature.menu.StatsRoute
 import com.xradar.app.feature.profile.ProfileRoute
@@ -78,6 +79,7 @@ fun XRadarNavHost(modifier: Modifier = Modifier) {
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenReferral = { navController.navigate(Routes.REFERRAL) },
                 onOpenLegal = { navController.navigate(Routes.LEGAL) },
+                onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
             )
         }
         composable(Routes.ACCOUNT) {
@@ -100,6 +102,9 @@ fun XRadarNavHost(modifier: Modifier = Modifier) {
         }
         composable(Routes.LEGAL) {
             LegalRoute(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.PRIVACY) {
+            PrivacyRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.DIAGNOSTIC) {
             DiagnosticRoute(onBack = { navController.popBackStack() })

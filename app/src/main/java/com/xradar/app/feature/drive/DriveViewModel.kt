@@ -284,6 +284,13 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             var lastFlush = System.currentTimeMillis()
             LocationRepository.location.collect { fix ->
                 if (fix == null) return@collect
+                // "Statistiques de conduite" off: nothing counted, nothing sent.
+                if (!AppPreferences.settings.value.drivingStats) {
+                    lastLat = Double.NaN
+                    pendingS = 0.0
+                    pendingM = 0.0
+                    return@collect
+                }
                 val now = System.currentTimeMillis()
                 val moving = (fix.speedMps ?: 0f) > DRIVE_MIN_SPEED_MS
                 if (!lastLat.isNaN() && moving) {
@@ -334,7 +341,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // shown to nobody, no position sent.
         viewModelScope.launch {
             while (true) {
-                AccountRepository.token?.let { token ->
+                // "Présence anonyme" off: no call at all.
+                AccountRepository.token?.takeIf { AppPreferences.settings.value.presence }?.let { token ->
                     liveApi.presence(token, inTrip = ActiveTripRepository.destination.value != null)
                 }
                 delay(PRESENCE_MS)
@@ -503,14 +511,14 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 if (!prefs.sound || speaker.isSpeaking || !nearest.type.isEnforcement) continue
                 if (s.speedKmh < AlertBeeps.MIN_SPEED_KMH) continue
                 if (nearest.distanceMeters <= AlertBeeps.BURST_METERS) {
-                    if (burstAlerts.add(nearest.key)) sounds.play(AlertSound.Laser, prefs.vibration)
+                    if (burstAlerts.add(nearest.key)) sounds.play(AlertSound.Laser, prefs.vibration, prefs.alertVolume)
                     continue
                 }
                 val interval = AlertBeeps.intervalMs(nearest.distanceMeters) ?: continue
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastBeepAt < interval) continue
                 lastBeepAt = now
-                sounds.play(AlertSound.Beep, prefs.vibration)
+                sounds.play(AlertSound.Beep, prefs.vibration, prefs.alertVolume)
             }
         }
         // Recompute the route if the driver leaves it (off-route detection).
@@ -637,7 +645,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         if (!announcedNear && (meters <= NEAR_ANNOUNCE_M || secondsAway <= NEAR_ANNOUNCE_S)) {
             announcedNear = true
             announcedFar = true // never announce a distance after the final cue
-            speaker.speak(GuidanceText.spokenNear(target))
+            speaker.speak(GuidanceText.spokenNear(target), AppPreferences.alerts.value.guidanceVolume)
             return
         }
         if (announcedFar) return
@@ -648,7 +656,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val marker = ANNOUNCE_MARKERS_M.firstOrNull { it <= horizon && meters - lead <= it }
         if (marker != null && secondsAway > FAR_MIN_GAP_S) {
             announcedFar = true
-            speaker.speak(GuidanceText.spokenFar(target, marker))
+            speaker.speak(GuidanceText.spokenFar(target, marker), AppPreferences.alerts.value.guidanceVolume)
         }
     }
 
@@ -729,6 +737,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private fun finalizeTrip() {
         val finished = trip ?: return
         trip = null
+        // "Statistiques de conduite" off: the trip only served the guidance (its arrival).
+        if (!AppPreferences.settings.value.drivingStats) return
         val record = finished.record(UUID.randomUUID().toString()) ?: return
         tripHistory.add(record)
         // Statistics live on the server for everyone: survive a reinstall.
@@ -824,7 +834,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val fix = state.location ?: return
         if (fix.timeMs == lastDetectedFixMs) return
         lastDetectedFixMs = fix.timeMs
-        if (!AppPreferences.settings.value.shareSlowdowns || AccountRepository.token == null) return
+        if (!AppPreferences.settings.value.sharedTraffic || AccountRepository.token == null) return
         val destination = ActiveTripRepository.destination.value
         val paused = destination != null && (
             (trip?.distanceMeters ?: 0.0) < SLOWDOWN_TRIP_START_M ||
@@ -890,6 +900,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             val saved = if (notice.gainMinutes > 1) "${notice.gainMinutes} minutes gagnées" else "1 minute gagnée"
             speaker.speak(
                 if (notice.closedRoad) "Route fermée devant : nouvel itinéraire." else "Itinéraire plus rapide trouvé : $saved.",
+                AppPreferences.alerts.value.guidanceVolume,
                 whole = true,
             )
         }
@@ -1109,7 +1120,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val d = alert.distanceMeters
         if (announcedAlerts.size > 300) announcedAlerts.clear()
         fun say(step: Int, text: String) {
-            if (announcedAlerts.add("$id@$step")) speaker.speak(text)
+            if (announcedAlerts.add("$id@$step")) speaker.speak(text, AppPreferences.alerts.value.alertVolume)
         }
         when {
             d in (VOICE_NEAR_M + 1)..VOICE_FAR_M -> {
@@ -1138,8 +1149,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         overspeeding = true
         lastOverspeedAt = now
         when (prefs.overspeed) {
-            OverspeedWarning.Voice -> if (prefs.voice) speaker.speak("Vous dépassez la limite de $limitKmh.")
-            OverspeedWarning.Beep -> if (prefs.sound) sounds.play(AlertSound.Overspeed, prefs.vibration)
+            OverspeedWarning.Voice -> if (prefs.voice) speaker.speak("Vous dépassez la limite de $limitKmh.", prefs.alertVolume)
+            OverspeedWarning.Beep -> if (prefs.sound) sounds.play(AlertSound.Overspeed, prefs.vibration, prefs.alertVolume)
             OverspeedWarning.Off -> Unit
         }
     }
@@ -1155,7 +1166,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
         val fresh = alerts.filter { soundedAlerts.add(it.key) }
         if (fresh.isEmpty()) return
-        sounds.play(if (fresh.any { it.type.isEnforcement }) AlertSound.Detector else AlertSound.Hazard, vibrate)
+        sounds.play(if (fresh.any { it.type.isEnforcement }) AlertSound.Detector else AlertSound.Hazard, vibrate, AppPreferences.alerts.value.alertVolume)
     }
 
     /** Every report ahead still worth an alert for this driver → [RoadAlert]s, nearest first. */

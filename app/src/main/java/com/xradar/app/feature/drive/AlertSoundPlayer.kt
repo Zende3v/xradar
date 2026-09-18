@@ -59,14 +59,16 @@ class AlertSoundPlayer(context: Context) {
         app.getSystemService(Vibrator::class.java)
     }
 
-    fun play(sound: AlertSound, vibrate: Boolean) {
+    /** [volume] (0..1): "Volume alertes". */
+    fun play(sound: AlertSound, vibrate: Boolean, volume: Float) {
         val id = ids[sound] ?: return
         handler.removeCallbacks(letGo)
         if (!holding) {
             holding = true
             audio?.requestAudioFocus(focus)
         }
-        pool.play(id, 1f, 1f, 1, 0, 1f)
+        val level = volume.coerceIn(0f, 1f)
+        pool.play(id, level, level, 1, 0, 1f)
         handler.postDelayed(letGo, (durations[sound] ?: DEFAULT_DURATION_MS) + RELEASE_DELAY_MS)
         if (vibrate) {
             vibrator?.vibrate(
