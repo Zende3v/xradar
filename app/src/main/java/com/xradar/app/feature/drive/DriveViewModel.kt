@@ -13,6 +13,7 @@ import com.xradar.app.core.geo.RoutePath
 import com.xradar.app.core.model.GeoPoint
 import com.xradar.app.core.model.GpsSignal
 import com.xradar.app.core.model.GuidanceInstruction
+import com.xradar.app.core.model.RouteTraffic
 import com.xradar.app.core.model.LocationSample
 import com.xradar.app.core.model.Place
 import com.xradar.app.core.model.Radar
@@ -99,6 +100,15 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val trafficApi = com.xradar.app.data.traffic.TrafficApi()
     /** Bumped at each new route: an answer about a route since replaced is dropped. */
     private var routeVersion = 0
+    /** Shown a few seconds after a switch to a faster route. */
+    private val fasterNotice = MutableStateFlow<FasterRouteNotice?>(null)
+    private val routingApi = com.xradar.app.data.routing.RoutingApi()
+    // "Éviter les bouchons": a check running, the last one asked, and the trip's last switch for
+    // traffic, for the destination they were about (the same place chosen again keeps them).
+    private var checkingFaster = false
+    private var lastFasterCheckAt = 0L
+    private var lastTrafficRerouteAt: Long? = null
+    private var fasterDestinationId: String? = null
     private val speaker = GuidanceSpeaker(application)
     private val sounds = AlertSoundPlayer(application)
     // Alert sounds: the alerts already announced by a sound, and those past their laser burst.
@@ -213,6 +223,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         state.copy(routeError = failed)
     }.combine(traffic) { state, t ->
         state.copy(traffic = if (state.routePoints.isEmpty()) null else t)
+    }.combine(fasterNotice) { state, notice ->
+        state.copy(fasterNotice = notice)
     }.combine(osmLimit) { state, live ->
         // The road's own limit beats the radar VMA: it is true everywhere, all the time.
         if (live != null) state.copy(speedLimitKmh = live, speedLimitSource = SpeedLimitSource.Road) else state
@@ -295,6 +307,13 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 delay(REPORT_REFRESH_MS)
             }
         }
+        // "Éviter les bouchons" turned on during a trip: the traffic already known is looked at now.
+        viewModelScope.launch {
+            AppPreferences.settings.map { it.avoidTraffic }.distinctUntilChanged().collect { on ->
+                val known = traffic.value
+                if (on && known != null) considerFasterRoute(known, routeVersion)
+            }
+        }
         // The traffic on the route being followed, every two minutes while a trip runs (a new
         // route asks at once). Nothing is fetched without a trip.
         viewModelScope.launch {
@@ -363,7 +382,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Toll / motorway preferences: recompute the live route as soon as they change.
         viewModelScope.launch {
             AppPreferences.settings
-                .map { Triple(it.avoidTolls, it.avoidHighways, it.avoidTraffic) }
+                .map { it.avoidTolls to it.avoidHighways }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
@@ -386,6 +405,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 startTrip(destination)
                 routeError.value = false
+                if (destination.id != fasterDestinationId) {
+                    fasterDestinationId = destination.id
+                    lastTrafficRerouteAt = null
+                    lastFasterCheckAt = 0L
+                }
                 // A simulated departure wins over the GPS: that is the point of it.
                 val simulated = ActiveTripRepository.start.value
                 val fix = LocationRepository.location.value
@@ -749,6 +773,53 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val fresh = trafficApi.route(route.points, progress()?.alongMeters, AccountRepository.token) ?: return
         if (version != routeVersion) return
         traffic.value = fresh
+        considerFasterRoute(fresh, version)
+    }
+
+    /**
+     * "Éviter les bouchons": when the backend says the traffic ahead (TomTom's and the drivers'
+     * jams) may be worth going around, it looks for a faster way, and the trip takes it when it
+     * saves enough time (the backend's thresholds, stricter a while after a switch) or goes
+     * around a closed road. Never a detour for a jam alone, never within a few minutes of the
+     * last switch, never for a simulated trip; asked again every few minutes at most (each
+     * check costs several TomTom and ORS requests).
+     */
+    private suspend fun considerFasterRoute(known: RouteTraffic, version: Int) {
+        if (!known.worthChecking || !AppPreferences.settings.value.avoidTraffic || checkingFaster) return
+        val destination = ActiveTripRepository.destination.value ?: return
+        val rp = path ?: return
+        val now = System.currentTimeMillis()
+        lastTrafficRerouteAt?.let { if (now - it < FASTER_COOLDOWN_MS) return }
+        if (now - lastFasterCheckAt < FASTER_RECHECK_MS) return
+        val match = progress() ?: return
+        checkingFaster = true
+        lastFasterCheckAt = now
+        try {
+            val since = lastTrafficRerouteAt?.let { ((now - it) / 1000).toInt() }
+            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since) ?: return
+            if (version != routeVersion || ActiveTripRepository.destination.value != destination) return
+            lastTrafficRerouteAt = System.currentTimeMillis()
+            ActiveTripRepository.setRoute(faster.route)
+            announceFaster(FasterRouteNotice(maxOf(1, (faster.gainSeconds / 60.0).roundToInt()), faster.closed))
+        } finally {
+            checkingFaster = false
+        }
+    }
+
+    /** The switch, said (to the end: the new route's first instruction waits) and shown a moment. */
+    private fun announceFaster(notice: FasterRouteNotice) {
+        fasterNotice.value = notice
+        if (AppPreferences.alerts.value.voice) {
+            val saved = if (notice.gainMinutes > 1) "${notice.gainMinutes} minutes gagnées" else "1 minute gagnée"
+            speaker.speak(
+                if (notice.closedRoad) "Route fermée devant : nouvel itinéraire." else "Itinéraire plus rapide trouvé : $saved.",
+                whole = true,
+            )
+        }
+        viewModelScope.launch {
+            delay(FASTER_NOTICE_MS)
+            if (fasterNotice.value == notice) fasterNotice.value = null
+        }
     }
 
     /** Where the driver is along the route followed; null off it (or on a simulated trip). */
@@ -765,7 +836,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         return buildList {
             if (s.avoidTolls) add("tolls")
             if (s.avoidHighways) add("highways")
-            if (s.avoidTraffic) add("traffic")
+            // "Éviter les bouchons" no longer avoids every reported jam: the faster-route check
+            // weighs the time saved instead (considerFasterRoute).
         }
     }
 
@@ -1128,6 +1200,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val PRESENCE_MS = 30_000L
         /** The route's traffic is asked for again this often during a trip. */
         const val TRAFFIC_REFRESH_MS = 120_000L
+        /** No faster route within this long of the last switch; checks this far apart at most. */
+        const val FASTER_COOLDOWN_MS = 300_000L
+        const val FASTER_RECHECK_MS = 300_000L
+        /** The "Itinéraire plus rapide" banner stays this long. */
+        const val FASTER_NOTICE_MS = 8_000L
         const val NAV_ALERT_RADIUS_M = 15000.0
         /** Spacing of the route corridor samples — well under the radius above. */
         const val CORRIDOR_STEP_M = 2_000.0

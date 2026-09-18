@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -230,6 +231,17 @@ fun DriveScreen(
                     border = BorderStroke(1.dp, colors.border),
                     size = 48.dp,
                 )
+            }
+
+            // A switch to a faster route, for a few seconds, under the guidance.
+            val lastNotice = remember { mutableStateOf<FasterRouteNotice?>(null) }
+            LaunchedEffect(state.fasterNotice) { state.fasterNotice?.let { lastNotice.value = it } }
+            AnimatedVisibility(
+                visible = state.fasterNotice != null,
+                enter = slideInVertically { -it / 2 } + fadeIn(),
+                exit = slideOutVertically { -it / 2 } + fadeOut(),
+            ) {
+                lastNotice.value?.let { FasterRouteBanner(it, Modifier.padding(top = spacing.sm)) }
             }
 
             // The music banner opens under the search bar (or the guidance): in the flow, so
@@ -601,5 +613,43 @@ private fun DriveScreenPreview() {
                 alerts = alerts,
             ),
         )
+    }
+}
+
+/**
+ * A faster way around the traffic was taken: the time it saves, for a few seconds; or the way
+ * around a closed road.
+ */
+@Composable
+private fun FasterRouteBanner(notice: FasterRouteNotice, modifier: Modifier = Modifier) {
+    val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(XRadarTheme.shapes.lg)
+            .background(colors.surface.copy(alpha = 0.9f))
+            .border(1.dp, colors.success, XRadarTheme.shapes.lg)
+            .padding(spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+    ) {
+        XRadarIcon(XRadarIcons.Navigation, contentDescription = null, tint = colors.success, size = 20.dp)
+        Column {
+            XRadarText(
+                if (notice.closedRoad) "Route fermée devant" else "Itinéraire plus rapide",
+                style = XRadarTheme.typography.bodyStrong,
+                color = colors.textPrimary,
+            )
+            XRadarText(
+                when {
+                    notice.closedRoad -> "Nouvel itinéraire pour la contourner"
+                    notice.gainMinutes > 1 -> "${notice.gainMinutes} min gagnées avec le trafic"
+                    else -> "1 min gagnée avec le trafic"
+                },
+                style = XRadarTheme.typography.footnote,
+                color = colors.textSecondary,
+            )
+        }
     }
 }

@@ -3,6 +3,7 @@ package com.xradar.app.feature.drive
 import android.content.Context
 import android.media.AudioAttributes
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import java.util.Locale
 
@@ -15,6 +16,9 @@ class GuidanceSpeaker(context: Context) {
 
     @Volatile private var ready = false
     private var engine: TextToSpeech? = null
+    /** A phrase that must be heard to the end (its utterance id): the next ones wait behind it. */
+    @Volatile private var wholeId: String? = null
+    private var said = 0L
 
     init {
         engine = TextToSpeech(context.applicationContext) { status ->
@@ -27,6 +31,13 @@ class GuidanceSpeaker(context: Context) {
                     // A touch slower than the default, for a calmer voice.
                     tts.setSpeechRate(SPEECH_RATE)
                 }
+                engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) = Unit
+                    override fun onDone(utteranceId: String?) = ended(utteranceId)
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) = ended(utteranceId)
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) = ended(utteranceId)
+                })
                 engine?.setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
@@ -37,17 +48,28 @@ class GuidanceSpeaker(context: Context) {
         }
     }
 
-    /** Speak now, interrupting any in-progress instruction. */
-    fun speak(text: String) {
+    /**
+     * Speak now, interrupting any in-progress instruction, unless a phrase said [whole] is still
+     * going: then this one waits behind it.
+     */
+    fun speak(text: String, whole: Boolean = false) {
         val e = engine ?: return
         if (!ready || text.isBlank()) return
-        e.speak(text, TextToSpeech.QUEUE_FLUSH, null, text.hashCode().toString())
+        val id = "${if (whole) "whole" else "say"}-${said++}"
+        val mode = if (wholeId != null && e.isSpeaking) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
+        if (whole) wholeId = id
+        e.speak(text, mode, null, id)
+    }
+
+    private fun ended(utteranceId: String?) {
+        if (utteranceId != null && utteranceId == wholeId) wholeId = null
     }
 
     /** A phrase is being said: the proximity beeps wait. */
     val isSpeaking: Boolean get() = engine?.isSpeaking == true
 
     fun stop() {
+        wholeId = null
         engine?.stop()
     }
 

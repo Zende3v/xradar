@@ -1,6 +1,7 @@
 package com.xradar.app.data.routing
 
 import com.xradar.app.BuildConfig
+import com.xradar.app.core.model.FasterRoute
 import com.xradar.app.core.model.GeoPoint
 import com.xradar.app.core.model.Route
 import com.xradar.app.core.model.RouteStep
@@ -9,8 +10,11 @@ import com.xradar.app.data.account.AccessDeniedException
 import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -23,8 +27,11 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    /** The faster-route check asks ORS and TomTom several times in a row. */
+    private val fasterClient = client.newBuilder().readTimeout(40, TimeUnit.SECONDS).build()
+
     /**
-     * [avoid] holds "tolls", "highways" and/or "traffic"; the backend maps them to ORS features.
+     * [avoid] holds "tolls" and/or "highways"; the backend maps them to ORS features.
      * A restricted account, or a guest past today's trips, is refused: that throws
      * [AccessDeniedException]; null is a route not obtained.
      */
@@ -48,8 +55,39 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }
     }
 
-    private fun parse(json: String): Route? {
-        val obj = JSONObject(json)
+    /**
+     * The rest of the route being followed ([remaining], from the driver) against variants
+     * around its traffic jams, all timed by TomTom with the traffic (`/api/route/faster`): a
+     * route only when the backend finds it saves enough time, or goes around a closed road.
+     * [sinceRerouteSeconds], the time since the last switch for traffic, makes it stricter for
+     * a while. Null otherwise, or when the check failed.
+     */
+    suspend fun faster(remaining: List<GeoPoint>, avoid: List<String>, sinceRerouteSeconds: Int?): FasterRoute? = withContext(Dispatchers.IO) {
+        if (remaining.size < 2) return@withContext null
+        val coords = JSONArray()
+        remaining.forEach { coords.put(JSONArray().put(it.lon).put(it.lat)) }
+        val body = JSONObject().put("coordinates", coords).put("avoid", JSONArray(avoid))
+        if (sinceRerouteSeconds != null) body.put("sinceRerouteS", sinceRerouteSeconds)
+        val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/api/route/faster")
+            .post(body.toString().toRequestBody(JSON))
+            .apply { com.xradar.app.data.account.AccountRepository.token?.let { header("Authorization", "Bearer $it") } }
+            .build()
+        runCatching {
+            fasterClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val better = JSONObject(response.body?.string() ?: "").optJSONObject("better") ?: return@use null
+                val route = better.optJSONObject("route")?.let { parse(it) } ?: return@use null
+                val gain = better.optInt("gainS")
+                val closed = better.optBoolean("closed")
+                if (gain > 0 || closed) FasterRoute(route, gain, closed) else null
+            }
+        }.getOrNull()
+    }
+
+    private fun parse(json: String): Route? = parse(JSONObject(json))
+
+    private fun parse(obj: JSONObject): Route? {
         val coords = obj.optJSONArray("coordinates") ?: return null
         val points = (0 until coords.length()).mapNotNull { i ->
             val pair = coords.optJSONArray(i) ?: return@mapNotNull null
@@ -58,6 +96,10 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }
         if (points.size < 2) return null
         return Route(points, obj.optInt("distanceM"), obj.optInt("durationS"), parseSteps(obj))
+    }
+
+    private companion object {
+        val JSON = "application/json; charset=utf-8".toMediaType()
     }
 
     /** Turn-by-turn steps; empty if the backend hasn't been redeployed with steps=true. */

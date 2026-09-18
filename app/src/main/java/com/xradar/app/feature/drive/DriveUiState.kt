@@ -14,6 +14,16 @@ import com.xradar.app.core.model.UserReport
 import com.xradar.app.media.MediaPlaybackState
 
 /** Everything the driving HUD needs to render one frame. */
+/**
+ * A faster way around the traffic was just taken: the banner saying how much time it saves, or
+ * that it goes around a closed road.
+ */
+data class FasterRouteNotice(
+    val gainMinutes: Int,
+    val closedRoad: Boolean = false,
+    val id: Long = System.nanoTime(),
+)
+
 data class DriveUiState(
     val speedKmh: Int,
     val speedLimitKmh: Int?,
@@ -48,6 +58,8 @@ data class DriveUiState(
     val speedLimitSource: SpeedLimitSource? = null,
     /** Traffic on the route being followed (TomTom's and the drivers' jams); null until known. */
     val traffic: com.xradar.app.core.model.RouteTraffic? = null,
+    /** Shown a few seconds after a switch to a faster route. */
+    val fasterNotice: FasterRouteNotice? = null,
 ) {
     val speedStatus: SpeedStatus?
         get() = SpeedStatus.of(speedKmh, speedLimitKmh)
