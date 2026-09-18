@@ -46,6 +46,8 @@ data class AppSettings(
     val avoidTraffic: Boolean = false,
     /** Fuel whose price the nearby "Carburant" search shows, picked there. */
     val preferredFuel: FuelType = FuelType.Gazole,
+    /** "Proche uniquement" in the nearby "Carburant" search: the nearest open stations, no price. */
+    val fuelNearestOnly: Boolean = false,
 )
 
 /** App-scoped preferences, backed by SharedPreferences. Init once from a Context. */
@@ -77,6 +79,7 @@ object AppPreferences {
             avoidHighways = p.getBoolean("avoidHighways", false),
             avoidTraffic = p.getBoolean("avoidTraffic", false),
             preferredFuel = enumOrDefault(p.getString("preferredFuel", null), FuelType.Gazole),
+            fuelNearestOnly = p.getBoolean("fuelNearestOnly", false),
         )
     }
 
@@ -111,6 +114,7 @@ object AppPreferences {
             putBoolean("avoidHighways", updated.avoidHighways)
             putBoolean("avoidTraffic", updated.avoidTraffic)
             putString("preferredFuel", updated.preferredFuel.name)
+            putBoolean("fuelNearestOnly", updated.fuelNearestOnly)
             apply()
         }
     }

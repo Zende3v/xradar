@@ -202,7 +202,9 @@ fun SearchRoute(onBack: () -> Unit) {
         categoryFailed = categoryFailed,
         waitingForPosition = start == null && !hasFix,
         preferredFuel = settings.preferredFuel,
-        onFuelSelect = { fuel -> AppPreferences.updateSettings { it.copy(preferredFuel = fuel) } },
+        fuelNearestOnly = settings.fuelNearestOnly,
+        onFuelSelect = { fuel -> AppPreferences.updateSettings { it.copy(preferredFuel = fuel, fuelNearestOnly = false) } },
+        onNearestOnly = { AppPreferences.updateSettings { it.copy(fuelNearestOnly = true) } },
         onQueryChange = { query = it },
         onPick = ::pick,
         onCategory = { cat ->
@@ -252,7 +254,10 @@ fun SearchScreen(
     onCategory: (PlaceCategory) -> Unit,
     /** Fuel whose official price the "Carburant" results show. */
     preferredFuel: FuelType = FuelType.Gazole,
+    /** "Proche uniquement": the nearest open stations, without prices. */
+    fuelNearestOnly: Boolean = false,
     onFuelSelect: (FuelType) -> Unit = {},
+    onNearestOnly: () -> Unit = {},
     onEditStart: () -> Unit,
     onClearStart: () -> Unit,
     onSetHome: () -> Unit,
@@ -301,7 +306,12 @@ fun SearchScreen(
         val showPrices = category == PlaceCategory.Fuel &&
             (categoryLoading || categoryPlaces.isEmpty() || categoryPlaces.any { it.fuel != null })
         if (showPrices) {
-            FuelTypeRow(selected = preferredFuel, onSelect = onFuelSelect)
+            FuelTypeRow(
+                selected = preferredFuel,
+                nearestOnly = fuelNearestOnly,
+                onSelect = onFuelSelect,
+                onNearestOnly = onNearestOnly,
+            )
         }
 
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -323,11 +333,14 @@ fun SearchScreen(
                     message = "Aucun résultat pour « ${category.label} » dans les environs.",
                 )
                 category != null -> {
-                    val fuel = if (showPrices) preferredFuel else null
+                    val nearestOnly = category == PlaceCategory.Fuel && fuelNearestOnly
+                    val fuel = if (showPrices && !nearestOnly) preferredFuel else null
                     // Open places first, nearest first (in a city a station showing a price may
-                    // go ahead); those closed right now follow, marked.
-                    val shown = remember(categoryPlaces, category, fuel) {
-                        NearbyPicker.pick(categoryPlaces, category, fuel, System.currentTimeMillis())
+                    // go ahead); those closed right now follow, marked. "Proche uniquement": the
+                    // open stations only, nearest first, no price.
+                    val shown = remember(categoryPlaces, category, fuel, nearestOnly) {
+                        val picked = NearbyPicker.pick(categoryPlaces, category, fuel, System.currentTimeMillis())
+                        if (nearestOnly) NearbyResults(picked.open, emptyList()) else picked
                     }
                     NearbyList(results = shown, category = category, fuel = fuel, onPick = onPick)
                 }
@@ -850,9 +863,17 @@ private fun StatusLine(status: NearbyLabels.Status) {
     }
 }
 
-/** Which fuel's price the stations show; the choice is remembered. */
+/**
+ * Which fuel's price the stations show, or "Proche uniquement" (the nearest open stations, no
+ * price); the choice is remembered.
+ */
 @Composable
-private fun FuelTypeRow(selected: FuelType, onSelect: (FuelType) -> Unit) {
+private fun FuelTypeRow(
+    selected: FuelType,
+    nearestOnly: Boolean,
+    onSelect: (FuelType) -> Unit,
+    onNearestOnly: () -> Unit,
+) {
     val spacing = XRadarTheme.spacing
     Row(
         modifier = Modifier
@@ -861,8 +882,9 @@ private fun FuelTypeRow(selected: FuelType, onSelect: (FuelType) -> Unit) {
             .padding(horizontal = spacing.lg, vertical = spacing.xs),
         horizontalArrangement = Arrangement.spacedBy(spacing.sm),
     ) {
+        XRadarChip(label = "Proche uniquement", selected = nearestOnly, onClick = onNearestOnly)
         FuelType.entries.forEach { fuel ->
-            XRadarChip(label = fuel.label, selected = fuel == selected, onClick = { onSelect(fuel) })
+            XRadarChip(label = fuel.label, selected = !nearestOnly && fuel == selected, onClick = { onSelect(fuel) })
         }
     }
 }
