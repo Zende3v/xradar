@@ -109,6 +109,12 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private var lastFasterCheckAt = 0L
     private var lastTrafficRerouteAt: Long? = null
     private var fasterDestinationId: String? = null
+    // "Partager les ralentissements": the detector (fed once per fix), the question asked, and
+    // where the driver said "Non" lately.
+    private val slowdownDetector = com.xradar.app.core.drive.SlowdownDetector()
+    private var lastDetectedFixMs = Long.MIN_VALUE
+    private val slowdownPrompt = MutableStateFlow<SlowdownPrompt?>(null)
+    private val declinedSlowdowns = ArrayList<Triple<Double, Double, Long>>()
     private val speaker = GuidanceSpeaker(application)
     private val sounds = AlertSoundPlayer(application)
     // Alert sounds: the alerts already announced by a sound, and those past their laser burst.
@@ -225,6 +231,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         state.copy(traffic = if (state.routePoints.isEmpty()) null else t)
     }.combine(fasterNotice) { state, notice ->
         state.copy(fasterNotice = notice)
+    }.combine(slowdownPrompt) { state, prompt ->
+        state.copy(slowdownPrompt = prompt)
     }.combine(osmLimit) { state, live ->
         // The road's own limit beats the radar VMA: it is true everywhere, all the time.
         if (live != null) state.copy(speedLimitKmh = live, speedLimitSource = SpeedLimitSource.Road) else state
@@ -480,6 +488,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 if (prefs.sound) soundNewAlerts(s.alerts, prefs.vibration)
                 if (prefs.voice) announceAlert(s.alert)
                 warnOverspeed(s.speedKmh, s.speedLimitKmh, prefs)
+                detectSlowdown(s)
             }
         }
         // Radarbot's approach: beeps faster and faster toward the nearest speed enforcement
@@ -806,6 +815,74 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * "Partager les ralentissements": a crawl on a fast road ([SlowdownDetector], fed once per
+     * fix) goes to the backend, anonymously; when no jam is known there yet, the driver is asked
+     * "Ralentissement du trafic ?" for a few seconds. Nothing while the trip starts or ends.
+     */
+    private fun detectSlowdown(state: DriveUiState) {
+        val fix = state.location ?: return
+        if (fix.timeMs == lastDetectedFixMs) return
+        lastDetectedFixMs = fix.timeMs
+        if (!AppPreferences.settings.value.shareSlowdowns || AccountRepository.token == null) return
+        val destination = ActiveTripRepository.destination.value
+        val paused = destination != null && (
+            (trip?.distanceMeters ?: 0.0) < SLOWDOWN_TRIP_START_M ||
+                Geo.haversine(fix.latitude, fix.longitude, destination.lat, destination.lon) < SLOWDOWN_TRIP_END_M
+            )
+        val slowdown = slowdownDetector.update(
+            sample = fix,
+            speedKmh = state.speedKmh,
+            limitKmh = state.speedLimitKmh,
+            limitFromRoad = state.speedLimitSource == SpeedLimitSource.Road,
+            paused = paused,
+        ) ?: return
+        viewModelScope.launch { shareSlowdown(slowdown) }
+    }
+
+    private suspend fun shareSlowdown(slowdown: com.xradar.app.core.drive.Slowdown) {
+        val known = trafficApi.probe(slowdown, AccountRepository.token)
+        val now = System.currentTimeMillis()
+        declinedSlowdowns.removeAll { it.third <= now }
+        // Known to the backend, to the trip's traffic here, or a "Bouchon" close by: nothing to
+        // ask. A blocked account is not asked either (it could not report).
+        if (known != false || slowdownPrompt.value != null || AccountRepository.account.value?.isRestricted == true) return
+        if (trafficKnownHere(slowdown)) return
+        if (declinedSlowdowns.any { Geo.haversine(it.first, it.second, slowdown.lat, slowdown.lon) < SLOWDOWN_DECLINE_M }) return
+        val prompt = SlowdownPrompt(slowdown)
+        slowdownPrompt.value = prompt
+        viewModelScope.launch {
+            delay(SLOWDOWN_PROMPT_MS)
+            if (slowdownPrompt.value == prompt) slowdownPrompt.value = null
+        }
+    }
+
+    /** Whether the trip's traffic already slows the road where the driver is, or a "Bouchon" report lies close by. */
+    private fun trafficKnownHere(slowdown: com.xradar.app.core.drive.Slowdown): Boolean {
+        val known = traffic.value
+        val rp = path
+        val match = progress()
+        if (known != null && rp != null && match != null && known.slowed(match.alongMeters, rp.totalMeters)) return true
+        return reports.value.any {
+            it.type == ReportType.TrafficJam && Geo.haversine(it.lat, it.lon, slowdown.lat, slowdown.lon) < SLOWDOWN_KNOWN_M
+        }
+    }
+
+    /**
+     * "Oui": a "Bouchon" report there (a guest's quota spared); "Non": the probe is taken back
+     * and the driver is not asked again around there for a while.
+     */
+    fun answerSlowdown(yes: Boolean) {
+        val prompt = slowdownPrompt.value ?: return
+        slowdownPrompt.value = null
+        if (yes) {
+            report(ReportDraft(ReportType.TrafficJam, prompted = true))
+        } else {
+            declinedSlowdowns += Triple(prompt.slowdown.lat, prompt.slowdown.lon, System.currentTimeMillis() + SLOWDOWN_DECLINE_MS)
+            viewModelScope.launch { trafficApi.dismissProbe(AccountRepository.token) }
+        }
+    }
+
     /** The switch, said (to the end: the new route's first instruction waits) and shown a moment. */
     private fun announceFaster(notice: FasterRouteNotice) {
         fasterNotice.value = notice
@@ -908,6 +985,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         plate = draft.plate,
                         direction = draft.direction,
                         bearingDeg = fix.bearingDeg?.toDouble(),
+                        prompted = draft.prompted,
                     ),
                     AccountRepository.token,
                     AccountRepository.deviceId,
@@ -1205,6 +1283,14 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val FASTER_RECHECK_MS = 300_000L
         /** The "Itinéraire plus rapide" banner stays this long. */
         const val FASTER_NOTICE_MS = 8_000L
+        // "Ralentissement du trafic ?": asked this long; nothing in a trip's first or last metres;
+        // not again this close to a "Non" for this long; a "Bouchon" this close is already known.
+        const val SLOWDOWN_PROMPT_MS = 10_000L
+        const val SLOWDOWN_TRIP_START_M = 300.0
+        const val SLOWDOWN_TRIP_END_M = 500.0
+        const val SLOWDOWN_DECLINE_MS = 900_000L
+        const val SLOWDOWN_DECLINE_M = 3_000.0
+        const val SLOWDOWN_KNOWN_M = 1_000.0
         const val NAV_ALERT_RADIUS_M = 15000.0
         /** Spacing of the route corridor samples — well under the radius above. */
         const val CORRIDOR_STEP_M = 2_000.0

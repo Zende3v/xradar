@@ -52,6 +52,8 @@ import com.xradar.app.core.model.RoadAlert
 import com.xradar.app.core.model.TripInfo
 import com.xradar.app.data.preferences.AppPreferences
 import com.xradar.app.data.routing.ActiveTripRepository
+import com.xradar.app.designsystem.component.XRadarButton
+import com.xradar.app.designsystem.component.XRadarButtonVariant
 import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarIconButton
 import com.xradar.app.designsystem.component.XRadarSurface
@@ -104,6 +106,7 @@ fun DriveRoute(
         onReportSpeedLimit = viewModel::reportSpeedLimit,
         votedReports = votedReports,
         onVote = viewModel::vote,
+        onSlowdownAnswer = viewModel::answerSlowdown,
         modifier = modifier,
     )
 }
@@ -142,6 +145,8 @@ fun DriveScreen(
     /** Reports the driver already voted on, and the vote itself ("toujours là" = true). */
     votedReports: Set<String> = emptySet(),
     onVote: (String, Boolean) -> Unit = { _, _ -> },
+    /** "Ralentissement du trafic ?" answered: yes or no. */
+    onSlowdownAnswer: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = XRadarTheme.colors
@@ -289,6 +294,14 @@ fun DriveScreen(
                     },
                     onVote = { alert, confirm -> alert.id?.let { onVote(it, confirm) } },
                 )
+            }
+
+            AnimatedVisibility(
+                visible = state.slowdownPrompt != null,
+                enter = slideInVertically { it / 2 } + fadeIn(),
+                exit = slideOutVertically { it / 2 } + fadeOut(),
+            ) {
+                SlowdownPromptCard(onAnswer = onSlowdownAnswer)
             }
 
             AnimatedVisibility(visible = state.routeError) {
@@ -650,6 +663,44 @@ private fun FasterRouteBanner(notice: FasterRouteNotice, modifier: Modifier = Mo
                 style = XRadarTheme.typography.footnote,
                 color = colors.textSecondary,
             )
+        }
+    }
+}
+
+/**
+ * "Ralentissement du trafic ?": two large answers, readable at a glance; it goes by itself after a
+ * few seconds.
+ */
+@Composable
+private fun SlowdownPromptCard(onAnswer: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
+    XRadarSurface(
+        modifier = modifier.fillMaxWidth(),
+        shape = XRadarTheme.shapes.lg,
+        color = colors.surface.copy(alpha = 0.9f),
+        border = BorderStroke(1.dp, colors.border),
+    ) {
+        Column(modifier = Modifier.padding(spacing.md), verticalArrangement = Arrangement.spacedBy(spacing.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                XRadarIcon(XRadarIcons.Warning, contentDescription = null, tint = colors.warning, size = 22.dp)
+                XRadarText("Ralentissement du trafic ?", style = XRadarTheme.typography.headline, color = colors.textPrimary)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                XRadarButton(
+                    text = "Non",
+                    onClick = { onAnswer(false) },
+                    variant = XRadarButtonVariant.Secondary,
+                    modifier = Modifier.weight(1f),
+                    fillWidth = true,
+                )
+                XRadarButton(
+                    text = "Oui",
+                    onClick = { onAnswer(true) },
+                    modifier = Modifier.weight(1f),
+                    fillWidth = true,
+                )
+            }
         }
     }
 }

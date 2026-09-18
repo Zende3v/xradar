@@ -34,6 +34,8 @@ data class NewReport(
     val direction: String = "same",
     /** The driver's course when reporting — orients the control zone. */
     val bearingDeg: Double? = null,
+    /** "Oui" to "Ralentissement du trafic ?": a guest's reports of the day are not used up. */
+    val prompted: Boolean = false,
 )
 
 /** HTTP client for crowdsourced reports (`/api/reports`). */
@@ -79,6 +81,7 @@ class ReportsApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 if (report.side != null) put("side", report.side)
                 put("direction", report.direction)
                 if (report.bearingDeg != null) put("bearing", report.bearingDeg)
+                if (report.prompted) put("prompted", true)
             }
             .toString()
             .toRequestBody(JSON)

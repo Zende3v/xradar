@@ -69,6 +69,8 @@ data class ReportDraft(
     val type: ReportType,
     val direction: String = DIRECTION_SAME,
     val plate: String? = null,
+    /** "Oui" to "Ralentissement du trafic ?". */
+    val prompted: Boolean = false,
 )
 
 /**

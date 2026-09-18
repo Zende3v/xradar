@@ -24,6 +24,12 @@ data class FasterRouteNotice(
     val id: Long = System.nanoTime(),
 )
 
+/** "Ralentissement du trafic ?", asked a few seconds about a slowdown nobody knows of yet. */
+data class SlowdownPrompt(
+    val slowdown: com.xradar.app.core.drive.Slowdown,
+    val id: Long = System.nanoTime(),
+)
+
 data class DriveUiState(
     val speedKmh: Int,
     val speedLimitKmh: Int?,
@@ -60,6 +66,8 @@ data class DriveUiState(
     val traffic: com.xradar.app.core.model.RouteTraffic? = null,
     /** Shown a few seconds after a switch to a faster route. */
     val fasterNotice: FasterRouteNotice? = null,
+    /** "Ralentissement du trafic ?", asked a few seconds about a slowdown nobody knows of yet. */
+    val slowdownPrompt: SlowdownPrompt? = null,
 ) {
     val speedStatus: SpeedStatus?
         get() = SpeedStatus.of(speedKmh, speedLimitKmh)
