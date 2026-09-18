@@ -30,7 +30,9 @@ import com.xradar.app.core.model.TripRecord
 import com.xradar.app.core.model.UserReport
 import com.xradar.app.core.model.isEnforcement
 import com.xradar.app.data.account.AccountRepository
+import com.xradar.app.data.preferences.AlertPreferences
 import com.xradar.app.data.preferences.AppPreferences
+import com.xradar.app.data.preferences.OverspeedWarning
 import com.xradar.app.data.radar.RadarRepository
 import com.xradar.app.data.reports.NewReport
 import com.xradar.app.data.reports.ReportsRepository
@@ -431,9 +433,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             driveState.collect { s ->
                 val prefs = AppPreferences.alerts.value
                 if (prefs.sound) soundNewAlerts(s.alerts, prefs.vibration)
-                if (!prefs.voice) return@collect
-                announceAlert(s.alert)
-                announceOverspeed(s.speedKmh, s.speedLimitKmh)
+                if (prefs.voice) announceAlert(s.alert)
+                warnOverspeed(s.speedKmh, s.speedLimitKmh, prefs)
             }
         }
         // Radarbot's approach: beeps faster and faster toward the nearest speed enforcement
@@ -925,8 +926,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Speak once (then cool down) when clearly over the active limit. */
-    private fun announceOverspeed(speedKmh: Int, limitKmh: Int?) {
+    /**
+     * Once when clearly over the limit, then an occasional reminder while it lasts: spoken or
+     * beeped, as "Dépassement limitation" says, and only while the voice or the sound is on.
+     */
+    private fun warnOverspeed(speedKmh: Int, limitKmh: Int?, prefs: AlertPreferences) {
         if (limitKmh == null || limitKmh <= 0) return
         if (speedKmh <= limitKmh + OVERSPEED_MARGIN) {
             overspeeding = false
@@ -938,7 +942,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         if (overspeeding && now - lastOverspeedAt < OVERSPEED_COOLDOWN_MS) return
         overspeeding = true
         lastOverspeedAt = now
-        speaker.speak("Vous dépassez la limite de $limitKmh.")
+        when (prefs.overspeed) {
+            OverspeedWarning.Voice -> if (prefs.voice) speaker.speak("Vous dépassez la limite de $limitKmh.")
+            OverspeedWarning.Beep -> if (prefs.sound) sounds.play(AlertSound.Overspeed, prefs.vibration)
+            OverspeedWarning.Off -> Unit
+        }
     }
 
     /**

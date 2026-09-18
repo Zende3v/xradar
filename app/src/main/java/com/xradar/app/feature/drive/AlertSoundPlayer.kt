@@ -25,6 +25,8 @@ enum class AlertSound(val res: Int) {
     Laser(R.raw.alert_laser),
     /** A road hazard shows up: a two-note chime. */
     Hazard(R.raw.alert_hazard),
+    /** Over the speed limit: a rising "bi-bip", lower and buzzier than the proximity beep. */
+    Overspeed(R.raw.alert_overspeed),
 }
 
 /**
