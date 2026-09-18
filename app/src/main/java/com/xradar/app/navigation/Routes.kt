@@ -3,7 +3,6 @@ package com.xradar.app.navigation
 /** Navigation route ids. */
 object Routes {
     const val DRIVE = "drive"
-    const val SEARCH = "search"
 
     /** "Menu" — first page: identity, the sections, sign-out. */
     const val MENU = "menu"

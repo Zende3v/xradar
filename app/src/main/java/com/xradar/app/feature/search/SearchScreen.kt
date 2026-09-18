@@ -271,7 +271,15 @@ fun SearchScreen(
     val colors = XRadarTheme.colors
     val spacing = XRadarTheme.spacing
 
-    Column(modifier = Modifier.fillMaxSize().background(colors.canvas)) {
+    // Frosted glass over the HUD: Android has no Liquid Glass, and blurring the live map would
+    // cost a TextureView (battery); a tinted pane lets the map and the HUD show through, light
+    // or dark with the theme. It takes every touch, so nothing reaches the HUD under it.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas.copy(alpha = SEARCH_GLASS_ALPHA))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { },
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -945,6 +953,8 @@ private fun PlaceKind.icon(): ImageVector = when (this) {
 }
 
 private const val MIN_QUERY = 3
+/** The frosted pane over the HUD: enough to read on, the map still showing through. */
+private const val SEARCH_GLASS_ALPHA = 0.8f
 private const val DEBOUNCE_MS = 300L
 
 @Preview(name = "Recherche", showBackground = true, backgroundColor = 0xFF06070A, widthDp = 380, heightDp = 800)
