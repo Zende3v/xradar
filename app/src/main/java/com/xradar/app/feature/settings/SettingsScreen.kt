@@ -25,13 +25,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xradar.app.R
 import com.xradar.app.data.preferences.AppPreferences
-import com.xradar.app.data.preferences.MapStyle
-import com.xradar.app.data.preferences.ThemeMode
-import com.xradar.app.designsystem.component.XRadarDivider
+import com.xradar.app.data.preferences.AppTheme
+import com.xradar.app.data.preferences.OverspeedWarning
 import com.xradar.app.designsystem.component.XRadarIcon
 import com.xradar.app.designsystem.component.XRadarListGroup
 import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarScreenScaffold
+import com.xradar.app.designsystem.component.XRadarSwitch
 import com.xradar.app.designsystem.component.XRadarText
 import com.xradar.app.designsystem.foundation.XRadarIcons
 import com.xradar.app.designsystem.theme.XRadarTheme
@@ -47,7 +47,8 @@ fun SettingsRoute(
     )
 }
 
-/** Réglages : apparence et diagnostic admin. Les alertes se configurent depuis le menu « Options » du HUD. */
+/** Réglages : apparence, dépassement de la limitation, partage des ralentissements et diagnostic admin.
+ *  Les alertes affichées se configurent depuis le menu « Options » du HUD. */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -68,8 +69,14 @@ fun SettingsScreen(
 
             XRadarListGroup(title = "Apparence") {
                 ThemeSetting()
-                RowDivider()
-                MapStyleSetting()
+            }
+
+            XRadarListGroup(title = "Alertes") {
+                OverspeedSetting()
+            }
+
+            XRadarListGroup(title = "Trafic") {
+                ShareSlowdownsSetting()
             }
 
             if (account?.role == com.xradar.app.core.model.Role.Admin) {
@@ -83,37 +90,66 @@ fun SettingsScreen(
     }
 }
 
-/** App color scheme: follow the phone, or force one. */
+/** "Thème général": the app, the map and the HUD together; "Auto" by day and night. */
 @Composable
 private fun ThemeSetting() {
     val settings by AppPreferences.settings.collectAsStateWithLifecycle()
     Segmented(
-        title = "Thème de l'app",
+        title = "Thème général",
         options = listOf(
-            "Système" to ThemeMode.System,
-            "Clair" to ThemeMode.Light,
-            "Sombre" to ThemeMode.Dark,
+            "Auto" to AppTheme.Auto,
+            "Jour" to AppTheme.Day,
+            "Nuit" to AppTheme.Night,
         ),
-        selected = settings.themeMode,
-        onSelect = { mode -> AppPreferences.updateSettings { it.copy(themeMode = mode) } },
+        selected = settings.theme,
+        onSelect = { theme -> AppPreferences.updateSettings { it.copy(theme = theme) } },
+        hint = "L'app, la carte et le HUD ensemble. Auto suit le jour et la nuit à ta position : clair de jour, sombre de nuit.",
     )
 }
 
-/** Basemap: follow the theme, or pin OSM Bright / Alidade Smooth Dark. */
+/** "Dépassement limitation": spoken, a beep of its own, or nothing. */
 @Composable
-private fun MapStyleSetting() {
-    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+private fun OverspeedSetting() {
+    val alerts by AppPreferences.alerts.collectAsStateWithLifecycle()
     Segmented(
-        title = "Fond de carte",
+        title = "Dépassement limitation",
         options = listOf(
-            "Auto" to MapStyle.Auto,
-            "Clair" to MapStyle.Bright,
-            "Sombre" to MapStyle.Dark,
+            "Vocal" to OverspeedWarning.Voice,
+            "Bip" to OverspeedWarning.Beep,
+            "Aucun" to OverspeedWarning.Off,
         ),
-        selected = settings.mapStyle,
-        onSelect = { style -> AppPreferences.updateSettings { it.copy(mapStyle = style) } },
-        hint = "Auto suit le jour et la nuit à ta position : OSM Bright de jour, Alidade Smooth Dark de nuit.",
+        selected = alerts.overspeed,
+        onSelect = { warning -> AppPreferences.updateAlerts { it.copy(overspeed = warning) } },
+        hint = "Plus de 5 km/h au-dessus de la limite, puis un rappel par minute tant que ça dure. Vocal suit le bouton des annonces vocales, Bip celui du son.",
     )
+}
+
+/** "Partager les ralentissements", anonymous; on by default. */
+@Composable
+private fun ShareSlowdownsSetting() {
+    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+    val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
+    Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            XRadarText(
+                "Partager les ralentissements",
+                style = XRadarTheme.typography.body,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            XRadarSwitch(
+                checked = settings.shareSlowdowns,
+                onCheckedChange = { on -> AppPreferences.updateSettings { it.copy(shareSlowdowns = on) } },
+            )
+        }
+        Spacer(Modifier.height(spacing.xs))
+        XRadarText(
+            "Sur une route à 70 km/h ou plus, quand tu roules nettement moins vite que la limite, l'app envoie la position, le sens et la vitesse de ce moment, sans lien avec ton compte, effacés après 30 minutes. À plusieurs, cela signale un bouchon ; seul, l'app te demande « Ralentissement du trafic ? ».",
+            style = XRadarTheme.typography.footnote,
+            color = colors.textTertiary,
+        )
+    }
 }
 
 /** Small pill picker — one row, one choice, no Material segmented button. */
@@ -174,11 +210,6 @@ private fun NavRow(title: String, icon: ImageVector, onClick: () -> Unit) {
             )
         },
     )
-}
-
-@Composable
-private fun RowDivider() {
-    XRadarDivider(Modifier.padding(start = 58.dp))
 }
 
 @Preview(name = "Réglages · dark", showBackground = true, backgroundColor = 0xFF06070A, widthDp = 380, heightDp = 800)

@@ -2,7 +2,9 @@ package com.xradar.app.data.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.xradar.app.core.geo.SunClock
 import com.xradar.app.core.model.FuelType
+import com.xradar.app.core.model.LocationSample
 import com.xradar.app.core.model.ReportType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +22,8 @@ data class AlertPreferences(
     val vibration: Boolean = true,
     /** Spoken (TTS) alert & maneuver announcements. */
     val voice: Boolean = true,
+    /** What warns the driver over the speed limit. */
+    val overspeed: OverspeedWarning = OverspeedWarning.Voice,
 ) {
     /** Whether reports of [type] reach the driver. */
     fun shows(type: ReportType): Boolean = type !in hiddenReports
@@ -28,26 +32,47 @@ data class AlertPreferences(
         copy(hiddenReports = if (type in hiddenReports) hiddenReports - type else hiddenReports + type)
 }
 
-/** How the app picks its color scheme. */
-enum class ThemeMode { System, Light, Dark }
+/** "Dépassement limitation": the spoken warning, a beep of its own, or nothing. */
+enum class OverspeedWarning { Voice, Beep, Off }
 
-/** Which basemap the map draws: follow the app theme, or force one. */
-enum class MapStyle { Auto, Bright, Dark }
+/**
+ * "Thème général", for the whole app, the map and the HUD over it: "Auto" follows day and night
+ * where the driver is, "Jour" and "Nuit" pin it.
+ */
+enum class AppTheme {
+    Auto, Day, Night;
+
+    /** Whether the app draws at night: "Auto" follows the sky where the driver is (Paris's
+     *  before the first fix). */
+    fun isDark(location: LocationSample?, epochMillis: Long = System.currentTimeMillis()): Boolean = when (this) {
+        Auto -> !SunClock.isDaylight(location?.latitude ?: PARIS_LAT, location?.longitude ?: PARIS_LON, epochMillis)
+        Day -> false
+        Night -> true
+    }
+
+    private companion object {
+        const val PARIS_LAT = 48.8566
+        const val PARIS_LON = 2.3522
+    }
+}
 
 /** Look-and-feel and routing choices (persisted), edited from Réglages and the Options dock. */
 data class AppSettings(
-    val themeMode: ThemeMode = ThemeMode.Dark,
-    val mapStyle: MapStyle = MapStyle.Auto,
+    val theme: AppTheme = AppTheme.Auto,
     /** Ask the router to keep the trip off toll roads. */
     val avoidTolls: Boolean = false,
     /** Ask the router to keep the trip off motorways. */
     val avoidHighways: Boolean = false,
-    /** Ask the router to go around the traffic jams drivers reported. */
+    /** "Éviter les bouchons": a faster way around the traffic ahead, taken only when it saves
+     *  enough time (or goes around a closed road). */
     val avoidTraffic: Boolean = false,
     /** Fuel whose price the nearby "Carburant" search shows, picked there. */
     val preferredFuel: FuelType = FuelType.Gazole,
     /** "Proche uniquement" in the nearby "Carburant" search: the nearest open stations, no price. */
     val fuelNearestOnly: Boolean = false,
+    /** "Partager les ralentissements": a slowdown on a fast road is sent anonymously (and may
+     *  ask "Ralentissement du trafic ?"). */
+    val shareSlowdowns: Boolean = true,
 )
 
 /** App-scoped preferences, backed by SharedPreferences. Init once from a Context. */
@@ -71,16 +96,24 @@ object AppPreferences {
             sound = p.getBoolean("sound", true),
             vibration = p.getBoolean("vibration", true),
             voice = p.getBoolean("voice", true),
+            overspeed = enumOrDefault(p.getString("overspeed", null), OverspeedWarning.Voice),
         )
         _settings.value = AppSettings(
-            themeMode = enumOrDefault(p.getString("themeMode", null), ThemeMode.Dark),
-            mapStyle = enumOrDefault(p.getString("mapStyle", null), MapStyle.Auto),
+            theme = enumOrDefault(p.getString("theme", null), legacyTheme(p)),
             avoidTolls = p.getBoolean("avoidTolls", false),
             avoidHighways = p.getBoolean("avoidHighways", false),
             avoidTraffic = p.getBoolean("avoidTraffic", false),
             preferredFuel = enumOrDefault(p.getString("preferredFuel", null), FuelType.Gazole),
             fuelNearestOnly = p.getBoolean("fuelNearestOnly", false),
+            shareSlowdowns = p.getBoolean("shareSlowdowns", true),
         )
+    }
+
+    /** Before "Thème général": the basemap setting was what the drive showed, so it decides. */
+    private fun legacyTheme(p: SharedPreferences): AppTheme = when (p.getString("mapStyle", null)) {
+        "Bright" -> AppTheme.Day
+        "Dark" -> AppTheme.Night
+        else -> AppTheme.Auto
     }
 
     /** The categories turned off; before one switch per category, the grouped switches of earlier builds. */
@@ -108,13 +141,16 @@ object AppPreferences {
         val updated = transform(_settings.value)
         _settings.value = updated
         prefs?.edit()?.apply {
-            putString("themeMode", updated.themeMode.name)
-            putString("mapStyle", updated.mapStyle.name)
+            putString("theme", updated.theme.name)
+            // The app theme and the basemap of earlier builds, merged into [theme].
+            remove("themeMode")
+            remove("mapStyle")
             putBoolean("avoidTolls", updated.avoidTolls)
             putBoolean("avoidHighways", updated.avoidHighways)
             putBoolean("avoidTraffic", updated.avoidTraffic)
             putString("preferredFuel", updated.preferredFuel.name)
             putBoolean("fuelNearestOnly", updated.fuelNearestOnly)
+            putBoolean("shareSlowdowns", updated.shareSlowdowns)
             apply()
         }
     }
@@ -132,6 +168,7 @@ object AppPreferences {
             putBoolean("sound", updated.sound)
             putBoolean("vibration", updated.vibration)
             putBoolean("voice", updated.voice)
+            putString("overspeed", updated.overspeed.name)
             apply()
         }
     }

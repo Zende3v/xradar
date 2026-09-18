@@ -8,11 +8,8 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xradar.app.BuildConfig
 import com.xradar.app.core.model.SignType
-import com.xradar.app.data.preferences.AppPreferences
-import com.xradar.app.data.preferences.MapStyle
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -82,7 +79,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.xradar.app.R
 import com.xradar.app.core.geo.RoutePath
-import com.xradar.app.core.geo.SunClock
 import com.xradar.app.core.model.RadarZone
 import com.xradar.app.core.model.RoadSign
 import com.xradar.app.designsystem.foundation.XRadarIcons
@@ -244,25 +240,9 @@ fun DriveMap(
         }
     }
 
-    // Load (or reload) the style when the basemap choice or the daylight changes.
-    val mapStyle by AppPreferences.settings.collectAsStateWithLifecycle()
-    // "Auto" follows the sky, not the app theme: daylight where the driver actually is.
-    var daylight by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            val fix = locationState.value
-            daylight = SunClock.isDaylight(
-                fix?.latitude ?: FALLBACK_LAT,
-                fix?.longitude ?: FALLBACK_LON,
-            )
-            delay(SUN_CHECK_MS)
-        }
-    }
-    val darkMap = when (mapStyle.mapStyle) {
-        MapStyle.Auto -> !daylight
-        MapStyle.Bright -> false
-        MapStyle.Dark -> true
-    }
+    // Day or night as the app's theme says ("Thème général"): the map and the HUD over it
+    // switch together. The style reloads when it changes.
+    val darkMap = XRadarTheme.colors.isDark
     LaunchedEffect(map, darkMap) {
         val current = map ?: return@LaunchedEffect
         styleReady = false
@@ -1021,12 +1001,7 @@ private const val TANGENT_LERP = 0.3f
 private const val PULSE_STEP = 0.09f
 private const val FRAME_MS = 16L
 // Map-matching: snap radius, progress smoothing, and how often the trimmed line refreshes.
-// Daylight check for the "Auto" basemap: cheap, so a coarse tick is plenty. Before
-// the first fix we assume Paris — only the first few seconds of a launch use it.
-private const val SUN_CHECK_MS = 5 * 60 * 1000L
 private const val AMBIENT_CACHE_BYTES = 200L * 1024 * 1024
-private const val FALLBACK_LAT = 48.8566
-private const val FALLBACK_LON = 2.3522
 // Alert clustering: group below this zoom, within this many screen pixels.
 private const val CLUSTER_MAX_ZOOM = 13
 private const val CLUSTER_RADIUS_PX = 62
