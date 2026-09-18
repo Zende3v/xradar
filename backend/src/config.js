@@ -31,6 +31,17 @@ export const config = {
   orsApiKey: process.env.ORS_API_KEY || null,
   orsUrl: process.env.ORS_URL || 'https://api.openrouteservice.org',
 
+  // TomTom Traffic on the route being followed (key from the service environment, never versioned).
+  tomtomApiKey: process.env.TOMTOM_API_KEY || null,
+  tomtomUrl: process.env.TOMTOM_URL || 'https://api.tomtom.com',
+  // Our route goes back to TomTom as supporting points: one every 30 m at least, 1000 at most.
+  trafficSupportingSpacingM: 30,
+  trafficMaxSupportingPoints: 1000,
+  trafficMaxPoints: 50_000,
+  // Drivers on the same route share one answer this long.
+  trafficCacheMs: 60 * 1000,
+  trafficTimeoutMs: 12 * 1000,
+
   // PostgreSQL / PostGIS: the signalisation (schema "signs", rebuilt weekly by
   // signalisation/rebuild.sh) and the drivers' reports and speed-limit changes (schema "crowd").
   pgHost: process.env.PGHOST || '/var/run/postgresql',

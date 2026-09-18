@@ -172,6 +172,7 @@ systemctl daemon-reload && systemctl restart xradar-backend
 | `ACCOUNTS_FILE` / `AVATARS_DIR` | comptes / photos | `./data/accounts.json` / `./data/avatars` |
 | `GUEST_TRIAL_MS` | essai compte email | 7 j |
 | `GUEST_LIFETIME_MS` | durée de vie compte invité | 7 j |
+| `TOMTOM_API_KEY` | trafic TomTom sur le trajet (drop-in `tomtom.conf`, jamais versionnée) | absent = pas de trafic (503) |
 | `DEVICE_TRIALS_FILE` | fin du premier essai par téléphone | `./data/device-trials.json` |
 | `GUEST_REPORTS_PER_DAY` / `GUEST_TRIPS_PER_DAY` | limites invité par jour | 5 / 7 |
 | `REFERRAL_SUBSCRIPTION_MONTHS` | mois offerts par parrainage | 6 |
@@ -518,6 +519,7 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 | GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm[&limit][&pool=1]` | plus proches d'abord (20, `pool=1` : 60) ; `hours` (état, créneaux du jour, prochain changement), `charging`, `parking`, `stars`, `brand` ; station : prix + horaires officiels |
 | POST | `/api/live/presence {inTrip}` | Bearer ; app ouverte (~30 s), compteur seulement. Anciennes apps : `/position` compte la présence (position ignorée), `/near` renvoie personne |
 | GET | `/api/signs/limit?lat&lon&bearing&way` | `{v, way}` |
+| POST | `/api/traffic/route {coordinates}` | Bearer ; notre tracé renvoyé à TomTom (points d'appui, 1 tous les 30 m, 1000 max) : portions ralenties **sur notre route** en mètres (`fromM`, `toM`, `level` slow/jam/heavy/closed), `totalM` ; cache 60 s ; 503 sans clé, 502 si TomTom muet (429 = quota) |
 | POST | `/api/signs/route {coordinates}` | panneaux + changements de limite du trajet |
 | GET | `/api/signs/near` | panneaux autour |
 | POST | `/api/reports` | compte obligatoire (401), restreint 403, limite du jour 429 ; 201 nouveau / 200 `merged: true` |

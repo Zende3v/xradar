@@ -16,6 +16,7 @@ import { meta as signsMeta } from './signs/postgis.js';
 import { signRouter } from './signs/routes.js';
 import { speedLimitRouter } from './speedlimits/routes.js';
 import { speedLimitStore } from './speedlimits/store.js';
+import { trafficRouter } from './traffic/routes.js';
 
 /** Builds the Express app (kept separate from bootstrap for testability). */
 export function createApp() {
@@ -27,6 +28,7 @@ export function createApp() {
   // The route geometry can be large — bigger JSON limit for the endpoints that take it.
   app.use('/api/signs/route', express.json({ limit: '3mb' }));
   app.use('/api/radars/route', express.json({ limit: '3mb' }));
+  app.use('/api/traffic/route', express.json({ limit: '3mb' }));
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {
@@ -39,6 +41,7 @@ export function createApp() {
       accounts: accountStore.meta,
       live: liveStore.meta,
       routing: { provider: config.orsApiKey ? 'ors' : 'osrm' },
+      traffic: { provider: config.tomtomApiKey ? 'tomtom' : null },
       signs: { published },
       speedLimits: speedLimitStore.meta,
       fuel: fuelStore.meta,
@@ -55,6 +58,7 @@ export function createApp() {
   app.use('/api/route', routeRouter);
   app.use('/api/signs', signRouter);
   app.use('/api/speed-limits', speedLimitRouter);
+  app.use('/api/traffic', trafficRouter);
 
   return app;
 }
