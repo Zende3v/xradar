@@ -94,6 +94,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     @Volatile private var limitFromRoute = false
     /** Set when a destination was chosen but routing came back empty. */
     private val routeError = MutableStateFlow(false)
+    /** Traffic on the route being followed, measured along it; null until known. */
+    private val traffic = MutableStateFlow<com.xradar.app.core.model.RouteTraffic?>(null)
+    private val trafficApi = com.xradar.app.data.traffic.TrafficApi()
+    /** Bumped at each new route: an answer about a route since replaced is dropped. */
+    private var routeVersion = 0
     private val speaker = GuidanceSpeaker(application)
     private val sounds = AlertSoundPlayer(application)
     // Alert sounds: the alerts already announced by a sound, and those past their laser burst.
@@ -206,6 +211,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         state.copy(signs = s)
     }.combine(routeError) { state, failed ->
         state.copy(routeError = failed)
+    }.combine(traffic) { state, t ->
+        state.copy(traffic = if (state.routePoints.isEmpty()) null else t)
     }.combine(osmLimit) { state, live ->
         // The road's own limit beats the radar VMA: it is true everywhere, all the time.
         if (live != null) state.copy(speedLimitKmh = live, speedLimitSource = SpeedLimitSource.Road) else state
@@ -286,6 +293,14 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 LocationRepository.location.value?.let { fix -> refreshReports(fix.latitude, fix.longitude) }
                 delay(REPORT_REFRESH_MS)
+            }
+        }
+        // The traffic on the route being followed, every two minutes while a trip runs (a new
+        // route asks at once). Nothing is fetched without a trip.
+        viewModelScope.launch {
+            while (true) {
+                delay(TRAFFIC_REFRESH_MS)
+                refreshTraffic(routeVersion)
             }
         }
         // Presence: the app says it is open, and whether a trip runs. Counted by the backend,
@@ -502,6 +517,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 stepAlong = buildStepAlong(path, route)
                 guidanceSteps = GuidanceSides.checked(route?.steps.orEmpty(), stepAlong, path)
                 buildCorridor(route)
+                // Another route, another geometry: its traffic is asked for at once.
+                routeVersion += 1
+                traffic.value = null
+                val version = routeVersion
+                viewModelScope.launch { refreshTraffic(version) }
                 if (route == null || route.steps.size < 2) {
                     guidance.value = null
                     speaker.stop()
@@ -719,6 +739,25 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Reports are few enough to hold the whole country at once. */
     private fun radiusM(): Int = FULL_LOAD_M
+
+    /**
+     * A failed request keeps the colours shown; an answer for a route since replaced is dropped.
+     * The driver's progress goes along: the backend says whether a faster route may exist ahead.
+     */
+    private suspend fun refreshTraffic(version: Int) {
+        val route = ActiveTripRepository.route.value?.takeIf { it.points.size >= 2 } ?: return
+        val fresh = trafficApi.route(route.points, progress()?.alongMeters, AccountRepository.token) ?: return
+        if (version != routeVersion) return
+        traffic.value = fresh
+    }
+
+    /** Where the driver is along the route followed; null off it (or on a simulated trip). */
+    private fun progress(): RoutePath.Match? {
+        if (ActiveTripRepository.start.value != null) return null
+        val fix = LocationRepository.location.value ?: return null
+        val match = path?.match(fix.latitude, fix.longitude) ?: return null
+        return match.takeIf { it.offRouteMeters <= OFF_ROUTE_M }
+    }
 
     /** Route constraints the driver asked for, as the backend expects them. */
     private fun avoidOptions(): List<String> {
@@ -1087,6 +1126,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val REPORT_REFRESH_MS = 25_000L
         /** The app tells the backend it is open this often (the backend forgets it after 90 s). */
         const val PRESENCE_MS = 30_000L
+        /** The route's traffic is asked for again this often during a trip. */
+        const val TRAFFIC_REFRESH_MS = 120_000L
         const val NAV_ALERT_RADIUS_M = 15000.0
         /** Spacing of the route corridor samples — well under the radius above. */
         const val CORRIDOR_STEP_M = 2_000.0

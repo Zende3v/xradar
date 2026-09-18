@@ -78,12 +78,18 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.xradar.app.R
+import com.xradar.app.core.geo.Geo
 import com.xradar.app.core.geo.RoutePath
 import com.xradar.app.core.model.RadarZone
 import com.xradar.app.core.model.RoadSign
+import com.xradar.app.core.model.RouteTraffic
+import com.xradar.app.core.model.TrafficLevel
 import com.xradar.app.designsystem.foundation.XRadarIcons
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.ln
+import kotlin.math.tan
 import kotlin.math.sin
 
 /**
@@ -99,6 +105,8 @@ fun DriveMap(
     zones: List<RadarZone>,
     signs: List<RoadSign>,
     routePoints: List<GeoPoint>,
+    /** Traffic on the route: its line takes the slowed stretches' colours. */
+    traffic: RouteTraffic?,
     following: Boolean,
     onUserGesture: () -> Unit,
     onReportTap: ((String) -> Unit)? = null,
@@ -153,6 +161,9 @@ fun DriveMap(
     // on the line and the passed part gets trimmed away ("eats the line").
     val routePath = remember(routePoints) { if (routePoints.size >= 2) RoutePath(routePoints) else null }
     val routePathState = rememberUpdatedState(routePath)
+    val trafficState = rememberUpdatedState(traffic)
+    // Where the drawn line starts along the route (the part driven is cut off), for its colours.
+    val routeFrom = remember { DoubleArray(1) }
     val nav = remember { NavHolder() }
 
     // Per-type map markers, using each type's own icon + color (same as the settings
@@ -248,7 +259,8 @@ fun DriveMap(
         styleReady = false
         current.setStyle(baseStyle(context, darkMap)) { style ->
             // Route (drawn at the bottom, under radars and the user marker).
-            style.addSource(GeoJsonSource(ROUTE_SOURCE))
+            // Line metrics: the traffic colours are laid along the line (line-progress).
+            style.addSource(GeoJsonSource(ROUTE_SOURCE, GeoJsonOptions().withLineMetrics(true)))
             style.addLayer(
                 LineLayer(ROUTE_GLOW, ROUTE_SOURCE).withProperties(
                     PropertyFactory.lineColor(ACCENT),
@@ -389,6 +401,8 @@ fun DriveMap(
             setControlZones(style, reports)
             setZones(style, zones)
             setRoute(style, routePoints)
+            routeFrom[0] = 0.0
+            applyTraffic(style, routePath, 0.0, traffic)
             styleReady = true
         }
     }
@@ -425,6 +439,12 @@ fun DriveMap(
     }
 
     // Match each GPS fix onto the active route (snap + progress); off-route falls back to raw GPS.
+    // New traffic (or a new style) colours the line at once, even when the car stands still.
+    LaunchedEffect(traffic, styleReady) {
+        val style = map?.style ?: return@LaunchedEffect
+        if (styleReady) applyTraffic(style, routePath, routeFrom[0], traffic)
+    }
+
     LaunchedEffect(location, routePath) {
         val fix = location ?: return@LaunchedEffect
         nav.speedMps = (fix.speedMps ?: 0f).toDouble()
@@ -459,6 +479,7 @@ fun DriveMap(
         var phase = 0f
         var displayedAlong = 0.0
         var lastRp: RoutePath? = null
+        var appliedTraffic: RouteTraffic? = null
         var arrowLat = locationState.value?.latitude ?: 0.0
         var arrowLon = locationState.value?.longitude ?: 0.0
         var arrowBearing = 0f
@@ -484,6 +505,7 @@ fun DriveMap(
                     lastRp = rp
                     displayedAlong = nav.targetAlong
                     if (rp == null) setRoute(style, emptyList())
+                    appliedTraffic = null
                 }
                 val now = System.currentTimeMillis()
                 if (rp != null && nav.onRoute) {
@@ -499,7 +521,11 @@ fun DriveMap(
                     arrowBearing = lerpAngle(arrowBearing.toDouble(), tangent.toFloat(), TANGENT_LERP).toFloat()
                     if (now - lastRouteAt > ROUTE_TRIM_MS) {
                         lastRouteAt = now
-                        setRoute(style, rp.trimFrom(displayedAlong))
+                        val trimmed = rp.trimFrom(displayedAlong)
+                        setRoute(style, trimmed)
+                        routeFrom[0] = displayedAlong
+                        applyTraffic(style, rp, displayedAlong, trafficState.value, trimmed)
+                        appliedTraffic = trafficState.value
                     }
                 } else {
                     // Same trick off-route: project the last fix along its heading.
@@ -521,6 +547,12 @@ fun DriveMap(
                     if (rp != null && now - lastRouteAt > ROUTE_TRIM_MS) {
                         lastRouteAt = now
                         setRoute(style, rp.points) // show the whole route until we're back on it
+                        val wasCut = routeFrom[0] != 0.0
+                        routeFrom[0] = 0.0
+                        if (wasCut || appliedTraffic !== trafficState.value) {
+                            applyTraffic(style, rp, 0.0, trafficState.value)
+                            appliedTraffic = trafficState.value
+                        }
                     }
                 }
                 setArrow(style, arrowLat, arrowLon, arrowBearing)
@@ -945,6 +977,94 @@ private fun markerBitmap(painter: Painter, sizePx: Int, iconColor: ComposeColor,
     return image.asAndroidBitmap()
 }
 
+/**
+ * The route line's colours along it: its own cyan, and the traffic's where the road is slowed
+ * (amber, orange, red, dark red when closed), blended over [TRAFFIC_BLEND_M]. [fromM]: where
+ * the drawn line ([drawn], [rp] cut there) starts along [rp]. The backend measured the same
+ * points; its metres are scaled to [rp]'s. Clear road: plain cyan.
+ */
+private fun applyTraffic(style: Style, rp: RoutePath?, fromM: Double, traffic: RouteTraffic?, drawn: List<GeoPoint>? = null) {
+    val layer = style.getLayerAs<LineLayer>(ROUTE_CORE) ?: return
+    val stops = ArrayList<Pair<Double, Int>>()
+    stops += 0.0 to ROUTE_CORE_COLOR
+    if (rp != null && traffic != null && traffic.totalMeters > 0 && rp.totalMeters - fromM > 1) {
+        val line = LineMeasure(drawn ?: rp.trimFrom(fromM))
+        val scale = rp.totalMeters / traffic.totalMeters
+        var cursor = 0.0
+        for (stretch in traffic.stretches.sortedBy { it.fromMeters }) {
+            val from = line.progress(stretch.fromMeters * scale - fromM)
+            val to = line.progress(stretch.toMeters * scale - fromM)
+            if (to <= from || to <= 0.0 || from < cursor) continue
+            val color = trafficColor(stretch.level)
+            val blendIn = line.progress(stretch.fromMeters * scale - fromM - TRAFFIC_BLEND_M)
+            val blendOut = line.progress(stretch.toMeters * scale - fromM + TRAFFIC_BLEND_M)
+            stops += maxOf(blendIn, cursor) to ROUTE_CORE_COLOR
+            stops += from to color
+            stops += to to color
+            stops += blendOut to ROUTE_CORE_COLOR
+            cursor = blendOut
+        }
+    }
+    stops += 1.0 to ROUTE_CORE_COLOR
+    // line-progress stops must go strictly up.
+    val kept = ArrayList<Pair<Double, Int>>()
+    for (stop in stops) if (kept.isEmpty() || stop.first > kept.last().first + 1e-6) kept += stop
+    layer.setProperties(
+        PropertyFactory.lineGradient(
+            Expression.interpolate(
+                Expression.linear(),
+                Expression.lineProgress(),
+                *kept.map { (at, color) -> Expression.stop(at.toFloat(), Expression.color(color)) }.toTypedArray(),
+            ),
+        ),
+    )
+}
+
+private fun trafficColor(level: TrafficLevel): Int = when (level) {
+    TrafficLevel.Slow -> 0xFFFFB300.toInt()
+    TrafficLevel.Jam -> 0xFFFF6D00.toInt()
+    TrafficLevel.Heavy -> 0xFFE53935.toInt()
+    TrafficLevel.Closed -> 0xFF8E1B1B.toInt()
+}
+
+/**
+ * A drawn line's length both ways: in metres, and as MapLibre's line-progress measures it (web
+ * Mercator), so a distance along the road lands at the right place of the gradient.
+ */
+private class LineMeasure(points: List<GeoPoint>) {
+    private val meters = DoubleArray(points.size)
+    private val mercator = DoubleArray(points.size)
+
+    init {
+        for (i in 1 until points.size) {
+            val a = points[i - 1]
+            val b = points[i]
+            meters[i] = meters[i - 1] + Geo.haversine(a.lat, a.lon, b.lat, b.lon)
+            mercator[i] = mercator[i - 1] + hypot(mercX(b.lon) - mercX(a.lon), mercY(b.lat) - mercY(a.lat))
+        }
+    }
+
+    /** The line-progress (0…1) [m] metres along the line. */
+    fun progress(m: Double): Double {
+        val total = meters.lastOrNull() ?: 0.0
+        val mercTotal = mercator.lastOrNull() ?: 0.0
+        if (total <= 0.0 || mercTotal <= 0.0) return 0.0
+        val d = m.coerceIn(0.0, total)
+        var lo = 0
+        var hi = meters.size - 1
+        while (hi - lo > 1) {
+            val mid = (lo + hi) / 2
+            if (meters[mid] <= d) lo = mid else hi = mid
+        }
+        val span = meters[hi] - meters[lo]
+        val t = if (span > 0) (d - meters[lo]) / span else 0.0
+        return (mercator[lo] + t * (mercator[hi] - mercator[lo])) / mercTotal
+    }
+
+    private fun mercX(lon: Double) = lon / 360.0
+    private fun mercY(lat: Double) = ln(tan(Math.PI / 4 + Math.toRadians(lat) / 2)) / (2 * Math.PI)
+}
+
 private fun setRoute(style: Style, points: List<GeoPoint>) {
     val source = style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE) ?: return
     if (points.size < 2) {
@@ -988,6 +1108,9 @@ private const val ZONE_LINE = "xr-zones-line"
 private const val ROUTE_SOURCE = "xr-route"
 private const val ROUTE_GLOW = "xr-route-glow"
 private const val ROUTE_CORE = "xr-route-core"
+/** The route line's own colour, and how far the traffic colours blend into it. */
+private val ROUTE_CORE_COLOR = 0xFF3EE1EC.toInt()
+private const val TRAFFIC_BLEND_M = 25.0
 private const val ACCENT = "#2CD5E0"
 private const val NAV_ZOOM = 17.6
 private const val NAV_TILT = 45.0

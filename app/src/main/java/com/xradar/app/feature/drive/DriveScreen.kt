@@ -165,6 +165,7 @@ fun DriveScreen(
             zones = state.zones,
             signs = state.signs,
             routePoints = state.routePoints,
+            traffic = state.traffic,
             following = following,
             onUserGesture = { following = false },
             onReportTap = if (isAdmin) ({ id -> pendingDelete = id }) else null,

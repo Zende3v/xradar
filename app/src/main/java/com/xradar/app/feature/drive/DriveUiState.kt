@@ -46,6 +46,8 @@ data class DriveUiState(
     val musicOpen: Boolean = false,
     /** Where [speedLimitKmh] comes from: the road's own limit or a radar's VMA. */
     val speedLimitSource: SpeedLimitSource? = null,
+    /** Traffic on the route being followed (TomTom's and the drivers' jams); null until known. */
+    val traffic: com.xradar.app.core.model.RouteTraffic? = null,
 ) {
     val speedStatus: SpeedStatus?
         get() = SpeedStatus.of(speedKmh, speedLimitKmh)
