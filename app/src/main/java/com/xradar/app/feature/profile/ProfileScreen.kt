@@ -40,6 +40,7 @@ import com.xradar.app.designsystem.component.XRadarListGroup
 import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarScreenScaffold
 import com.xradar.app.designsystem.component.XRadarText
+import com.xradar.app.designsystem.foundation.XRadarIcons
 import com.xradar.app.designsystem.theme.XRadarTheme
 import com.xradar.app.feature.subscription.OffersSheet
 import com.xradar.app.feature.subscription.PaywallReason
@@ -52,8 +53,9 @@ fun ProfileRoute(onBack: () -> Unit) {
 }
 
 /**
- * "Mon compte": name, role and photo (members change it), access status, email verification,
- * the guest's trial note, the app version, and the deletion of the account.
+ * "Mon compte": name, role and photo (members change it), "Changer de pseudo" (clients with
+ * access), access status, email verification, the guest's trial note, the app version, and the
+ * deletion of the account.
  */
 @Composable
 fun ProfileScreen(
@@ -68,6 +70,7 @@ fun ProfileScreen(
     var deleting by remember { mutableStateOf(false) }
     var deleteError by remember { mutableStateOf<String?>(null) }
     var offers by remember { mutableStateOf<PaywallReason?>(null) }
+    var renaming by remember { mutableStateOf(false) }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
     ) { uri ->
@@ -83,6 +86,24 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(spacing.xl),
         ) {
             Header(account, onPickAvatar, onPhotoOffers = { offers = PaywallReason.Photo })
+
+            // Only a client whose access runs, as the backend says; once a week.
+            if (account?.canChangeUsername == true) {
+                val wait = account.usernameChangeableAt
+                    ?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+                    ?.takeIf { it.isAfter(java.time.Instant.now()) }
+                    ?.let { "Prochain changement le ${com.xradar.app.feature.menu.shortDate(account.usernameChangeableAt)}" }
+                XRadarListGroup {
+                    XRadarListRow(
+                        title = "Changer de pseudo",
+                        subtitle = wait ?: "Une fois par semaine",
+                        leadingIcon = XRadarIcons.User,
+                        leadingTint = colors.accent,
+                        onClick = if (wait == null) ({ renaming = true }) else null,
+                    )
+                }
+            }
+
             AccessCard(account)
 
             if (account?.email != null && account.emailVerified == false) {
@@ -125,6 +146,10 @@ fun ProfileScreen(
         }
 
         offers?.let { reason -> OffersSheet(reason, account, onClose = { offers = null }) }
+
+        if (renaming) {
+            UsernameDialog(current = account?.username.orEmpty(), onClose = { renaming = false })
+        }
 
         if (confirmDelete) {
             XRadarConfirmDialog(

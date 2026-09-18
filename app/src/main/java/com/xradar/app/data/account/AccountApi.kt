@@ -6,6 +6,7 @@ import com.xradar.app.core.model.Account
 import com.xradar.app.core.model.DailyLimits
 import com.xradar.app.core.model.Role
 import com.xradar.app.core.model.TripRecord
+import com.xradar.app.core.model.UsernameAvailability
 import com.xradar.app.core.model.alertTypeFromWire
 import com.xradar.app.core.model.wireName
 import com.xradar.app.data.network.FallbackDns
@@ -59,12 +60,22 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private fun url(path: String) = "${baseUrl.trimEnd('/')}$path"
 
-    suspend fun usernameAvailable(username: String): Boolean = withContext(Dispatchers.IO) {
-        val req = Request.Builder().url(url("/api/accounts/username-available?u=$username")).build()
-        client.newCall(req).execute().use { r ->
-            val body = r.body?.string() ?: return@use false
-            JSONObject(body).optBoolean("available", false)
-        }
+    /**
+     * Whether [username] is free. Signed in ([token]), a name the driver left lately counts as
+     * theirs again. Null when the backend could not say.
+     */
+    suspend fun usernameAvailability(username: String, token: String?): UsernameAvailability? = withContext(Dispatchers.IO) {
+        val u = java.net.URLEncoder.encode(username, "UTF-8")
+        val req = Request.Builder().url(url("/api/accounts/username-available?u=$u"))
+            .apply { token?.let { header("Authorization", "Bearer $it") } }
+            .build()
+        runCatching {
+            client.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                val o = JSONObject(r.body?.string() ?: "")
+                UsernameAvailability.fromWire(o.optBoolean("available"), o.optString("reason").ifBlank { null }.takeUnless { o.isNull("reason") })
+            }
+        }.getOrNull()
     }
 
     /** Legacy device sign-in (used to restore a session by deviceId). */
@@ -279,6 +290,8 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         accessEndsAt = o.optString("accessEndsAt").ifBlank { null }.takeUnless { o.isNull("accessEndsAt") },
         trust = o.optDouble("trust", 2.5),
         limits = o.optJSONObject("limits")?.let(::parseLimits),
+        canChangeUsername = o.optBoolean("canChangeUsername"),
+        usernameChangeableAt = o.optString("usernameChangeableAt").ifBlank { null }.takeUnless { o.isNull("usernameChangeableAt") },
     )
 
     /** POST returning {ok}/{error}: null on success, else a friendly message. */
@@ -329,6 +342,9 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private fun friendly(err: String): String = when {
         err.contains("taken") -> "Ce pseudo est déjà pris."
+        err.contains("reserved") -> "Ce pseudo est réservé."
+        err.contains("change too soon") -> "Un seul changement de pseudo par semaine."
+        err.contains("clients only") -> "Réservé aux membres avec un accès actif."
         err.contains("invalid username") -> "Pseudo invalide (3–20 caractères : lettres, chiffres, _ .)."
         err.contains("email already") -> "Cet email est déjà utilisé."
         err.contains("invalid email") -> "Email invalide."

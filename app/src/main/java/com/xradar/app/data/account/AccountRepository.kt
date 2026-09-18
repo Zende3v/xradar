@@ -81,7 +81,9 @@ object AccountRepository {
         null
     }
 
-    suspend fun usernameAvailable(username: String): Boolean = api.usernameAvailable(username)
+    /** Whether [username] is free (a name this driver left lately is theirs); null when unknown. */
+    suspend fun usernameAvailability(username: String): com.xradar.app.core.model.UsernameAvailability? =
+        api.usernameAvailability(username, token)
 
     suspend fun claimGuest(username: String, password: String): AuthOutcome =
         api.claimGuest(ensureDeviceIdOrEmpty(), username, password).also(::applyOutcome)
@@ -187,6 +189,8 @@ object AccountRepository {
         put("canNavigate", a.canNavigate)
         put("accessEndsAt", a.accessEndsAt)
         put("trust", a.trust)
+        put("canChangeUsername", a.canChangeUsername)
+        put("usernameChangeableAt", a.usernameChangeableAt)
         a.limits?.let { l ->
             put(
                 "limits",
@@ -214,6 +218,9 @@ object AccountRepository {
         accessEndsAt = o.optString("accessEndsAt").ifBlank { null }.takeUnless { o.isNull("accessEndsAt") },
         trust = o.optDouble("trust", 2.5),
         limits = o.optJSONObject("limits")?.let(AccountApi::parseLimits),
+        // A cache from before username changes: no rename until the next refresh.
+        canChangeUsername = o.optBoolean("canChangeUsername"),
+        usernameChangeableAt = o.optString("usernameChangeableAt").ifBlank { null }.takeUnless { o.isNull("usernameChangeableAt") },
     )
 
     private const val KEY_DEVICE = "device_id"

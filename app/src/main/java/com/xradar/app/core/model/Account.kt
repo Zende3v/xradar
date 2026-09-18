@@ -57,15 +57,45 @@ data class Account(
     val trust: Double = 2.5,
     /** A guest's daily limits and today's use; null for clients and admins, who have none. */
     val limits: DailyLimits? = null,
+    /** "Changer de pseudo": a client whose access runs, as the backend says. */
+    val canChangeUsername: Boolean = false,
+    /** When the username may change again (ISO-8601, once a week); null = now. */
+    val usernameChangeableAt: String? = null,
 ) {
     /** A finished onboarding = has a chosen username. */
     val isOnboarded: Boolean get() = !username.isNullOrBlank()
 
-    /** Profile pictures and renames are for members. */
+    /** Profile pictures are for members (renames: [canChangeUsername]). */
     val canEditProfile: Boolean get() = role == Role.Client || role == Role.Admin
 
     val isRestricted: Boolean get() = access == Access.Restricted || !canNavigate
 
     /** A client whose subscription runs, or an admin. */
     val isSubscriber: Boolean get() = (role == Role.Client || role == Role.Admin) && !isRestricted
+}
+
+/** What the backend says of a username someone wants. */
+enum class UsernameAvailability {
+    Available,
+    Taken,
+    /** Kept for the team ("admin", "support", "xradar…"). */
+    Reserved,
+    Invalid;
+
+    companion object {
+        fun fromWire(available: Boolean, reason: String?): UsernameAvailability = when {
+            available -> Available
+            reason == "reserved" -> Reserved
+            reason == "invalid username" -> Invalid
+            else -> Taken
+        }
+    }
+}
+
+/** The backend's rules for a username, checked before asking it anything. */
+object UsernameRules {
+    private val WELL_FORMED = Regex("^[a-zA-Z0-9_.]{3,20}$")
+
+    /** 3 to 20 letters (no accents), digits, "_" and ".". */
+    fun isWellFormed(name: String): Boolean = WELL_FORMED.matches(name)
 }
