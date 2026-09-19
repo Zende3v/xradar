@@ -13,5 +13,7 @@ object Routes {
     const val DIAGNOSTIC = "diagnostic"
     const val LEGAL = "legal"
     const val PRIVACY = "privacy"
+    const val BUG_REPORT = "bug-report"
+    const val BUGS = "bugs"
     const val SUBSCRIPTION = "subscription"
 }

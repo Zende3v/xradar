@@ -55,6 +55,8 @@ fun MenuRoute(
     onOpenReferral: () -> Unit,
     onOpenLegal: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenBugReport: () -> Unit,
+    onOpenBugs: () -> Unit,
 ) {
     val account by AccountRepository.account.collectAsStateWithLifecycle()
     // The access status moves on its own (trial ending, referral applied): refresh.
@@ -69,6 +71,8 @@ fun MenuRoute(
         onOpenReferral = onOpenReferral,
         onOpenLegal = onOpenLegal,
         onOpenPrivacy = onOpenPrivacy,
+        onOpenBugReport = onOpenBugReport,
+        onOpenBugs = onOpenBugs,
         onLogout = { AccountRepository.logout() },
     )
 }
@@ -84,6 +88,8 @@ fun MenuScreen(
     onOpenReferral: () -> Unit,
     onOpenLegal: () -> Unit,
     onOpenPrivacy: () -> Unit,
+    onOpenBugReport: () -> Unit,
+    onOpenBugs: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val colors = XRadarTheme.colors
@@ -111,10 +117,14 @@ fun MenuScreen(
                 if (account?.role == Role.Admin) {
                     XRadarDivider(Modifier.padding(start = 58.dp))
                     Section("Parrainage", ImageVector.vectorResource(R.drawable.ic_referral), onOpenReferral)
+                    XRadarDivider(Modifier.padding(start = 58.dp))
+                    Section("Rapports de bugs", XRadarIcons.Warning, onOpenBugs)
                 }
             }
 
             XRadarListGroup {
+                Section("Signaler un bug", XRadarIcons.Warning, onOpenBugReport)
+                XRadarDivider(Modifier.padding(start = 58.dp))
                 Section("À propos", XRadarIcons.Info, onOpenLegal)
             }
 
