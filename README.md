@@ -1,6 +1,6 @@
 # x_radar — installer, déployer, lancer, surveiller, réparer
 
-Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + PostgreSQL/PostGIS sur un VPS Debian, exposé en HTTPS par Tailscale Funnel. L'app iOS vit dans son propre dépôt : `git@github.com:Zende3v/xradar_ios.git` (guide dans son README).
+Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + PostgreSQL/PostGIS sur un VPS Debian, exposé en HTTPS par Cloudflare Tunnel. L'app iOS vit dans son propre dépôt : `git@github.com:Zende3v/xradar_ios.git` (guide dans son README).
 
 ---
 
@@ -8,7 +8,7 @@ Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + Po
 
 | Quoi | Où / commande |
 |---|---|
-| URL publique backend | `https://api.lrda-mercuriale.uk/` (Cloudflare Tunnel `xradar`, service `xradar-tunnel` → `127.0.0.1:8090`) ; `https://debian.taila9954f.ts.net/` (Funnel) gardé pendant la transition. Politique : `https://confidentialite.zylo-app.fr` (même tunnel → `127.0.0.1:9020`) |
+| URL publique backend | `https://api.lrda-mercuriale.uk/` (Cloudflare Tunnel `xradar`, service `xradar-tunnel` → `127.0.0.1:8090`). Politique : `https://confidentialite.zylo-app.fr` (même tunnel → `127.0.0.1:9020`) |
 | SSH VPS | `ssh root@100.107.151.127` (IP Tailscale ; le PC doit être dans le tailnet) |
 | Code backend VPS | `/opt/xradar-backend` (user `xradar`) |
 | Service | `systemctl status xradar-backend` |
@@ -24,7 +24,7 @@ Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + Po
 ## 1. Architecture
 
 ```
-App Android ──HTTPS──▶ Tailscale Funnel ──▶ backend Node :8090 (systemd, user xradar)
+App Android ──HTTPS──▶ Cloudflare Tunnel ──▶ backend Node :8090 (systemd, user xradar)
    │                                              │
    ├─ tuiles carte : Stadia Maps (direct)          ├─ PostgreSQL/PostGIS « xradar »
    └─ adresses : api-adresse.data.gouv.fr          │    ├─ schéma signs  : routes + panneaux + services autour (rebuild hebdo depuis OSM)
@@ -66,9 +66,9 @@ app/                      app Android
 
 - Debian 13, i5-11400H 12 threads, 7,4 Go RAM + 7,6 Go swap, NVMe 460 Go.
 - Accès : **Tailscale uniquement** (`100.107.151.127`). Le port 22 public ne répond pas.
-- `ufw` actif. x_radar n'ouvre **aucun** port : tout passe par Funnel.
-- La machine héberge **d'autres projets** (Caddy sur 80/443, lazarus-server, medocs, zylo…). Ne pas y toucher, ne pas redémarrer Caddy pour x_radar.
-- Services x_radar lancés au boot : `xradar-backend`, `postgresql`, `tailscaled`, `cron` (tous `enabled`). Un reboot remet tout en route seul.
+- `ufw` actif. x_radar n'ouvre **aucun** port : tout passe par Cloudflare Tunnel (connexion sortante). Backend (8090) et politique (9020) n'écoutent que sur `127.0.0.1`.
+- La machine héberge **d'autres projets** (Caddy sur 80/443, lazarus-server, medocs…). Ne pas y toucher, ne pas redémarrer Caddy pour x_radar.
+- Services x_radar lancés au boot : `xradar-backend`, `xradar-privacy`, `xradar-tunnel`, `postgresql`, `tailscaled`, `cron` (tous `enabled`). Un reboot remet tout en route seul.
 
 ---
 
@@ -205,10 +205,16 @@ EOF
 
 ### 3.7 HTTPS public
 
+Cloudflare Tunnel `xradar` (`cloudflared` déjà dans `/usr/local/bin`, identifiants dans `/root/.cloudflared/<tunnel id>.json`, jamais versionnés) :
+
 ```bash
-tailscale funnel --bg 8090
-tailscale funnel status        # doit montrer https://debian.taila9954f.ts.net → 127.0.0.1:8090
+cloudflared tunnel create xradar                      # une fois ; donne le <tunnel id>
+install -D -m 644 deploy/cloudflared-xradar.yml /etc/cloudflared/xradar.yml   # y mettre le <tunnel id>
+install -m 644 deploy/xradar-tunnel.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now xradar-tunnel
 ```
+
+DNS dans le tableau de bord Cloudflare : `api` (zone `lrda-mercuriale.uk`) et `confidentialite` (zone `zylo-app.fr`) en CNAME proxifié vers `<tunnel id>.cfargotunnel.com`. `cloudflared tunnel route dns` ne marche que pour `zylo-app.fr` (le `cert.pem` est lié à cette zone) : pour `lrda-mercuriale.uk`, passer par le tableau de bord.
 
 ### 3.8 Vérifier
 
@@ -331,11 +337,12 @@ Pas de sauvegarde automatique (choix assumé) : lancer la sauvegarde manuelle av
 ## 7. Surveiller
 
 ```bash
-systemctl status xradar-backend postgresql tailscaled --no-pager
+systemctl status xradar-backend xradar-tunnel xradar-privacy postgresql tailscaled --no-pager
 journalctl -u xradar-backend -f                          # logs en direct
 journalctl -u xradar-backend --since "-1 h" --no-pager | grep -iE "error|unavailable|failed"
 curl -s http://127.0.0.1:8090/health | python3 -m json.tool
-tailscale funnel status
+curl -s -o /dev/null -w "%{http_code}
+" https://api.lrda-mercuriale.uk/health
 tail -20 /var/lib/xradar-signs/rebuild.log
 df -h / && free -h
 ```
@@ -376,7 +383,7 @@ Le backend relance seul après un crash (5 s). Un reboot relance tout. Sinon :
 |---|---|---|
 | App : « Réseau indisponible » partout | `curl -s https://api.lrda-mercuriale.uk/health` depuis le PC | voir lignes suivantes |
 | Backend arrêté / boucle de redémarrage | `systemctl status xradar-backend` ; `journalctl -u xradar-backend -n 80 --no-pager` | erreur de code → retour arrière (ci-dessous) ; `EADDRINUSE` → un autre process tient 8090 (`ss -ltnp \| grep 8090`) |
-| `/health` OK en local, KO en public | `tailscale funnel status` | `systemctl restart tailscaled && tailscale funnel --bg 8090` |
+| `/health` OK en local, KO en public | `journalctl -u xradar-tunnel -n 50` | `systemctl restart xradar-tunnel` |
 | `signs.published: null`, erreurs 503 signs/reports | `systemctl status postgresql` ; `journalctl -u postgresql@17-main -n 50` | `systemctl restart postgresql` puis `systemctl restart xradar-backend` |
 | Limites / panneaux faux après un dimanche | `tail -80 /var/lib/xradar-signs/rebuild.log` ; `SELECT * FROM signs.meta` | retour à `signs_prev` (§5) |
 | Rebuild échoué | log : download, md5, osm2pgsql, `checks` | cause réseau → relancer `rebuild.sh` ; `checks` refuse → extrait OSM douteux, attendre le suivant (version publiée intacte) |
