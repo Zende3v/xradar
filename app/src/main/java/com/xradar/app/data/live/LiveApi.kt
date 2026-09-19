@@ -1,7 +1,6 @@
 package com.xradar.app.data.live
 
 import com.xradar.app.BuildConfig
-import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,7 +17,6 @@ import java.util.concurrent.TimeUnit
 class LiveApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
-        .dns(FallbackDns)
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
         .build()

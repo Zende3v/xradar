@@ -32,9 +32,9 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
-            // Live backend (Tailscale Funnel on the VPS). Works on a real phone too.
+            // Live backend (the VPS through Cloudflare Tunnel). Works on a real phone too.
             // For local dev instead, use "http://10.0.2.2:8090/" (emulator → host).
-            buildConfigField("String", "BACKEND_BASE_URL", "\"https://debian.taila9954f.ts.net/\"")
+            buildConfigField("String", "BACKEND_BASE_URL", "\"https://api.lrda-mercuriale.uk/\"")
         }
         release {
             // Shrinking/obfuscation are wired up in a later hardening step.
@@ -46,7 +46,7 @@ android {
             // Signed with the debug key so the release APK is installable now.
             // TODO: generate a dedicated release keystore before any store upload.
             signingConfig = signingConfigs.getByName("debug")
-            buildConfigField("String", "BACKEND_BASE_URL", "\"https://debian.taila9954f.ts.net/\"")
+            buildConfigField("String", "BACKEND_BASE_URL", "\"https://api.lrda-mercuriale.uk/\"")
         }
     }
 

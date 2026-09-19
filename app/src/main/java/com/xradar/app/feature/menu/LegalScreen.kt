@@ -17,8 +17,8 @@ import com.xradar.app.designsystem.component.XRadarListRow
 import com.xradar.app.designsystem.component.XRadarScreenScaffold
 import com.xradar.app.designsystem.theme.XRadarTheme
 
-/** The privacy policy, served by the backend machine (port 9020). */
-const val PRIVACY_POLICY_URL = "http://45.80.23.8:9020/"
+/** The privacy policy, served by the backend machine through Cloudflare Tunnel. */
+const val PRIVACY_POLICY_URL = "https://confidentialite.zylo-app.fr/"
 
 /**
  * "À propos": the privacy policy, and where the map, the places and the figures come from.

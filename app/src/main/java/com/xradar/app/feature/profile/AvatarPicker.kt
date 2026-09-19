@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
-import com.xradar.app.data.network.FallbackDns
 import com.xradar.app.designsystem.component.XRadarText
 import com.xradar.app.designsystem.theme.XRadarTheme
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +31,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.ByteArrayOutputStream
 
-private val imageClient = OkHttpClient.Builder().dns(FallbackDns).build()
+private val imageClient = OkHttpClient()
 
 /** Circular avatar: loads [url] into an image, falling back to the [initial] letter. */
 @Composable

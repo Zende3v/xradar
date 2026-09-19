@@ -7,7 +7,6 @@ import com.xradar.app.core.model.Route
 import com.xradar.app.core.model.RouteStep
 import com.xradar.app.data.account.AccessDenial
 import com.xradar.app.data.account.AccessDeniedException
-import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -22,7 +21,6 @@ import java.util.concurrent.TimeUnit
 class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
-        .dns(FallbackDns)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()

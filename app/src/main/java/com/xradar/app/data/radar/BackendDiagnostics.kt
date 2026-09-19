@@ -1,7 +1,6 @@
 package com.xradar.app.data.radar
 
 import com.xradar.app.BuildConfig
-import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -14,7 +13,6 @@ data class CheckResult(val name: String, val ok: Boolean, val detail: String)
 class BackendDiagnostics(val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
-        .dns(FallbackDns)
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(6, TimeUnit.SECONDS)
         .build()

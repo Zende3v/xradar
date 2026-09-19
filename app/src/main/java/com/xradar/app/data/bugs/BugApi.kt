@@ -2,7 +2,6 @@ package com.xradar.app.data.bugs
 
 import android.os.Build
 import com.xradar.app.BuildConfig
-import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -54,7 +53,6 @@ enum class BugSendOutcome { Sent, TooMany, Failed }
 class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
-        .dns(FallbackDns)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()

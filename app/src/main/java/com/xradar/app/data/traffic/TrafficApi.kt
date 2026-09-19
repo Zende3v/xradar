@@ -6,7 +6,6 @@ import com.xradar.app.core.model.GeoPoint
 import com.xradar.app.core.model.RouteTraffic
 import com.xradar.app.core.model.TrafficLevel
 import com.xradar.app.core.model.TrafficStretch
-import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -24,7 +23,6 @@ import java.util.concurrent.TimeUnit
 class TrafficApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
-        .dns(FallbackDns)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()

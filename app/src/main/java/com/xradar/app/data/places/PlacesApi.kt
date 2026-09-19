@@ -14,7 +14,6 @@ import com.xradar.app.core.model.PlaceCategory
 import com.xradar.app.core.model.PlaceKind
 import com.xradar.app.core.model.StationFuel
 import com.xradar.app.core.model.TimeSlot
-import com.xradar.app.data.network.FallbackDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -26,7 +25,6 @@ import java.util.concurrent.TimeUnit
 class PlacesApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
-        .dns(FallbackDns)
         .connectTimeout(8, TimeUnit.SECONDS)
         // The backend answers from its own database in milliseconds.
         .readTimeout(10, TimeUnit.SECONDS)
