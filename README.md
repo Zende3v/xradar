@@ -8,7 +8,7 @@ Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + Po
 
 | Quoi | Où / commande |
 |---|---|
-| URL publique backend | `https://debian.taila9954f.ts.net/` (Funnel → `127.0.0.1:8090`) |
+| URL publique backend | `https://api.lrda-mercuriale.uk/` (Cloudflare Tunnel `xradar`, service `xradar-tunnel` → `127.0.0.1:8090`) ; `https://debian.taila9954f.ts.net/` (Funnel) gardé pendant la transition. Politique : `https://confidentialite.zylo-app.fr` (même tunnel → `127.0.0.1:9020`) |
 | SSH VPS | `ssh root@100.107.151.127` (IP Tailscale ; le PC doit être dans le tailnet) |
 | Code backend VPS | `/opt/xradar-backend` (user `xradar`) |
 | Service | `systemctl status xradar-backend` |
@@ -168,7 +168,7 @@ systemctl daemon-reload && systemctl restart xradar-backend
 | `OSRM_URL` | OSRM de repli | `https://router.project-osrm.org` |
 | `PGHOST` / `PGDATABASE` | base | `/var/run/postgresql` / `xradar` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
-| `PUBLIC_BASE_URL` | base des URLs d'avatars | `https://debian.taila9954f.ts.net` |
+| `PUBLIC_BASE_URL` | base des URLs d'avatars (les anciennes en `ts.net` sont réécrites au chargement) | `https://api.lrda-mercuriale.uk` |
 | `ACCOUNTS_FILE` / `AVATARS_DIR` | comptes / photos | `./data/accounts.json` / `./data/avatars` |
 | `GUEST_TRIAL_MS` | essai compte email | 7 j |
 | `GUEST_LIFETIME_MS` | durée de vie compte invité | 7 j |
@@ -216,7 +216,7 @@ tailscale funnel status        # doit montrer https://debian.taila9954f.ts.net �
 systemctl is-active xradar-backend postgresql
 curl -s http://127.0.0.1:8090/health
 curl -s "http://127.0.0.1:8090/api/signs/limit?lat=48.1113&lon=-1.6778&bearing=0"
-curl -s https://debian.taila9954f.ts.net/health        # depuis n'importe où
+curl -s https://api.lrda-mercuriale.uk/health        # depuis n'importe où (Cloudflare)
 ```
 
 ---
@@ -374,7 +374,7 @@ Le backend relance seul après un crash (5 s). Un reboot relance tout. Sinon :
 
 | Symptôme | Vérifier | Réparer |
 |---|---|---|
-| App : « Réseau indisponible » partout | `curl -s https://debian.taila9954f.ts.net/health` depuis le PC | voir lignes suivantes |
+| App : « Réseau indisponible » partout | `curl -s https://api.lrda-mercuriale.uk/health` depuis le PC | voir lignes suivantes |
 | Backend arrêté / boucle de redémarrage | `systemctl status xradar-backend` ; `journalctl -u xradar-backend -n 80 --no-pager` | erreur de code → retour arrière (ci-dessous) ; `EADDRINUSE` → un autre process tient 8090 (`ss -ltnp \| grep 8090`) |
 | `/health` OK en local, KO en public | `tailscale funnel status` | `systemctl restart tailscaled && tailscale funnel --bg 8090` |
 | `signs.published: null`, erreurs 503 signs/reports | `systemctl status postgresql` ; `journalctl -u postgresql@17-main -n 50` | `systemctl restart postgresql` puis `systemctl restart xradar-backend` |

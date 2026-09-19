@@ -116,7 +116,7 @@ export const config = {
   // Places sent to a client asking for a pool (?pool=1), which ranks them itself.
   placePoolLimit: 60,
   // Identifies us to the open-data servers we download from.
-  placeUserAgent: process.env.PLACE_USER_AGENT || 'x_radar/1.0 (+https://debian.taila9954f.ts.net)',
+  placeUserAgent: process.env.PLACE_USER_AGENT || 'x_radar/1.0 (+https://api.lrda-mercuriale.uk)',
 
   // Official fuel prices — prix-carburants.gouv.fr "flux instantané" (Licence Ouverte).
   // They only enrich the fuel stations the nearby search finds; they never replace it.
@@ -321,8 +321,10 @@ export const config = {
   // Profile pictures: stored on the VPS filesystem, served statically at /avatars.
   avatarsDir: process.env.AVATARS_DIR || './data/avatars',
   avatarMaxBytes: 2 * 1024 * 1024, // 2 MB
-  // Absolute base for avatar URLs the app loads (the public tunnel host).
-  publicBaseUrl: (process.env.PUBLIC_BASE_URL || 'https://debian.taila9954f.ts.net').replace(/\/$/, ''),
+  // Absolute base for avatar URLs the app loads (the API through Cloudflare Tunnel).
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL || 'https://api.lrda-mercuriale.uk').replace(/\/$/, ''),
+  // Earlier public bases: avatar URLs stored under them move to publicBaseUrl when the accounts load.
+  legacyPublicBaseUrls: ['https://debian.taila9954f.ts.net'],
 
   // "Signaler un bug": text sizes, flood limits (per account, for everyone), a page of the list,
   // and how long a resolved report stays.

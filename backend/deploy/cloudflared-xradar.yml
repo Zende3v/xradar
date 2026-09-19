@@ -1,0 +1,12 @@
+# /etc/cloudflared/xradar.yml — XRadar only: the API and the privacy page through Cloudflare.
+# <tunnel id>: `cloudflared tunnel list`. The credentials file is created by
+# `cloudflared tunnel create xradar` and never leaves the VPS.
+tunnel: <tunnel id>
+credentials-file: /root/.cloudflared/<tunnel id>.json
+
+ingress:
+  - hostname: api.lrda-mercuriale.uk
+    service: http://127.0.0.1:8090
+  - hostname: confidentialite.zylo-app.fr
+    service: http://127.0.0.1:9020
+  - service: http_status:404

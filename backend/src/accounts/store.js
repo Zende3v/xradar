@@ -133,6 +133,12 @@ class AccountStore {
   }
 
   normalizeAccount(account) {
+    // A photo stored under an earlier public address (Tailscale Funnel) now points to the current one.
+    const legacy = config.legacyPublicBaseUrls.find((base) => account.avatarUrl?.startsWith(base + '/'));
+    if (legacy) {
+      account.avatarUrl = config.publicBaseUrl + account.avatarUrl.slice(legacy.length);
+      this.scheduleSave();
+    }
     if (!Array.isArray(account.trips)) account.trips = [];
     if (account.trips.length > config.accountTripHistoryMax) account.trips = account.trips.slice(0, config.accountTripHistoryMax);
     account.stats = statsShape(account.stats);
