@@ -16,6 +16,7 @@ import { meta as signsMeta } from './signs/postgis.js';
 import { signRouter } from './signs/routes.js';
 import { speedLimitRouter } from './speedlimits/routes.js';
 import { speedLimitStore } from './speedlimits/store.js';
+import { bugRouter } from './bugs/routes.js';
 import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
 
@@ -52,6 +53,7 @@ export function createApp() {
   });
 
   app.use('/api/accounts', accountRouter);
+  app.use('/api/bugs', bugRouter);
   app.use('/api/admin/accounts', adminAccountRouter);
   app.use('/api/live', liveRouter);
   app.use('/api/places', placeRouter);

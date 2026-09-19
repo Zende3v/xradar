@@ -324,6 +324,16 @@ export const config = {
   // Absolute base for avatar URLs the app loads (the public tunnel host).
   publicBaseUrl: (process.env.PUBLIC_BASE_URL || 'https://debian.taila9954f.ts.net').replace(/\/$/, ''),
 
+  // "Signaler un bug": text sizes, flood limits (per account, for everyone), a page of the list,
+  // and how long a resolved report stays.
+  bugTextMin: 10,
+  bugTextMax: 1000,
+  bugPerHour: 3,
+  bugPerDay: 10,
+  bugPerDayAll: 500,
+  bugPage: 50,
+  bugResolvedDays: 90,
+
   // Presence: an account counts as online (and on a trip or not) for 90 s after the app said so.
   liveTtlMs: 90 * 1000,
 

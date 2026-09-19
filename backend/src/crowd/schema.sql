@@ -100,3 +100,25 @@ CREATE TABLE IF NOT EXISTS crowd.speed_limit_event (
     detail jsonb NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS speed_limit_event_change ON crowd.speed_limit_event (change_id, at);
+
+-- ---- Bug reports ("Signaler un bug") ------------------------------------------------------
+
+-- What the driver saw, a category, and the app's own details (platform, version, system,
+-- model). The author is the account (a guest's too), never asked again; NULL once deleted.
+CREATE TABLE IF NOT EXISTS crowd.bug_report (
+    id uuid PRIMARY KEY,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    -- new, then progress, then resolved.
+    status text NOT NULL DEFAULT 'new',
+    category text NOT NULL,
+    description text NOT NULL,
+    steps text,
+    account_id text,
+    platform text,
+    app_version text,
+    os_version text,
+    device_model text
+);
+CREATE INDEX IF NOT EXISTS bug_report_recent ON crowd.bug_report (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS bug_report_author ON crowd.bug_report (account_id, created_at);
