@@ -3,7 +3,42 @@ import { config } from '../config.js';
 /** The app's avoid options → ORS avoid_features. */
 export const ORS_AVOID = { tolls: 'tollways', highways: 'highways', ferries: 'ferries' };
 
+/**
+ * The day's ORS calls, against config.orsDailyBudget. ORS gives a free plan a fixed number of
+ * routes a day, counted on UTC days: we stop short of it so a burst can never leave the app
+ * without routing until the next reset, and so the rerouting around traffic keeps its share.
+ */
+const budget = { day: '', used: 0, warned: false };
+
+/** A request that was never sent: postORS answers with it once the day's budget is spent. */
+const SPENT = { ok: false, status: 429, budgetSpent: true, text: async () => 'ORS daily budget spent' };
+
+function take() {
+  const day = new Date().toISOString().slice(0, 10); // ORS counts on UTC days
+  if (budget.day !== day) {
+    budget.day = day;
+    budget.used = 0;
+    budget.warned = false;
+  }
+  if (budget.used >= config.orsDailyBudget) {
+    if (!budget.warned) {
+      budget.warned = true;
+      console.warn(`[route] budget ORS du jour atteint (${config.orsDailyBudget}) — plus d'appel jusqu'à minuit UTC`);
+    }
+    return false;
+  }
+  budget.used += 1;
+  return true;
+}
+
+/** What the day's budget has left, for /health. */
+export function orsBudgetLeft() {
+  const day = new Date().toISOString().slice(0, 10);
+  return budget.day === day ? Math.max(0, config.orsDailyBudget - budget.used) : config.orsDailyBudget;
+}
+
 export function postORS(body) {
+  if (!take()) return Promise.resolve(SPENT);
   return fetch(`${config.orsUrl.replace(/\/$/, '')}/v2/directions/driving-car/geojson`, {
     method: 'POST',
     headers: { Authorization: config.orsApiKey, 'Content-Type': 'application/json' },

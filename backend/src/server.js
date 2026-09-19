@@ -12,6 +12,7 @@ import { radarStore } from './radars/store.js';
 import { reportRouter } from './reports/routes.js';
 import { reportStore } from './reports/store.js';
 import { routeRouter } from './routing/routes.js';
+import { orsBudgetLeft } from './routing/ors.js';
 import { meta as signsMeta } from './signs/postgis.js';
 import { signRouter } from './signs/routes.js';
 import { speedLimitRouter } from './speedlimits/routes.js';
@@ -43,7 +44,10 @@ export function createApp() {
       reports: reportStore.meta,
       accounts: accountStore.meta,
       live: liveStore.meta,
-      routing: { provider: config.orsApiKey ? 'ors' : 'osrm' },
+      routing: {
+        provider: config.orsApiKey ? 'ors' : 'osrm',
+        budgetLeft: config.orsApiKey ? orsBudgetLeft() : null,
+      },
       traffic: { provider: config.tomtomApiKey ? 'tomtom' : null, probes: probeStore.meta.count },
       signs: { published },
       speedLimits: speedLimitStore.meta,

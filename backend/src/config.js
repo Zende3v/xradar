@@ -21,6 +21,22 @@ export const config = {
   // How often to re-check data.gouv for a fresh dataset (ms). Default: daily.
   refreshIntervalMs: Number(process.env.REFRESH_INTERVAL_MS) || 24 * 60 * 60 * 1000,
 
+  // Guards on /api/route, so no client can spend the day's routing quota on its own (a
+  // recalculation loop, a retry that never gives up). Same trip asked again within
+  // routeCacheMs, from routeCacheFromM of the same start to routeCacheToM of the same
+  // destination: the answer already given comes back, without asking the routing engine.
+  routeCacheMs: 60 * 1000,
+  routeCacheFromM: 75,
+  routeCacheToM: 30,
+  routeCacheMax: 300,
+  // What one account may really compute: a trip and its recalculations, never a loop.
+  routePerMinute: 10,
+  routePerHour: 120,
+  routeAccountsMax: 2000,
+  // Calls to ORS a day, under the free plan's own quota (2000, reset at midnight UTC): the rest
+  // is the margin that keeps the rerouting around traffic, and the other drivers, working.
+  orsDailyBudget: Number(process.env.ORS_DAILY_BUDGET) || 1500,
+
   // Routing engine, proxied by /api/route. Defaults to the free public OSRM
   // demo server (hosted, no self-host, no key). Override with OSRM_URL to point
   // at a self-hosted OSRM or another OSRM-compatible endpoint later.

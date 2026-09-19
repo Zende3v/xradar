@@ -5,6 +5,7 @@ import { accountStore } from '../accounts/store.js';
 import { haversine } from '../radars/geo.js';
 import { reportStore } from '../reports/store.js';
 import { fasterRoute } from './faster.js';
+import { cachedRoute, keepRoute, spendRoute } from './guard.js';
 import { ORS_AVOID, normalizeOrsFeature, postORS, square } from './ors.js';
 
 export const routeRouter = Router();
@@ -38,6 +39,18 @@ routeRouter.get('/', async (req, res) => {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  // The same trip asked again within the minute costs nothing: an app looping on a recalculation
+  // (a driver still off the road, a retry that keeps failing) never spends the day's routes.
+  const known = cachedRoute(from, to, avoid);
+  if (known) {
+    if (trip.isNew) accountStore.countTrip(account, to);
+    return res.json(known);
+  }
+  const allowance = spendRoute(account.id);
+  if (!allowance.ok) {
+    return res.status(429).json({ error: 'too many routes', retryAfterS: allowance.retryAfterS });
+  }
+
   try {
     const route = config.orsApiKey
       ? await routeViaORS(from, to, avoid)
@@ -47,6 +60,7 @@ routeRouter.get('/', async (req, res) => {
       return res.status(route.status || 502).json({ error: route.error });
     }
     if (trip.isNew) accountStore.countTrip(account, to);
+    keepRoute(from, to, avoid, route);
     res.json(route);
   } catch (e) {
     console.warn('[route] unavailable —', String(e.message || e));
@@ -110,6 +124,7 @@ async function routeViaORS(from, to, avoid) {
   let r = await postORS(jams ? { ...body, options: { ...body.options, avoid_polygons: jams } } : body);
   // A route squeezed out by the reported jams can be impossible: the trip matters more.
   if (!r.ok && jams) r = await postORS(body);
+  if (r.budgetSpent) return { error: 'routing budget reached', status: 503 };
   if (!r.ok) {
     const detail = await r.text().catch(() => '');
     return { error: `ORS ${r.status}`, status: 502, detail: detail.slice(0, 200) };
