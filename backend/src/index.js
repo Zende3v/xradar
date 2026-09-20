@@ -24,5 +24,5 @@ ensureCrowdSchema()
 
 const app = createApp();
 app.listen(config.port, config.host, () => {
-  console.log(`x_radar backend listening on ${config.host}:${config.port}`);
+  console.log(`EONA backend listening on ${config.host}:${config.port}`);
 });

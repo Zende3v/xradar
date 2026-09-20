@@ -9,12 +9,12 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PBF="${1:-/opt/xradar-backend/data/france-latest.osm.pbf}"
-WORK="${WORK:-/var/lib/xradar-signs}"
-DB="${DB:-xradar}"
+PBF="${1:-/opt/eona-backend/data/france-latest.osm.pbf}"
+WORK="${WORK:-/var/lib/eona-signs}"
+DB="${DB:-eona}"
 
 mkdir -p "$WORK"
-chown xradar:xradar "$WORK"
+chown eona:eona "$WORK"
 
 echo "[import] filtering roads, sign nodes, services and communes…"
 osmium tags-filter --overwrite -o "$WORK/roads-signs.osm.pbf" "$PBF" \
@@ -24,11 +24,11 @@ osmium tags-filter --overwrite -o "$WORK/roads-signs.osm.pbf" "$PBF" \
   n/railway=level_crossing \
   nwr/amenity=fuel,charging_station,parking,atm,bank nwr/shop=tobacco,car_repair nwr/tobacco=yes,only \
   nwr/tourism=hotel,motel r/admin_level=8
-chown xradar:xradar "$WORK/roads-signs.osm.pbf"
+chown eona:eona "$WORK/roads-signs.osm.pbf"
 
 echo "[import] loading into PostGIS (schema osm)…"
-runuser -u xradar -- psql -qX -v ON_ERROR_STOP=1 -d "$DB" -c 'DROP SCHEMA IF EXISTS osm CASCADE; CREATE SCHEMA osm;'
-runuser -u xradar -- osm2pgsql --create --output=flex --style "$HERE/style.lua" \
+runuser -u eona -- psql -qX -v ON_ERROR_STOP=1 -d "$DB" -c 'DROP SCHEMA IF EXISTS osm CASCADE; CREATE SCHEMA osm;'
+runuser -u eona -- osm2pgsql --create --output=flex --style "$HERE/style.lua" \
   --database "$DB" --schema osm --number-processes 8 --log-progress=false \
   "$WORK/roads-signs.osm.pbf"
 

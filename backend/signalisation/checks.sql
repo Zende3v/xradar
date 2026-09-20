@@ -1,4 +1,4 @@
--- x_radar signalisation v2, step 3: refuse to publish a build that looks broken. Any exception
+-- EONA signalisation v2, step 3: refuse to publish a build that looks broken. Any exception
 -- stops rebuild.sh, and the published schema "signs" stays as it is.
 
 \set ON_ERROR_STOP on

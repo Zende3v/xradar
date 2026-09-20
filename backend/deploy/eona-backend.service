@@ -1,32 +1,32 @@
 [Unit]
-Description=x_radar backend
+Description=EONA backend
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/xradar-backend
+WorkingDirectory=/opt/eona-backend
 ExecStart=/usr/bin/node src/index.js
 Restart=on-failure
 RestartSec=5
-User=xradar
-Group=xradar
+User=eona
+Group=eona
 Environment=NODE_ENV=production
 # Port local (change-le s'il est déjà pris — ex. 8080 souvent occupé).
 Environment=PORT=8090
 Environment=HOST=127.0.0.1
 # Accounts and avatars live under data/ (reports and speed limits are in PostgreSQL).
-Environment=ACCOUNTS_FILE=/opt/xradar-backend/data/accounts.json
+Environment=ACCOUNTS_FILE=/opt/eona-backend/data/accounts.json
 # Secrets (ADMIN_TOKEN, ORS_API_KEY, SMTP_*) go in drop-ins under
-# /etc/systemd/system/xradar-backend.service.d/ — see deploy/setup-admin.sh and README.md.
+# /etc/systemd/system/eona-backend.service.d/ — see deploy/setup-admin.sh and README.md.
 
 # Lightweight hardening. The app only writes under data/, which we open up below.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-# Allow writing the JSON stores (create the dir first: mkdir -p /opt/xradar-backend/data && chown xradar:xradar it).
-ReadWritePaths=/opt/xradar-backend/data
+# Allow writing the JSON stores (create the dir first: mkdir -p /opt/eona-backend/data && chown eona:eona it).
+ReadWritePaths=/opt/eona-backend/data
 
 [Install]
 WantedBy=multi-user.target

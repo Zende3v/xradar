@@ -23,10 +23,10 @@ function verifyPassword(password, stored) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-/** Reserved: compared without "_", "." and digits ("Admin_2" is "admin"), and any "xradar…". */
+/** Reserved: compared without "_", "." and digits ("Admin_2" is "admin"), and any "eona…". */
 function isReservedUsername(lower) {
   const stem = lower.replace(/[._\d]/g, '');
-  return stem.startsWith('xradar') || config.reservedUsernames.includes(stem);
+  return stem.startsWith('eona') || config.reservedUsernames.includes(stem);
 }
 
 function genCode() {

@@ -1,5 +1,5 @@
 /**
- * Temporary public download server for the x_radar APK.
+ * Temporary public download server for the EONA APK.
  *
  *   APK_DIR=/root/apk PORT=8087 node scripts/apk-server.js
  *
@@ -15,7 +15,7 @@ import { join } from 'node:path';
 const dir = process.env.APK_DIR || '/root/apk';
 const port = Number(process.env.PORT) || 8087;
 const host = process.env.HOST || '0.0.0.0';
-const downloadName = process.env.APK_NAME || 'x_radar.apk';
+const downloadName = process.env.APK_NAME || 'EONA.apk';
 
 /** Newest *.apk in the directory, or null. Re-read per request so a rebuild is picked up. */
 function currentApk() {
@@ -42,7 +42,7 @@ function page(apk) {
     : `<p class="meta">Aucun APK disponible pour le moment.</p>`;
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>x_radar — téléchargement</title>
+<title>EONA — téléchargement</title>
 <style>
   :root { color-scheme: dark; }
   body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
@@ -55,7 +55,7 @@ function page(apk) {
          background:#2CD5E0; color:#062024; font-weight:700; text-decoration:none; }
   .hint { color:#6C7280; font-size:.8rem; }
 </style></head><body><main>
-<p class="tag">x_radar</p><h1>Application Android</h1>${info}
+<p class="tag">EONA</p><h1>Application Android</h1>${info}
 </main></body></html>`;
 }
 

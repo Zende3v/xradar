@@ -1,4 +1,4 @@
--- x_radar nearby services, step 2b (after build.sql): the places a driver looks for around them
+-- EONA nearby services, step 2b (after build.sql): the places a driver looks for around them
 -- — fuel, chargers, car parks, tobacconists, garages, hotels, cash machines — filtered,
 -- deduplicated and published with the signs (schema signs_next, swapped in by publish.sql).
 --
@@ -7,7 +7,7 @@
 -- The same place is often mapped twice (a station node inside the station area, a car park
 -- node on its polygon, one charger per bay): objects of the same kind that close, under
 -- compatible names, become one place, with the tags of all of them.
--- Run as xradar after build.sql:  psql -d xradar -f places.sql
+-- Run as eona after build.sql:  psql -d eona -f places.sql
 
 \set ON_ERROR_STOP on
 SET client_min_messages = warning;

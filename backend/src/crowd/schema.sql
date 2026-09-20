@@ -1,4 +1,4 @@
--- x_radar crowd data in PostGIS: drivers' reports and speed-limit changes. The weekly
+-- EONA crowd data in PostGIS: drivers' reports and speed-limit changes. The weekly
 -- signalisation rebuild never touches schema "crowd". Applied at every backend start, so every
 -- statement is idempotent. Metric geometry in Lambert-93 (EPSG:2154), like schema "signs".
 

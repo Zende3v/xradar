@@ -28,8 +28,8 @@ async function send(to, subject, text) {
 
 export const mailer = {
   sendVerify: (to, code) =>
-    send(to, 'Vérifie ton compte x_radar', `Ton code de vérification x_radar : ${code}`),
+    send(to, 'Vérifie ton compte EONA', `Ton code de vérification EONA : ${code}`),
   sendReset: (to, code) =>
-    send(to, 'Réinitialisation de ton mot de passe x_radar',
-      `Ton code de réinitialisation x_radar : ${code}\nValable 30 minutes. Si tu n'es pas à l'origine de cette demande, ignore ce message.`),
+    send(to, 'Réinitialisation de ton mot de passe EONA',
+      `Ton code de réinitialisation EONA : ${code}\nValable 30 minutes. Si tu n'es pas à l'origine de cette demande, ignore ce message.`),
 };

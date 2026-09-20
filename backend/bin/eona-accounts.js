@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * x_radar — account admin CLI.
+ * EONA — account admin CLI.
  *
  * Manages guest/client/admin accounts through the backend's admin API.
  * Config via env (or a .env you `source`):
@@ -9,11 +9,11 @@
  *                        the token is read straight from the running systemd service.
  *
  * Usage:
- *   xradar-accounts list [guest|client|admin]
- *   xradar-accounts show <id>
- *   xradar-accounts add <guest|client|admin> [--device=ID] [--name="Nom"]
- *   xradar-accounts set <id> [--role=guest|client|admin] [--name="Nom"] [--ban] [--unban]
- *   xradar-accounts del <id>
+ *   eona-accounts list [guest|client|admin]
+ *   eona-accounts show <id>
+ *   eona-accounts add <guest|client|admin> [--device=ID] [--name="Nom"]
+ *   eona-accounts set <id> [--role=guest|client|admin] [--name="Nom"] [--ban] [--unban]
+ *   eona-accounts del <id>
  */
 
 import { execFileSync } from 'node:child_process';
@@ -28,7 +28,7 @@ const ROLES = ['guest', 'client', 'admin'];
  * host, or when the unit is not there — the caller then reports the missing token.
  */
 function tokenFromService() {
-  const unit = process.env.X_RADAR_SERVICE || 'xradar-backend';
+  const unit = process.env.X_RADAR_SERVICE || 'eona-backend';
   try {
     const raw = execFileSync(
       'systemctl',
@@ -49,7 +49,7 @@ async function main() {
   if (!TOKEN) {
     fail(
       'jeton admin introuvable.\n' +
-      "  Le service tourne ? `systemctl is-active xradar-backend`\n" +
+      "  Le service tourne ? `systemctl is-active eona-backend`\n" +
       '  Sinon, exporte-le à la main :\n' +
       '    export X_RADAR_ADMIN_TOKEN=<le même que ADMIN_TOKEN du backend>',
     );
@@ -190,7 +190,7 @@ function fail(msg, showUsage = false) {
 }
 
 function usage() {
-  console.log(`x_radar accounts — gestion des comptes (${BASE})
+  console.log(`EONA accounts — gestion des comptes (${BASE})
 
   list [guest|client|admin]                     lister les comptes
   show <id>                                     détail d'un compte

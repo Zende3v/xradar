@@ -2,16 +2,16 @@
 #
 # Signalisation v2 — weekly rebuild: fresh France extract, import, build (signs, then nearby
 # services), checks, corrections made by hand replayed, publish.
-# Any failure stops here and the published version stays. Run as root (cron.d/xradar-signs).
+# Any failure stops here and the published version stays. Run as root (cron.d/eona-signs).
 #
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-WORK="${WORK:-/var/lib/xradar-signs}"
-DB="${DB:-xradar}"
+WORK="${WORK:-/var/lib/eona-signs}"
+DB="${DB:-eona}"
 URL="${PBF_URL:-https://download.geofabrik.de/europe/france-latest.osm.pbf}"
 
-psql_xradar() { runuser -u xradar -- psql -qX -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
+psql_eona() { runuser -u eona -- psql -qX -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
 
 echo "[rebuild] $(date -Is) start"
 mkdir -p "$WORK"
@@ -26,17 +26,17 @@ md5sum -c france-latest.osm.pbf.md5
 bash "$HERE/import.sh" "$WORK/france-latest.osm.pbf"
 
 echo "[rebuild] building"
-psql_xradar -f "$HERE/build.sql"
-psql_xradar -f "$HERE/places.sql"
+psql_eona -f "$HERE/build.sql"
+psql_eona -f "$HERE/places.sql"
 
 echo "[rebuild] checking"
-psql_xradar -f "$HERE/checks.sql"
+psql_eona -f "$HERE/checks.sql"
 
 echo "[rebuild] replaying the corrections made by hand"
-psql_xradar -f "$HERE/edits.sql"
+psql_eona -f "$HERE/edits.sql"
 
 echo "[rebuild] publishing"
-psql_xradar -f "$HERE/publish.sql"
-psql_xradar -c 'DROP SCHEMA IF EXISTS osm CASCADE'
+psql_eona -f "$HERE/publish.sql"
+psql_eona -c 'DROP SCHEMA IF EXISTS osm CASCADE'
 
 echo "[rebuild] $(date -Is) done"

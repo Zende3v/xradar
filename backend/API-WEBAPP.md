@@ -1,4 +1,4 @@
-# API XRadar — doc pour la webapp d'administration
+# API EONA — doc pour la webapp d'administration
 
 Tout passe par HTTP/JSON. Pas d'accès à la base, pas de SSH : la webapp demande et envoie des
 données, le backend fait le reste.
@@ -28,7 +28,7 @@ curl -s -X POST https://api.lrda-mercuriale.uk/api/accounts/login \
 **Le `ADMIN_TOKEN` ne doit jamais partir dans le navigateur.** Il donne la création et la
 suppression de comptes. La webapp a donc besoin d'un petit serveur à elle (Node, PHP, peu importe)
 qui garde le token et relaie les appels. Le navigateur parle à ce serveur, jamais directement au
-backend XRadar.
+backend EONA.
 
 **CORS** : le backend répond aux navigateurs venant des adresses listées dans `WEBAPP_ORIGINS`
 (côté serveur, séparées par des virgules). Donne ton adresse exacte à Arthur, scheme compris —

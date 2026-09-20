@@ -1,4 +1,4 @@
--- x_radar signalisation v2 — osm2pgsql flex style (osm2pgsql 2.x).
+-- EONA signalisation v2 — osm2pgsql flex style (osm2pgsql 2.x).
 --
 -- Keeps what a driver needs from OpenStreetMap: the roads a car can take, with their limit
 -- in each direction, the sign nodes on or beside them, the nearby services a driver looks for

@@ -107,7 +107,7 @@ export const config = {
   // PostgreSQL / PostGIS: the signalisation (schema "signs", rebuilt weekly by
   // signalisation/rebuild.sh) and the drivers' reports and speed-limit changes (schema "crowd").
   pgHost: process.env.PGHOST || '/var/run/postgresql',
-  pgDatabase: process.env.PGDATABASE || 'xradar',
+  pgDatabase: process.env.PGDATABASE || 'eona',
   pgPoolMax: 8,
   pgStatementTimeoutMs: 15000,
   signDefaultRadiusM: 30000, // 30 km
@@ -140,7 +140,7 @@ export const config = {
   // Places sent to a client asking for a pool (?pool=1), which ranks them itself.
   placePoolLimit: 60,
   // Identifies us to the open-data servers we download from.
-  placeUserAgent: process.env.PLACE_USER_AGENT || 'x_radar/1.0 (+https://api.lrda-mercuriale.uk)',
+  placeUserAgent: process.env.PLACE_USER_AGENT || 'EONA/1.0 (+https://api.lrda-mercuriale.uk)',
 
   // Official fuel prices — prix-carburants.gouv.fr "flux instantané" (Licence Ouverte).
   // They only enrich the fuel stations the nearby search finds; they never replace it.
@@ -336,7 +336,7 @@ export const config = {
     port: Number(process.env.SMTP_PORT) || 587,
     user: process.env.SMTP_USER || null,
     pass: process.env.SMTP_PASS || null,
-    from: process.env.SMTP_FROM || 'x_radar',
+    from: process.env.SMTP_FROM || 'EONA',
   },
   resetCodeTtlMs: 30 * 60 * 1000, // 30 min
   // A guest ("Continuer en invité": username + password, no email) is deleted this long
@@ -374,7 +374,7 @@ export const config = {
   // "Changer de pseudo": a client with access changes it at most once per
   // usernameChangeIntervalMs; the name left stays theirs usernameHoldMs (nobody else takes it
   // meanwhile, so nobody passes for them). Reserved names (compared without "_", "." and
-  // digits, and anything starting with "xradar") belong to no driver; admins set them.
+  // digits, and anything starting with "eona") belong to no driver; admins set them.
   usernameChangeIntervalMs: 7 * D,
   usernameHoldMs: 30 * D,
   reservedUsernames: [

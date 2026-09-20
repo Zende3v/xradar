@@ -1,4 +1,4 @@
--- x_radar signalisation v2, step 4: publish the checked build in one transaction. The backend
+-- EONA signalisation v2, step 4: publish the checked build in one transaction. The backend
 -- reads schema "signs"; the previous version stays as "signs_prev" for a rollback.
 
 \set ON_ERROR_STOP on

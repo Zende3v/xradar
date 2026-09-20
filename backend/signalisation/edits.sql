@@ -1,4 +1,4 @@
--- x_radar signalisation v2, step 3b: replay the corrections made by hand (crowd.sign_edit) onto
+-- EONA signalisation v2, step 3b: replay the corrections made by hand (crowd.sign_edit) onto
 -- the fresh build, before it is published. The corrections are the truth: this script never
 -- deletes one. A correction whose sign cannot be found again with certainty is left alone and
 -- marked "conflict" — the console shows it, someone decides.

@@ -1,19 +1,19 @@
 {
-  "name": "xradar-backend",
+  "name": "eona-backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "x_radar backend — serves French road-safety data (fixed radars from data.gouv) to the app.",
+  "description": "EONA backend — serves French road-safety data (fixed radars from data.gouv) to the app.",
   "engines": {
     "node": ">=18"
   },
   "bin": {
-    "xradar-accounts": "bin/xradar-accounts.js"
+    "eona-accounts": "bin/eona-accounts.js"
   },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "accounts": "node bin/xradar-accounts.js"
+    "accounts": "node bin/eona-accounts.js"
   },
   "dependencies": {
     "express": "^4.21.2",

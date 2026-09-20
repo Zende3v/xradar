@@ -1,6 +1,6 @@
-# x_radar — installer, déployer, lancer, surveiller, réparer
+# EONA — installer, déployer, lancer, surveiller, réparer
 
-Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + PostgreSQL/PostGIS sur un VPS Debian, exposé en HTTPS par Cloudflare Tunnel. L'app iOS vit dans son propre dépôt : `git@github.com:Zende3v/xradar_ios.git` (guide dans son README).
+Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + PostgreSQL/PostGIS sur un VPS Debian, exposé en HTTPS par Cloudflare Tunnel. L'app iOS vit dans son propre dépôt : `git@github.com:Zende3v/xradar_ios.git (dépôt pas encore renommé)` (guide dans son README).
 
 ---
 
@@ -8,15 +8,15 @@ Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + Po
 
 | Quoi | Où / commande |
 |---|---|
-| URL publique backend | `https://api.lrda-mercuriale.uk/` (Cloudflare Tunnel `xradar`, service `xradar-tunnel` → `127.0.0.1:8090`). Politique : `https://confidentialite.zylo-app.fr` (même tunnel → `127.0.0.1:9020`) |
+| URL publique backend | `https://api.lrda-mercuriale.uk/` (Cloudflare Tunnel `eona`, service `eona-tunnel` → `127.0.0.1:8090`). Politique : `https://confidentialite.zylo-app.fr` (même tunnel → `127.0.0.1:9020`) |
 | SSH VPS | `ssh root@100.107.151.127` (IP Tailscale ; le PC doit être dans le tailnet) |
-| Code backend VPS | `/opt/xradar-backend` (user `xradar`) |
-| Service | `systemctl status xradar-backend` |
-| Logs live | `journalctl -u xradar-backend -f` |
+| Code backend VPS | `/opt/eona-backend` (user `eona`) |
+| Service | `systemctl status eona-backend` |
+| Logs live | `journalctl -u eona-backend -f` |
 | Santé | `curl -s http://127.0.0.1:8090/health` |
-| Base | PostgreSQL 17 + PostGIS, base `xradar` (`runuser -u xradar -- psql -d xradar`) |
-| Rebuild signalisation | cron dimanche 03:30, log `/var/lib/xradar-signs/rebuild.log` |
-| Relancer le backend | `systemctl restart xradar-backend` |
+| Base | PostgreSQL 17 + PostGIS, base `eona` (`runuser -u eona -- psql -d eona`) |
+| Rebuild signalisation | cron dimanche 03:30, log `/var/lib/eona-signs/rebuild.log` |
+| Relancer le backend | `systemctl restart eona-backend` |
 | Build APK | `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk` |
 
 ---
@@ -24,9 +24,9 @@ Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + Po
 ## 1. Architecture
 
 ```
-App Android ──HTTPS──▶ Cloudflare Tunnel ──▶ backend Node :8090 (systemd, user xradar)
+App Android ──HTTPS──▶ Cloudflare Tunnel ──▶ backend Node :8090 (systemd, user eona)
    │                                              │
-   ├─ tuiles carte : Stadia Maps (direct)          ├─ PostgreSQL/PostGIS « xradar »
+   ├─ tuiles carte : Stadia Maps (direct)          ├─ PostgreSQL/PostGIS « eona »
    └─ adresses : api-adresse.data.gouv.fr          │    ├─ schéma signs  : routes + panneaux + services autour (rebuild hebdo depuis OSM)
                                                    │    └─ schéma crowd  : signalements + corrections de limite
                                                    ├─ data/accounts.json : comptes, stats, parrainage
@@ -54,7 +54,7 @@ backend/
 │  ├─ speedlimits/        corrections de limitation
 │  └─ signs/postgis.js    limite sous le conducteur, panneaux du trajet
 ├─ signalisation/         pipeline OSM → PostGIS (import.sh, style.lua, build.sql, checks.sql, publish.sql, rebuild.sh)
-├─ bin/xradar-accounts.js CLI admin comptes
+├─ bin/eona-accounts.js CLI admin comptes
 ├─ deploy/                unit systemd + setup-admin.sh
 └─ scripts/apk-server.js  serveur temporaire de téléchargement APK
 app/                      app Android
@@ -66,9 +66,9 @@ app/                      app Android
 
 - Debian 13, i5-11400H 12 threads, 7,4 Go RAM + 7,6 Go swap, NVMe 460 Go.
 - Accès : **Tailscale uniquement** (`100.107.151.127`). Le port 22 public ne répond pas.
-- `ufw` actif. x_radar n'ouvre **aucun** port : tout passe par Cloudflare Tunnel (connexion sortante). Backend (8090) et politique (9020) n'écoutent que sur `127.0.0.1`.
-- La machine héberge **d'autres projets** (Caddy sur 80/443, lazarus-server, medocs…). Ne pas y toucher, ne pas redémarrer Caddy pour x_radar.
-- Services x_radar lancés au boot : `xradar-backend`, `xradar-privacy`, `xradar-tunnel`, `postgresql`, `tailscaled`, `cron` (tous `enabled`). Un reboot remet tout en route seul.
+- `ufw` actif. EONA n'ouvre **aucun** port : tout passe par Cloudflare Tunnel (connexion sortante). Backend (8090) et politique (9020) n'écoutent que sur `127.0.0.1`.
+- La machine héberge **d'autres projets** (Caddy sur 80/443, lazarus-server, medocs…). Ne pas y toucher, ne pas redémarrer Caddy pour EONA.
+- Services EONA lancés au boot : `eona-backend`, `eona-privacy`, `eona-tunnel`, `postgresql`, `tailscaled`, `cron` (tous `enabled`). Un reboot remet tout en route seul.
 
 ---
 
@@ -91,28 +91,28 @@ tailscale up
 ### 3.2 Utilisateur, dossiers, code
 
 ```bash
-useradd --system --home /opt/xradar-backend --shell /usr/sbin/nologin xradar || true
-mkdir -p /opt/xradar-backend/data/avatars /var/lib/xradar-signs
+useradd --system --home /opt/eona-backend --shell /usr/sbin/nologin eona || true
+mkdir -p /opt/eona-backend/data/avatars /var/lib/eona-signs
 ```
 
 Depuis le PC (dossier du repo) :
 
 ```bash
-scp -r backend/src backend/bin backend/deploy backend/signalisation backend/scripts backend/package.json backend/package-lock.json root@100.107.151.127:/opt/xradar-backend/
+scp -r backend/src backend/bin backend/deploy backend/signalisation backend/scripts backend/package.json backend/package-lock.json root@100.107.151.127:/opt/eona-backend/
 ```
 
 Sur le VPS :
 
 ```bash
-cd /opt/xradar-backend && npm ci --omit=dev
-chown -R xradar:xradar /opt/xradar-backend /var/lib/xradar-signs
+cd /opt/eona-backend && npm ci --omit=dev
+chown -R eona:eona /opt/eona-backend /var/lib/eona-signs
 ```
 
 ### 3.3 PostgreSQL / PostGIS
 
 ```bash
-cat > /etc/postgresql/17/main/conf.d/xradar.conf <<'EOF'
-# x_radar : machine 8 Go partagée avec le backend, disque NVMe.
+cat > /etc/postgresql/17/main/conf.d/eona.conf <<'EOF'
+# EONA : machine 8 Go partagée avec le backend, disque NVMe.
 shared_buffers = 1GB
 effective_cache_size = 4GB
 maintenance_work_mem = 1GB
@@ -126,41 +126,41 @@ max_parallel_maintenance_workers = 4
 jit = off
 EOF
 systemctl restart postgresql
-runuser -u postgres -- psql -c "CREATE ROLE xradar LOGIN"
-runuser -u postgres -- createdb -O xradar xradar
-runuser -u postgres -- psql -d xradar -c "CREATE EXTENSION postgis"
+runuser -u postgres -- psql -c "CREATE ROLE eona LOGIN"
+runuser -u postgres -- createdb -O eona eona
+runuser -u postgres -- psql -d eona -c "CREATE EXTENSION postgis"
 ```
 
-Auth : socket local + **peer** (user système `xradar` = rôle `xradar`). Aucun mot de passe, aucun port DB exposé (écoute `127.0.0.1` seulement).
+Auth : socket local + **peer** (user système `eona` = rôle `eona`). Aucun mot de passe, aucun port DB exposé (écoute `127.0.0.1` seulement).
 
 ### 3.4 Secrets (drop-ins systemd, jamais dans git)
 
 ```bash
-cd /opt/xradar-backend && bash deploy/setup-admin.sh   # installe le .service, crée ADMIN_TOKEN (admin.conf), redémarre
+cd /opt/eona-backend && bash deploy/setup-admin.sh   # installe le .service, crée ADMIN_TOKEN (admin.conf), redémarre
 ```
 
-Autres secrets, un fichier par sujet dans `/etc/systemd/system/xradar-backend.service.d/` :
+Autres secrets, un fichier par sujet dans `/etc/systemd/system/eona-backend.service.d/` :
 
 ```bash
-install -m 600 /dev/null /etc/systemd/system/xradar-backend.service.d/ors.conf
-cat > /etc/systemd/system/xradar-backend.service.d/ors.conf <<'EOF'
+install -m 600 /dev/null /etc/systemd/system/eona-backend.service.d/ors.conf
+cat > /etc/systemd/system/eona-backend.service.d/ors.conf <<'EOF'
 [Service]
 Environment=ORS_API_KEY=ta_cle_openrouteservice
 Environment=ORS_API_KEY_2=ta_cle_de_secours
 EOF
-cat > /etc/systemd/system/xradar-backend.service.d/smtp.conf <<'EOF'
+cat > /etc/systemd/system/eona-backend.service.d/smtp.conf <<'EOF'
 [Service]
 Environment=SMTP_HOST=smtp.gmail.com
 Environment=SMTP_PORT=587
 Environment=SMTP_USER=adresse@gmail.com
 Environment="SMTP_PASS=xxxx xxxx xxxx xxxx"
-Environment="SMTP_FROM=xradar adresse@gmail.com"
+Environment="SMTP_FROM=eona adresse@gmail.com"
 EOF
-systemctl daemon-reload && systemctl restart xradar-backend
+systemctl daemon-reload && systemctl restart eona-backend
 ```
 
 ⚠️ Valeur avec espaces = **guillemets** autour de toute la ligne `Environment="…"`, sinon mail muet sans erreur.
-⚠️ Ne jamais afficher `systemctl cat xradar-backend` en public : secrets en clair.
+⚠️ Ne jamais afficher `systemctl cat eona-backend` en public : secrets en clair.
 
 | Variable | Rôle | Défaut |
 |---|---|---|
@@ -170,7 +170,7 @@ systemctl daemon-reload && systemctl restart xradar-backend
 | `ORS_API_KEY_2` (et `_3`) | clé de secours : elle prend le relais dès que la précédente est refusée (quota du jour épuisé, trop d'appels d'un coup), jusqu'à minuit UTC | — |
 | `ORS_DAILY_BUDGET` | appels ORS par clé et par jour, sous le quota du plan gratuit (2000) | `1500` |
 | `OSRM_URL` | OSRM de repli | `https://router.project-osrm.org` |
-| `PGHOST` / `PGDATABASE` | base | `/var/run/postgresql` / `xradar` |
+| `PGHOST` / `PGDATABASE` | base | `/var/run/postgresql` / `eona` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
 | `PUBLIC_BASE_URL` | base des URLs d'avatars (les anciennes en `ts.net` sont réécrites au chargement) | `https://api.lrda-mercuriale.uk` |
 | `ACCOUNTS_FILE` / `AVATARS_DIR` | comptes / photos | `./data/accounts.json` / `./data/avatars` |
@@ -183,7 +183,7 @@ systemctl daemon-reload && systemctl restart xradar-backend
 | `ACCOUNT_TRIP_HISTORY_MAX` | trajets gardés par compte | 200 |
 | `RADAR_DATASET_API_URL` / `REFRESH_INTERVAL_MS` | dataset radars / refresh | data.gouv / 24 h |
 | `FUEL_FEED_URL` / `FUEL_REFRESH_INTERVAL_MS` | prix carburants | roulez-eco / 10 min |
-| `PLACE_USER_AGENT` | identité HTTP vers les données ouvertes | `x_radar/1.0 (+url)` |
+| `PLACE_USER_AGENT` | identité HTTP vers les données ouvertes | `EONA/1.0 (+url)` |
 | `PLACE_TABLE` | services autour : `signs_next.place` = tester un build non publié (staging) | `signs.place` |
 
 Générer un secret : `openssl rand -hex 32`.
@@ -192,7 +192,7 @@ Générer un secret : `openssl rand -hex 32`.
 
 ```bash
 systemctl daemon-reload
-systemctl enable --now xradar-backend
+systemctl enable --now eona-backend
 ```
 
 Le .service : `Restart=on-failure` (relance seul 5 s après un crash), `ProtectSystem=strict`, seul `data/` inscriptible.
@@ -200,22 +200,22 @@ Le .service : `Restart=on-failure` (relance seul 5 s après un crash), `ProtectS
 ### 3.6 Signalisation (premier build + cron)
 
 ```bash
-bash /opt/xradar-backend/signalisation/rebuild.sh    # ~10 min : téléchargement 5,8 Go + import + build + contrôles + publication
-cat > /etc/cron.d/xradar-signs <<'EOF'
-# x_radar signalisation : reconstruction hebdo depuis un extrait France frais (dimanche 03:30).
-30 3 * * 0 root bash /opt/xradar-backend/signalisation/rebuild.sh >> /var/lib/xradar-signs/rebuild.log 2>&1
+bash /opt/eona-backend/signalisation/rebuild.sh    # ~10 min : téléchargement 5,8 Go + import + build + contrôles + publication
+cat > /etc/cron.d/eona-signs <<'EOF'
+# EONA signalisation : reconstruction hebdo depuis un extrait France frais (dimanche 03:30).
+30 3 * * 0 root bash /opt/eona-backend/signalisation/rebuild.sh >> /var/lib/eona-signs/rebuild.log 2>&1
 EOF
 ```
 
 ### 3.7 HTTPS public
 
-Cloudflare Tunnel `xradar` (`cloudflared` déjà dans `/usr/local/bin`, identifiants dans `/root/.cloudflared/<tunnel id>.json`, jamais versionnés) :
+Cloudflare Tunnel `eona` (`cloudflared` déjà dans `/usr/local/bin`, identifiants dans `/root/.cloudflared/<tunnel id>.json`, jamais versionnés) :
 
 ```bash
-cloudflared tunnel create xradar                      # une fois ; donne le <tunnel id>
-install -D -m 644 deploy/cloudflared-xradar.yml /etc/cloudflared/xradar.yml   # y mettre le <tunnel id>
-install -m 644 deploy/xradar-tunnel.service /etc/systemd/system/
-systemctl daemon-reload && systemctl enable --now xradar-tunnel
+cloudflared tunnel create eona                      # une fois ; donne le <tunnel id>
+install -D -m 644 deploy/cloudflared-eona.yml /etc/cloudflared/eona.yml   # y mettre le <tunnel id>
+install -m 644 deploy/eona-tunnel.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now eona-tunnel
 ```
 
 DNS dans le tableau de bord Cloudflare : `api` (zone `lrda-mercuriale.uk`) et `confidentialite` (zone `zylo-app.fr`) en CNAME proxifié vers `<tunnel id>.cfargotunnel.com`. `cloudflared tunnel route dns` ne marche que pour `zylo-app.fr` (le `cert.pem` est lié à cette zone) : pour `lrda-mercuriale.uk`, passer par le tableau de bord.
@@ -223,7 +223,7 @@ DNS dans le tableau de bord Cloudflare : `api` (zone `lrda-mercuriale.uk`) et `c
 ### 3.8 Vérifier
 
 ```bash
-systemctl is-active xradar-backend postgresql
+systemctl is-active eona-backend postgresql
 curl -s http://127.0.0.1:8090/health
 curl -s "http://127.0.0.1:8090/api/signs/limit?lat=48.1113&lon=-1.6778&bearing=0"
 curl -s https://api.lrda-mercuriale.uk/health        # depuis n'importe où (Cloudflare)
@@ -237,32 +237,32 @@ Depuis le PC, dossier du repo.
 
 1. Sauvegarder le code en place (retour arrière) :
    ```bash
-   ssh root@100.107.151.127 "cd /opt/xradar-backend && tar czf /opt/xradar-backend-src-backup-\$(date +%Y%m%d-%H%M).tgz src package.json package-lock.json"
+   ssh root@100.107.151.127 "cd /opt/eona-backend && tar czf /opt/eona-backend-src-backup-\$(date +%Y%m%d-%H%M).tgz src package.json package-lock.json"
    ```
 2. Envoyer le code (le `rm` retire les fichiers supprimés dans le repo) :
    ```bash
-   ssh root@100.107.151.127 "rm -rf /opt/xradar-backend/src"
-   scp -r backend/src backend/package.json backend/package-lock.json root@100.107.151.127:/opt/xradar-backend/
+   ssh root@100.107.151.127 "rm -rf /opt/eona-backend/src"
+   scp -r backend/src backend/package.json backend/package-lock.json root@100.107.151.127:/opt/eona-backend/
    ```
    Pipeline signalisation modifié → envoyer aussi `backend/signalisation`.
 3. Sur le VPS :
    ```bash
-   cd /opt/xradar-backend
+   cd /opt/eona-backend
    npm ci --omit=dev                      # seulement si package.json a changé
-   chown -R xradar:xradar src node_modules package.json package-lock.json signalisation
-   systemctl restart xradar-backend
+   chown -R eona:eona src node_modules package.json package-lock.json signalisation
+   systemctl restart eona-backend
    curl -s http://127.0.0.1:8090/health
-   journalctl -u xradar-backend -n 30 --no-pager
+   journalctl -u eona-backend -n 30 --no-pager
    ```
 
 Schéma `crowd` modifié (`src/crowd/schema.sql`) → appliqué seul au redémarrage (idempotent, jamais de `DROP`).
 
 ### Instance de test (optionnel, avant la prod)
 
-`/opt/xradar-backend-staging` : copie du backend sur le port **8099**, lancée par `bash /opt/xradar-backend-staging/run.sh` (ADMIN_TOKEN=`staging-admin`).
+`/opt/eona-backend-staging` : copie du backend sur le port **8099**, lancée par `bash /opt/eona-backend-staging/run.sh` (ADMIN_TOKEN=`staging-admin`).
 ⚠️ Elle utilise **la même base** que la prod : ses tests écrivent dans `crowd`. Nettoyer après :
 ```bash
-runuser -u xradar -- psql -d xradar -c "TRUNCATE crowd.report, crowd.report_voice, crowd.speed_limit_change, crowd.speed_limit_voice, crowd.speed_limit_event"
+runuser -u eona -- psql -d eona -c "TRUNCATE crowd.report, crowd.report_voice, crowd.speed_limit_change, crowd.speed_limit_voice, crowd.speed_limit_event"
 ```
 Seulement si la prod n'a pas encore de vraies données dans `crowd`. Arrêt : `pkill -f "[n]ode src/index.js --stag[i]ng"`.
 
@@ -272,7 +272,7 @@ Seulement si la prod n'a pas encore de vraies données dans `crowd`. Arrêt : `p
 
 Chaîne `rebuild.sh` (cron hebdo) :
 
-1. **Téléchargement** `france-latest.osm.pbf` Geofabrik + contrôle md5 → `/var/lib/xradar-signs/`.
+1. **Téléchargement** `france-latest.osm.pbf` Geofabrik + contrôle md5 → `/var/lib/eona-signs/`.
 2. **import.sh** : osmium garde routes voitures + nœuds de signalisation + services (stations, bornes, parkings, tabacs, garages, hôtels, distributeurs) + communes (~1 min), osm2pgsql (`style.lua`) charge le schéma `osm` (~2 min). Déjà écartés : accès privé, fermé, bornes vélo, boxes/garages privés.
 3. **build.sql** (~3 min) → schéma `signs_next` :
    - `road` : 5,8 M routes, limite **par sens** (`maxspeed`, `:forward`, `:backward`, `FR:urban`…, zone de rencontre = 20).
@@ -286,20 +286,20 @@ Chaîne `rebuild.sh` (cron hebdo) :
 6. **publish.sql** : bascule atomique `signs` → `signs_prev`, `signs_next` → `signs` (panneaux et services ensemble). Zéro coupure.
 7. Suppression du schéma `osm`.
 
-Rejouer seulement les services sur un `signs_next` déjà construit : `runuser -u xradar -- psql -d xradar -f places.sql` (il nettoie un essai interrompu), puis `checks.sql`. Tester avant publication : instance staging avec `PLACE_TABLE=signs_next.place`.
+Rejouer seulement les services sur un `signs_next` déjà construit : `runuser -u eona -- psql -d eona -f places.sql` (il nettoie un essai interrompu), puis `checks.sql`. Tester avant publication : instance staging avec `PLACE_TABLE=signs_next.place`.
 
 Échec à n'importe quelle étape = version publiée intacte.
 
 ```bash
-tail -50 /var/lib/xradar-signs/rebuild.log                        # dernier rebuild
-bash /opt/xradar-backend/signalisation/rebuild.sh                  # relancer à la main
-runuser -u xradar -- psql -d xradar -c "SELECT * FROM signs.meta"  # version publiée
+tail -50 /var/lib/eona-signs/rebuild.log                        # dernier rebuild
+bash /opt/eona-backend/signalisation/rebuild.sh                  # relancer à la main
+runuser -u eona -- psql -d eona -c "SELECT * FROM signs.meta"  # version publiée
 ```
 
 **Revenir à la version précédente** (build publié mais faux) :
 ```bash
-runuser -u xradar -- psql -d xradar -c "BEGIN; ALTER SCHEMA signs RENAME TO signs_broken; ALTER SCHEMA signs_prev RENAME TO signs; COMMIT;"
-runuser -u xradar -- psql -d xradar -c "DROP SCHEMA signs_broken CASCADE"
+runuser -u eona -- psql -d eona -c "BEGIN; ALTER SCHEMA signs RENAME TO signs_broken; ALTER SCHEMA signs_prev RENAME TO signs; COMMIT;"
+runuser -u eona -- psql -d eona -c "DROP SCHEMA signs_broken CASCADE"
 ```
 
 Sans `ALTER`, la base ne touche jamais `crowd` : signalements et corrections survivent à chaque rebuild.
@@ -314,24 +314,24 @@ Sans `ALTER`, la base ne touche jamais `crowd` : signalements et corrections sur
 | Photos de profil | `data/avatars/` | oui |
 | Signalements + votes, corrections de limite + historique | PostGIS schéma `crowd` | **OUI** |
 | Routes + panneaux | PostGIS schémas `signs`, `signs_prev` | non (rebuild) |
-| Extrait OSM | `/var/lib/xradar-signs/france-latest.osm.pbf` | non (retéléchargé) |
+| Extrait OSM | `/var/lib/eona-signs/france-latest.osm.pbf` | non (retéléchargé) |
 | Copies auto des comptes avant purge | `data/accounts.backup-<date>.json` | oui |
 | Ancien système (NDJSON, JSON d'avant PostGIS) | `data/archive/` | non (supprimable) |
-| Sauvegardes du code | `/opt/xradar-backend-src-backup-*.tgz` | garder les 2-3 dernières |
+| Sauvegardes du code | `/opt/eona-backend-src-backup-*.tgz` | garder les 2-3 dernières |
 
 Sauvegarde manuelle :
 ```bash
-mkdir -p /var/backups/xradar
-runuser -u postgres -- pg_dump -Fc -n crowd xradar > /var/backups/xradar/crowd-$(date +%F).dump
-tar czf /var/backups/xradar/data-$(date +%F).tgz -C /opt/xradar-backend/data accounts.json avatars
+mkdir -p /var/backups/eona
+runuser -u postgres -- pg_dump -Fc -n crowd eona > /var/backups/eona/crowd-$(date +%F).dump
+tar czf /var/backups/eona/data-$(date +%F).tgz -C /opt/eona-backend/data accounts.json avatars
 ```
 
 Restauration :
 ```bash
-systemctl stop xradar-backend
-runuser -u postgres -- pg_restore -d xradar --clean --if-exists < /var/backups/xradar/crowd-AAAA-MM-JJ.dump
-tar xzf /var/backups/xradar/data-AAAA-MM-JJ.tgz -C /opt/xradar-backend/data && chown -R xradar:xradar /opt/xradar-backend/data
-systemctl start xradar-backend
+systemctl stop eona-backend
+runuser -u postgres -- pg_restore -d eona --clean --if-exists < /var/backups/eona/crowd-AAAA-MM-JJ.dump
+tar xzf /var/backups/eona/data-AAAA-MM-JJ.tgz -C /opt/eona-backend/data && chown -R eona:eona /opt/eona-backend/data
+systemctl start eona-backend
 ```
 
 Pas de sauvegarde automatique (choix assumé) : lancer la sauvegarde manuelle avant toute opération risquée (migration, restauration, gros déploiement).
@@ -341,13 +341,13 @@ Pas de sauvegarde automatique (choix assumé) : lancer la sauvegarde manuelle av
 ## 7. Surveiller
 
 ```bash
-systemctl status xradar-backend xradar-tunnel xradar-privacy postgresql tailscaled --no-pager
-journalctl -u xradar-backend -f                          # logs en direct
-journalctl -u xradar-backend --since "-1 h" --no-pager | grep -iE "error|unavailable|failed"
+systemctl status eona-backend eona-tunnel eona-privacy postgresql tailscaled --no-pager
+journalctl -u eona-backend -f                          # logs en direct
+journalctl -u eona-backend --since "-1 h" --no-pager | grep -iE "error|unavailable|failed"
 curl -s http://127.0.0.1:8090/health | python3 -m json.tool
 curl -s -o /dev/null -w "%{http_code}
 " https://api.lrda-mercuriale.uk/health
-tail -20 /var/lib/xradar-signs/rebuild.log
+tail -20 /var/lib/eona-signs/rebuild.log
 df -h / && free -h
 ```
 
@@ -367,7 +367,7 @@ df -h / && free -h
 
 Requêtes utiles :
 ```bash
-runuser -u xradar -- psql -d xradar <<'SQL'
+runuser -u eona -- psql -d eona <<'SQL'
 SELECT type, count(*) FROM crowd.report WHERE status = 'live' GROUP BY type;
 SELECT status, count(*) FROM crowd.speed_limit_change GROUP BY status;
 SELECT nspname, pg_size_pretty(sum(pg_total_relation_size(c.oid))) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -386,26 +386,26 @@ Le backend relance seul après un crash (5 s). Un reboot relance tout. Sinon :
 | Symptôme | Vérifier | Réparer |
 |---|---|---|
 | App : « Réseau indisponible » partout | `curl -s https://api.lrda-mercuriale.uk/health` depuis le PC | voir lignes suivantes |
-| Backend arrêté / boucle de redémarrage | `systemctl status xradar-backend` ; `journalctl -u xradar-backend -n 80 --no-pager` | erreur de code → retour arrière (ci-dessous) ; `EADDRINUSE` → un autre process tient 8090 (`ss -ltnp \| grep 8090`) |
-| `/health` OK en local, KO en public | `journalctl -u xradar-tunnel -n 50` | `systemctl restart xradar-tunnel` |
-| `signs.published: null`, erreurs 503 signs/reports | `systemctl status postgresql` ; `journalctl -u postgresql@17-main -n 50` | `systemctl restart postgresql` puis `systemctl restart xradar-backend` |
-| Limites / panneaux faux après un dimanche | `tail -80 /var/lib/xradar-signs/rebuild.log` ; `SELECT * FROM signs.meta` | retour à `signs_prev` (§5) |
+| Backend arrêté / boucle de redémarrage | `systemctl status eona-backend` ; `journalctl -u eona-backend -n 80 --no-pager` | erreur de code → retour arrière (ci-dessous) ; `EADDRINUSE` → un autre process tient 8090 (`ss -ltnp \| grep 8090`) |
+| `/health` OK en local, KO en public | `journalctl -u eona-tunnel -n 50` | `systemctl restart eona-tunnel` |
+| `signs.published: null`, erreurs 503 signs/reports | `systemctl status postgresql` ; `journalctl -u postgresql@17-main -n 50` | `systemctl restart postgresql` puis `systemctl restart eona-backend` |
+| Limites / panneaux faux après un dimanche | `tail -80 /var/lib/eona-signs/rebuild.log` ; `SELECT * FROM signs.meta` | retour à `signs_prev` (§5) |
 | Rebuild échoué | log : download, md5, osm2pgsql, `checks` | cause réseau → relancer `rebuild.sh` ; `checks` refuse → extrait OSM douteux, attendre le suivant (version publiée intacte) |
-| Disque plein | `df -h /` ; `du -sh /var/lib/postgresql /var/lib/xradar-signs /opt/xradar-backend/data` | `DROP SCHEMA IF EXISTS osm CASCADE` ; `DROP SCHEMA IF EXISTS signs_prev CASCADE` ; vider `data/archive/`, vieux `*.tgz` |
-| RAM saturée | `free -h` ; `top` | `systemctl restart xradar-backend` ; rebuild en cours = normal (osm2pgsql) |
-| Comptes perdus / `accounts.json` cassé | `journalctl … \| grep accounts` | `systemctl stop xradar-backend` → copier `data/accounts.backup-<date>.json` (ou sauvegarde §6) sur `accounts.json` → `chown xradar:xradar` → start |
+| Disque plein | `df -h /` ; `du -sh /var/lib/postgresql /var/lib/eona-signs /opt/eona-backend/data` | `DROP SCHEMA IF EXISTS osm CASCADE` ; `DROP SCHEMA IF EXISTS signs_prev CASCADE` ; vider `data/archive/`, vieux `*.tgz` |
+| RAM saturée | `free -h` ; `top` | `systemctl restart eona-backend` ; rebuild en cours = normal (osm2pgsql) |
+| Comptes perdus / `accounts.json` cassé | `journalctl … \| grep accounts` | `systemctl stop eona-backend` → copier `data/accounts.backup-<date>.json` (ou sauvegarde §6) sur `accounts.json` → `chown eona:eona` → start |
 | Mails (vérif, mot de passe oublié) ne partent pas | logs `[mail]` | `smtp.conf` : guillemets autour des valeurs avec espaces |
-| API admin 503 | `systemctl show xradar-backend -p Environment \| grep -c ADMIN_TOKEN` | `bash deploy/setup-admin.sh` |
+| API admin 503 | `systemctl show eona-backend -p Environment \| grep -c ADMIN_TOKEN` | `bash deploy/setup-admin.sh` |
 | Itinéraires lents / en erreur | `/health` → `routing.provider` ; logs `[route]` | clé ORS (`ors.conf`) ; quota ORS dépassé → attendre ou retirer la clé (bascule OSRM public) |
 | Carte vide dans l'app | — | clé Stadia (`local.properties`, §9) invalide ou quota Stadia |
 
 **Retour arrière du code** :
 ```bash
-cd /opt/xradar-backend
-ls -t /opt/xradar-backend-src-backup-*.tgz | head -3
-rm -rf src && tar xzf /opt/xradar-backend-src-backup-AAAAMMJJ-HHMM.tgz
-npm ci --omit=dev && chown -R xradar:xradar src node_modules package.json package-lock.json
-systemctl restart xradar-backend
+cd /opt/eona-backend
+ls -t /opt/eona-backend-src-backup-*.tgz | head -3
+rm -rf src && tar xzf /opt/eona-backend-src-backup-AAAAMMJJ-HHMM.tgz
+npm ci --omit=dev && chown -R eona:eona src node_modules package.json package-lock.json
+systemctl restart eona-backend
 ```
 
 ---
@@ -446,7 +446,7 @@ adb -s <ID> install -r app/build/outputs/apk/release/app-release.apk
 
 ```bash
 scp app/build/outputs/apk/release/app-release.apk root@100.107.151.127:/root/apk/
-ssh root@100.107.151.127 "ufw allow 8087/tcp && cd /opt/xradar-backend && APK_DIR=/root/apk PORT=8087 nohup node scripts/apk-server.js > /var/log/xradar-apk.log 2>&1 &"
+ssh root@100.107.151.127 "ufw allow 8087/tcp && cd /opt/eona-backend && APK_DIR=/root/apk PORT=8087 nohup node scripts/apk-server.js > /var/log/eona-apk.log 2>&1 &"
 ```
 Lien : `http://45.80.23.8:8087/` (HTTP clair, sans auth ; seuls des `.apk` dans `/root/apk`). Couper : `pkill -f apk-server.js && ufw delete allow 8087/tcp`.
 
@@ -476,11 +476,11 @@ Limites `guest` (essai compris, jour à l'heure de Paris) : **5 signalements** (
 ### CLI (sur le VPS, jeton lu dans le service)
 
 ```bash
-cd /opt/xradar-backend
-node bin/xradar-accounts.js list [guest|client|admin]
-node bin/xradar-accounts.js show <id>
-node bin/xradar-accounts.js set <id> --role=client       # --role=admin, --name="Nom", --ban, --unban
-node bin/xradar-accounts.js del <id>
+cd /opt/eona-backend
+node bin/eona-accounts.js list [guest|client|admin]
+node bin/eona-accounts.js show <id>
+node bin/eona-accounts.js set <id> --role=client       # --role=admin, --name="Nom", --ban, --unban
+node bin/eona-accounts.js del <id>
 ```
 
 Parrainage : un admin crée les codes dans l'app (`Menu ▸ Parrainage`), code saisi à la création du compte.
@@ -489,7 +489,7 @@ Note de confiance /5 = (confirmés + 1) / (déclarés + 2) × 5.
 ### Modération (jeton admin)
 
 ```bash
-T=$(systemctl show xradar-backend -p Environment --value | grep -oP 'ADMIN_TOKEN=\K\S+')
+T=$(systemctl show eona-backend -p Environment --value | grep -oP 'ADMIN_TOKEN=\K\S+')
 curl -s -X DELETE -H "x-admin-token: $T" http://127.0.0.1:8090/api/reports/<id>          # retirer un signalement
 curl -s -H "x-admin-token: $T" http://127.0.0.1:8090/api/speed-limits/<id>                # historique d'une correction
 curl -s -X DELETE -H "x-admin-token: $T" http://127.0.0.1:8090/api/speed-limits/<id>     # annuler une correction
@@ -521,7 +521,7 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 |---|---|---|
 | GET | `/health` | état complet (§7) |
 | POST | `/api/accounts/auth` `/guest` `/register` `/login` `/logout` `/verify` `/resend-verify` `/forgot` `/reset` | login : `identifier` (pseudo ou email) + `deviceId` |
-| GET/PATCH/DELETE | `/api/accounts/me` · GET `/api/accounts/username-available` | Bearer ; GET : `limits` `{reportsPerDay, reportsToday, tripsPerDay, tripsToday}` (null client/admin), `canChangeUsername`, `usernameChangeableAt` ; PATCH `{username?, avatarUrl?}` : photo client/admin, **pseudo seulement client avec accès actif** (403 sinon), 1 fois / 7 j (429 + `nextAt`), libre (409 `username taken`), ni invalide ni réservé (400 ; admin, support, moderateur…, tout « xradar… », comparés sans `_ .` ni chiffres) ; l'ancien pseudo reste réservé 30 j à son titulaire ; username-available (Bearer facultatif : son ancien pseudo compte libre) ; DELETE : suppression définitive par le titulaire (compte, stats, trajets, sessions, présence, avatar ; signalements et propositions de limitation gardés, anonymisés) |
+| GET/PATCH/DELETE | `/api/accounts/me` · GET `/api/accounts/username-available` | Bearer ; GET : `limits` `{reportsPerDay, reportsToday, tripsPerDay, tripsToday}` (null client/admin), `canChangeUsername`, `usernameChangeableAt` ; PATCH `{username?, avatarUrl?}` : photo client/admin, **pseudo seulement client avec accès actif** (403 sinon), 1 fois / 7 j (429 + `nextAt`), libre (409 `username taken`), ni invalide ni réservé (400 ; admin, support, moderateur…, tout « eona… », comparés sans `_ .` ni chiffres) ; l'ancien pseudo reste réservé 30 j à son titulaire ; username-available (Bearer facultatif : son ancien pseudo compte libre) ; DELETE : suppression définitive par le titulaire (compte, stats, trajets, sessions, présence, avatar ; signalements et propositions de limitation gardés, anonymisés) |
 | GET/POST | `/api/accounts/me/stats` `/me/trips` `/me/drive` · `/api/accounts/referrals` | Bearer (referrals : admin) ; trajet : `plannedSeconds` (estimation, null inconnue), `stops` / `stoppedSeconds` (arrêts ≥ 10 s), `events` {radarFixed, radarMobile, controlZone, camera, hazard, accident, roadwork, radarCar : nombre} |
 | POST | `/api/accounts/avatar` | Bearer, base64 ≤ 4 Mo |
 | GET/POST/PATCH/DELETE | `/api/admin/accounts[/:id]` | ADMIN_TOKEN |
@@ -550,4 +550,4 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 - Login Google / Apple, portail de paiement.
 - Timer feu rouge (E4) : source de données manquante.
 - Script du style de carte à rapatrier dans le repo.
-- App iOS : dépôt `xradar_ios` (voir son README).
+- App iOS : dépôt `eona_ios` (voir son README).

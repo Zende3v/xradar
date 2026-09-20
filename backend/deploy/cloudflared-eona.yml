@@ -1,6 +1,6 @@
-# /etc/cloudflared/xradar.yml — XRadar only: the API and the privacy page through Cloudflare.
+# /etc/cloudflared/eona.yml — EONA only: the API and the privacy page through Cloudflare.
 # <tunnel id>: `cloudflared tunnel list`. The credentials file is created by
-# `cloudflared tunnel create xradar` and never leaves the VPS.
+# `cloudflared tunnel create eona` and never leaves the VPS.
 tunnel: <tunnel id>
 credentials-file: /root/.cloudflared/<tunnel id>.json
 

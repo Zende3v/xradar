@@ -1,11 +1,11 @@
--- x_radar signalisation v2, step 2 (after import.sh): from the raw import (schema osm) to the
+-- EONA signalisation v2, step 2 (after import.sh): from the raw import (schema osm) to the
 -- tables the backend publishes, built in schema signs_next and swapped in by rebuild.sh.
 --
 --   signs_next.road   every car road, with its limit in each direction
 --   signs_next.sign   every sign once: on its road, oriented, deduplicated, with a stable id
 --
 -- Distances are metric in Lambert-93 (EPSG:2154): the extract is metropolitan France.
--- Run as xradar:  psql -d xradar -f build.sql
+-- Run as eona:  psql -d eona -f build.sql
 
 \set ON_ERROR_STOP on
 SET client_min_messages = warning;

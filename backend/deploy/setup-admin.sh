@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 #
-# Setup unique pour les comptes x_radar sur le VPS.
+# Setup unique pour les comptes EONA sur le VPS.
 # À lancer sur le VPS, depuis le dossier backend/, en sudo :
 #
 #     sudo bash deploy/setup-admin.sh
 #
 # Ce script :
 #   1. installe le service systemd à jour (dossier data/ inscriptible),
-#   2. crée /opt/xradar-backend/data (inscriptible par l'utilisateur xradar),
+#   2. crée /opt/eona-backend/data (inscriptible par l'utilisateur eona),
 #   3. génère un ADMIN_TOKEN aléatoire (ou réutilise celui déjà en place),
 #   4. redémarre le backend,
 #   5. affiche le token + les 2 lignes à copier pour le CLI.
 #
 set -euo pipefail
 
-APP_DIR=/opt/xradar-backend
-SERVICE=xradar-backend
+APP_DIR=/opt/eona-backend
+SERVICE=eona-backend
 UNIT=/etc/systemd/system/${SERVICE}.service
 DROPIN_DIR=${UNIT}.d
-SRC_UNIT="$(cd "$(dirname "$0")" && pwd)/xradar-backend.service"
-RUN_USER=xradar
+SRC_UNIT="$(cd "$(dirname "$0")" && pwd)/eona-backend.service"
+RUN_USER=eona
 
 if [[ $EUID -ne 0 ]]; then
   echo "Lance-moi en sudo :  sudo bash deploy/setup-admin.sh" >&2
@@ -78,7 +78,7 @@ cat <<EOF
 
    export X_RADAR_URL=http://127.0.0.1:8090
    export X_RADAR_ADMIN_TOKEN=$TOKEN
-   node $APP_DIR/bin/xradar-accounts.js list
+   node $APP_DIR/bin/eona-accounts.js list
 
 ────────────────────────────────────────────────────────
 EOF

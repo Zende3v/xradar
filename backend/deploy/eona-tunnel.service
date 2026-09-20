@@ -1,0 +1,16 @@
+# Cloudflare Tunnel for EONA: api.lrda-mercuriale.uk -> backend (8090) and
+# confidentialite.zylo-app.fr -> privacy page (9020), with no port open for them.
+# Config: /etc/cloudflared/eona.yml (see deploy/cloudflared-eona.yml); the tunnel's
+# credentials stay in /root/.cloudflared/<tunnel id>.json (root only, never versioned).
+[Unit]
+Description=EONA Cloudflare Tunnel
+After=network-online.target eona-backend.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate tunnel --config /etc/cloudflared/eona.yml run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
