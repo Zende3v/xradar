@@ -6,6 +6,10 @@ import com.xradar.app.feature.subscription.OffersPrompt
 import com.xradar.app.feature.subscription.OffersSheet
 import com.xradar.app.feature.subscription.PaywallReason
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
@@ -34,10 +39,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xradar.app.core.model.GpsSignal
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -107,6 +114,7 @@ fun DriveRoute(
         votedReports = votedReports,
         onVote = viewModel::vote,
         onSlowdownAnswer = viewModel::answerSlowdown,
+        onDismissArrival = viewModel::dismissArrival,
         modifier = modifier,
     )
 }
@@ -147,6 +155,8 @@ fun DriveScreen(
     onVote: (String, Boolean) -> Unit = { _, _ -> },
     /** "Ralentissement du trafic ?" answered: yes or no. */
     onSlowdownAnswer: (Boolean) -> Unit = {},
+    /** The driver closed the arrival card. */
+    onDismissArrival: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = XRadarTheme.colors
@@ -302,6 +312,17 @@ fun DriveScreen(
                 exit = slideOutVertically { it / 2 } + fadeOut(),
             ) {
                 SlowdownPromptCard(onAnswer = onSlowdownAnswer)
+            }
+
+            // Destination reached: the trip's figures, then the HUD is simply driving again.
+            val lastArrival = remember { mutableStateOf<TripArrival?>(null) }
+            LaunchedEffect(state.arrival) { state.arrival?.let { lastArrival.value = it } }
+            AnimatedVisibility(
+                visible = state.arrival != null,
+                enter = slideInVertically { it / 2 } + fadeIn() + scaleIn(initialScale = 0.92f),
+                exit = slideOutVertically { it / 2 } + fadeOut(),
+            ) {
+                lastArrival.value?.let { ArrivalCard(it, onDismiss = onDismissArrival) }
             }
 
             AnimatedVisibility(visible = state.routeError) {
@@ -666,6 +687,83 @@ private fun FasterRouteBanner(notice: FasterRouteNotice, modifier: Modifier = Mo
         }
     }
 }
+
+/**
+ * The destination is reached: a round check that lands with a bounce, the place, and what the trip
+ * came to. It goes on its own after a few seconds, or on "Terminé".
+ */
+@Composable
+private fun ArrivalCard(arrival: TripArrival, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = XRadarTheme.colors
+    val spacing = XRadarTheme.spacing
+    // The check lands: it grows past its size, then settles.
+    val scale = remember(arrival.id) { Animatable(0.4f) }
+    LaunchedEffect(arrival.id) {
+        scale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+    }
+    XRadarSurface(
+        modifier = modifier.fillMaxWidth(),
+        shape = XRadarTheme.shapes.lg,
+        color = colors.surface.copy(alpha = 0.94f),
+        border = BorderStroke(1.dp, colors.success),
+    ) {
+        Column(modifier = Modifier.padding(spacing.md), verticalArrangement = Arrangement.spacedBy(spacing.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing.md)) {
+                Box(
+                    modifier = Modifier
+                        .scale(scale.value)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(colors.success.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    XRadarIcon(XRadarIcons.Check, contentDescription = null, tint = colors.success, size = 26.dp)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    XRadarText("Vous êtes arrivé", style = XRadarTheme.typography.headline, color = colors.textPrimary)
+                    XRadarText(
+                        arrival.toLabel,
+                        style = XRadarTheme.typography.footnote,
+                        color = colors.textSecondary,
+                        maxLines = 2,
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(spacing.lg)) {
+                ArrivalFigure("Durée", arrivalDuration(arrival.durationSeconds))
+                ArrivalFigure("Distance", arrivalDistance(arrival.distanceMeters))
+                if (arrival.alertsCount > 0) {
+                    ArrivalFigure("Alertes", arrival.alertsCount.toString())
+                }
+            }
+            XRadarButton(
+                text = "Terminé",
+                onClick = onDismiss,
+                variant = XRadarButtonVariant.Secondary,
+                fillWidth = true,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArrivalFigure(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        XRadarText(value, style = XRadarTheme.typography.bodyStrong, color = XRadarTheme.colors.textPrimary)
+        XRadarText(label, style = XRadarTheme.typography.footnote, color = XRadarTheme.colors.textTertiary)
+    }
+}
+
+/** "8 min", "1 h 05" — the way a driver reads a trip. */
+private fun arrivalDuration(seconds: Int): String {
+    val minutes = (seconds + 30) / 60
+    if (minutes < 60) return "$minutes min"
+    return "${minutes / 60} h ${(minutes % 60).toString().padStart(2, '0')}"
+}
+
+/** "820 m", "12,4 km". */
+private fun arrivalDistance(meters: Int): String =
+    if (meters < 1000) "$meters m" else String.format(java.util.Locale.FRANCE, "%.1f km", meters / 1000.0)
 
 /**
  * "Ralentissement du trafic ?": two large answers, readable at a glance; it goes by itself after a

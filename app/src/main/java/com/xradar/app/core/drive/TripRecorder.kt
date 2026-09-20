@@ -24,6 +24,9 @@ class TripRecorder(toLabel: String, val startedAt: Long = System.currentTimeMill
     private var stoppedSince: Long? = null
     /** Alerts met, by key, with their kind. */
     private val met = HashMap<String, AlertType>()
+
+    /** How many alerts the trip has met, for the arrival card. */
+    val alertsMet: Int get() = met.size
     private var lastLat = Double.NaN
     private var lastLon = Double.NaN
 

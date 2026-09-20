@@ -24,6 +24,18 @@ data class FasterRouteNotice(
     val id: Long = System.nanoTime(),
 )
 
+/**
+ * The trip just reached its destination: what the arrival card shows, a few seconds, before the
+ * HUD goes back to simply driving.
+ */
+data class TripArrival(
+    val toLabel: String,
+    val distanceMeters: Int,
+    val durationSeconds: Int,
+    val alertsCount: Int,
+    val id: Long = System.nanoTime(),
+)
+
 /** "Ralentissement du trafic ?", asked a few seconds about a slowdown nobody knows of yet. */
 data class SlowdownPrompt(
     val slowdown: com.xradar.app.core.drive.Slowdown,
@@ -68,6 +80,8 @@ data class DriveUiState(
     val fasterNotice: FasterRouteNotice? = null,
     /** "Ralentissement du trafic ?", asked a few seconds about a slowdown nobody knows of yet. */
     val slowdownPrompt: SlowdownPrompt? = null,
+    /** Shown a few seconds once the destination is reached. */
+    val arrival: TripArrival? = null,
 ) {
     val speedStatus: SpeedStatus?
         get() = SpeedStatus.of(speedKmh, speedLimitKmh)

@@ -83,8 +83,9 @@ data class AppSettings(
     val tripSuggestions: Boolean = true,
     /** "Statistiques de conduite": trips and driving time are recorded and sent to the account. */
     val drivingStats: Boolean = true,
-    /** "Présence anonyme": the backend counts the app open and a trip running (no position). */
-    val presence: Boolean = true,
+    /** "Présence anonyme": the backend counts the app open and a trip running (no position).
+     *  Off unless the driver turns it on: counting is ours, not theirs. */
+    val presence: Boolean = false,
 )
 
 /** App-scoped preferences, backed by SharedPreferences. Init once from a Context. */
@@ -123,7 +124,7 @@ object AppPreferences {
             sharedTraffic = p.getBoolean("shareSlowdowns", true),
             tripSuggestions = p.getBoolean("tripSuggestions", true),
             drivingStats = p.getBoolean("drivingStats", true),
-            presence = p.getBoolean("presence", true),
+            presence = p.getBoolean("presence", false),
         )
     }
 

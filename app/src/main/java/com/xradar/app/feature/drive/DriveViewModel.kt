@@ -114,6 +114,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val slowdownDetector = com.xradar.app.core.drive.SlowdownDetector()
     private var lastDetectedFixMs = Long.MIN_VALUE
     private val slowdownPrompt = MutableStateFlow<SlowdownPrompt?>(null)
+    /** The arrival card, once the destination is reached. */
+    private val arrival = MutableStateFlow<TripArrival?>(null)
+    /** True when the trip ended at its destination, as opposed to being stopped on the way. */
+    private var arrived = false
     private val declinedSlowdowns = ArrayList<Triple<Double, Double, Long>>()
     private val speaker = GuidanceSpeaker(application)
     private val sounds = AlertSoundPlayer(application)
@@ -241,6 +245,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         state.copy(fasterNotice = notice)
     }.combine(slowdownPrompt) { state, prompt ->
         state.copy(slowdownPrompt = prompt)
+    }.combine(arrival) { state, reached ->
+        state.copy(arrival = reached)
     }.combine(osmLimit) { state, live ->
         // The road's own limit beats the radar VMA: it is true everywhere, all the time.
         if (live != null) state.copy(speedLimitKmh = live, speedLimitSource = SpeedLimitSource.Road) else state
@@ -489,7 +495,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 // Auto-finish when we reach the destination.
                 ActiveTripRepository.destination.value?.let { dest ->
                     val toDest = Geo.haversine(sample.latitude, sample.longitude, dest.lat, dest.lon)
-                    if (toDest < ARRIVE_M && current.distanceMeters >= TripRecorder.MIN_METERS) ActiveTripRepository.clear()
+                    if (toDest < ARRIVE_M && current.distanceMeters >= TripRecorder.MIN_METERS) {
+                        arrived = true
+                        ActiveTripRepository.clear()
+                    }
                 }
             }
         }
@@ -783,12 +792,37 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private fun finalizeTrip() {
         val finished = trip ?: return
         trip = null
+        // Arrived, not stopped on the way: the HUD says so before going back to simply driving.
+        if (arrived) {
+            arrived = false
+            showArrival(finished)
+        }
         // "Statistiques de conduite" off: the trip only served the guidance (its arrival).
         if (!AppPreferences.settings.value.drivingStats) return
         val record = finished.record(UUID.randomUUID().toString()) ?: return
         tripHistory.add(record)
         // Statistics live on the server for everyone: survive a reinstall.
         viewModelScope.launch { AccountRepository.postTrip(record) }
+    }
+
+    /** The destination is reached: the card, with the trip's figures, for a few seconds. */
+    private fun showArrival(finished: TripRecorder) {
+        val reached = TripArrival(
+            toLabel = finished.toLabel,
+            distanceMeters = finished.distanceMeters.roundToInt(),
+            durationSeconds = ((System.currentTimeMillis() - finished.startedAt) / 1000).toInt(),
+            alertsCount = finished.alertsMet,
+        )
+        arrival.value = reached
+        viewModelScope.launch {
+            delay(ARRIVAL_MS)
+            if (arrival.value == reached) arrival.value = null
+        }
+    }
+
+    /** The driver closed the arrival card. */
+    fun dismissArrival() {
+        arrival.value = null
     }
 
     /**
@@ -1343,6 +1377,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // "Ralentissement du trafic ?": asked this long; nothing in a trip's first or last metres;
         // not again this close to a "Non" for this long; a "Bouchon" this close is already known.
         const val SLOWDOWN_PROMPT_MS = 10_000L
+        /** How long the arrival card stays before going on its own. */
+        const val ARRIVAL_MS = 15_000L
         const val SLOWDOWN_TRIP_START_M = 300.0
         const val SLOWDOWN_TRIP_END_M = 500.0
         const val SLOWDOWN_DECLINE_MS = 900_000L
