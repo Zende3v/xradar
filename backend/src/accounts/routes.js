@@ -314,8 +314,19 @@ adminAccountRouter.patch('/:id', (req, res) => {
   res.json({ account: adminView(result.account) });
 });
 
-adminAccountRouter.delete('/:id', (req, res) => {
-  const result = accountStore.remove(req.params.id);
+adminAccountRouter.delete('/:id', async (req, res) => {
+  const account = accountStore.get(req.params.id);
+  if (!account) return res.status(404).json({ error: 'not found' });
+  // Deleted by an admin or by its owner, an account leaves the same thing behind: nothing.
+  try {
+    await forgetInCrowd([account.id, account.deviceId].filter(Boolean));
+  } catch (e) {
+    console.error('[accounts] admin delete failed:', e.message);
+    return res.status(500).json({ error: 'could not delete account' });
+  }
+  liveStore.remove(account.id);
+  await Promise.all(['png', 'jpg', 'webp'].map((ext) => unlink(`${config.avatarsDir}/${account.id}.${ext}`).catch(() => {})));
+  const result = accountStore.remove(account.id);
   if (result.error) return res.status(404).json({ error: result.error });
   res.json(result);
 });

@@ -57,7 +57,7 @@ class SignEditStore {
     if (op === 'add' && (!Number.isFinite(lat) || !Number.isFinite(lon))) {
       return { error: 'lat and lon required' };
     }
-    return transaction(async (client) => {
+    const done = await transaction(async (client) => {
       const was = op === 'add' ? null : await signRow(client, targetId);
       if (op !== 'add' && !was) return { error: 'sign not found' };
       const id = randomUUID();
@@ -78,13 +78,14 @@ class SignEditStore {
           JSON.stringify(was ?? {}), authorId ?? null, note ? String(note).slice(0, 500) : null],
       );
       await apply(client, { op, targetId: sign, ...next });
-      return { edit: await this.get(id) };
+      return { id };
     });
+    return done.error ? done : { edit: await this.get(done.id) };
   }
 
   /** Change what a correction says (an add or an edit), and apply it again. */
   async update(id, { kind, value, course, lat, lon, note }) {
-    return transaction(async (client) => {
+    const done = await transaction(async (client) => {
       const { rows } = await client.query('SELECT * FROM crowd.sign_edit WHERE id = $1 FOR UPDATE', [id]);
       const row = rows[0];
       if (!row) return { error: 'not found' };
@@ -116,8 +117,9 @@ class SignEditStore {
         lat: fresh.rows[0].lat,
         lon: fresh.rows[0].lon,
       });
-      return { edit: await this.get(id) };
+      return { id };
     });
+    return done.error ? done : { edit: await this.get(id) };
   }
 
   /**
@@ -125,7 +127,7 @@ class SignEditStore {
    * hidden one comes back). The row stays, marked "reverted", so the history is kept.
    */
   async revert(id) {
-    return transaction(async (client) => {
+    const done = await transaction(async (client) => {
       const { rows } = await client.query('SELECT * FROM crowd.sign_edit WHERE id = $1 FOR UPDATE', [id]);
       const row = rows[0];
       if (!row) return { error: 'not found' };
@@ -140,15 +142,18 @@ class SignEditStore {
         `UPDATE crowd.sign_edit SET status = 'reverted', conflict = NULL, updated_at = now() WHERE id = $1`,
         [id],
       );
-      return { edit: await this.get(id) };
+      return { id };
     });
+    return done.error ? done : { edit: await this.get(id) };
   }
 }
 
 /** The sign as it is now in the published signalisation, or null. */
 async function signRow(client, id) {
   const { rows } = await client.query(
-    'SELECT id, kind, value, course, ST_Y(geom) AS lat, ST_X(geom) AS lon FROM signs.sign WHERE id = $1',
+    `SELECT id, kind, value, course, way_id, sources, node_ids,
+            ST_Y(geom) AS lat, ST_X(geom) AS lon
+     FROM signs.sign WHERE id = $1`,
     [id],
   );
   return rows[0] ?? null;
@@ -197,21 +202,27 @@ async function apply(client, { op, targetId, kind, value, course, lat, lon }) {
   }
 }
 
-/** Puts a sign back the way it was before a correction (used when one is undone). */
+/**
+ * Puts a sign back exactly the way it was before a correction (used when one is undone): what it
+ * carried from OpenStreetMap too, so the next rebuild finds the same thing it built.
+ */
 async function restore(client, id, was) {
   await client.query(
     `INSERT INTO signs.sign (id, kind, value, course, way_id, sources, node_ids, geom, geom_m)
-     SELECT $1, $2, $3, $4,
-            (SELECT r.way_id FROM signs.road r
-              ORDER BY r.geom_m <-> ST_Transform(ST_SetSRID(ST_MakePoint($6, $5), 4326), 2154)
-              LIMIT 1),
-            1, NULL,
-            ST_SetSRID(ST_MakePoint($6, $5), 4326),
-            ST_Transform(ST_SetSRID(ST_MakePoint($6, $5), 4326), 2154)
+     VALUES ($1, $2, $3, $4,
+             COALESCE($7::bigint,
+                      (SELECT r.way_id FROM signs.road r
+                        ORDER BY r.geom_m <-> ST_Transform(ST_SetSRID(ST_MakePoint($6, $5), 4326), 2154)
+                        LIMIT 1)),
+             COALESCE($8::int, 1), $9::bigint[],
+             ST_SetSRID(ST_MakePoint($6, $5), 4326),
+             ST_Transform(ST_SetSRID(ST_MakePoint($6, $5), 4326), 2154))
      ON CONFLICT (id) DO UPDATE
        SET kind = EXCLUDED.kind, value = EXCLUDED.value, course = EXCLUDED.course,
+           way_id = EXCLUDED.way_id, sources = EXCLUDED.sources, node_ids = EXCLUDED.node_ids,
            geom = EXCLUDED.geom, geom_m = EXCLUDED.geom_m`,
-    [id, was.kind, was.value ?? null, was.course ?? null, was.lat, was.lon],
+    [id, was.kind, was.value ?? null, was.course ?? null, was.lat, was.lon,
+      was.way_id ?? null, was.sources ?? null, was.node_ids ?? null],
   );
 }
 
