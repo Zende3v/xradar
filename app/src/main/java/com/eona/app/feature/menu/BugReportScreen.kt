@@ -88,7 +88,7 @@ fun BugReportRoute(onBack: () -> Unit) {
             Label("Comment le reproduire ?")
             Area(steps, "Facultatif : ce que tu faisais juste avant") { steps = it }
             EonaText(
-                "Envoyé avec ton compte et ${details.platform} ${details.os} · XRadar ${details.version} · ${details.model}.",
+                "Envoyé avec ton compte et ${details.platform} ${details.os} · EONA ${details.version} · ${details.model}.",
                 style = EonaTheme.typography.footnote,
                 color = colors.textTertiary,
             )

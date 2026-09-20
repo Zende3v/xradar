@@ -85,7 +85,7 @@ class LocationService : LifecycleService() {
             flags,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("x_radar")
+            .setContentTitle("EONA")
             .setContentText("Suivi de conduite actif")
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)

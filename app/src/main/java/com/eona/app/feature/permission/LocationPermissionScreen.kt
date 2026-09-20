@@ -66,7 +66,7 @@ fun LocationPermissionScreen(onAllow: () -> Unit, onSkip: () -> Unit) {
             icon = EonaIcons.Gps,
             iconTint = EonaTheme.colors.accent,
             title = "Activer la localisation",
-            message = "x_radar utilise ta position pour la navigation en temps réel et les alertes radars sur ta route. Ta position n'est jamais partagée sans ton accord.",
+            message = "EONA utilise ta position pour la navigation en temps réel et les alertes radars sur ta route. Ta position n'est jamais partagée sans ton accord.",
             primaryLabel = "Autoriser la localisation",
             onPrimary = onAllow,
             secondaryLabel = "Plus tard",

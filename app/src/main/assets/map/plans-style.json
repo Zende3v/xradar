@@ -1,6 +1,6 @@
 {
   "version": 8,
-  "name": "x_radar Plans",
+  "name": "EONA Plans",
   "metadata": {
     "xradar:about": "Apple-Plans-like basemap. \"@token\" colours come from plans-palettes.json (light/dark); {{STADIA_API_KEY}} is filled at runtime by PlansMapStyle."
   },

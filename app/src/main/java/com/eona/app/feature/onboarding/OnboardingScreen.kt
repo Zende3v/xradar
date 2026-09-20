@@ -84,7 +84,7 @@ fun OnboardingScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(spacing.md),
         ) {
-            EonaText("x_radar", style = EonaTheme.typography.displayHero, color = colors.accent)
+            EonaText("EONA", style = EonaTheme.typography.displayHero, color = colors.accent)
             val subtitle = when (mode) {
                 Mode.Choose -> null
                 Mode.Guest -> "Choisis un pseudo et un mot de passe."

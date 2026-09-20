@@ -87,7 +87,7 @@ fun PrivacyScreen(onBack: () -> Unit) {
                 "Statistiques",
                 "Statistiques de conduite : tes trajets et ton temps de conduite, enregistrés sur ton compte (Menu ▸ " +
                     "Statistiques) ; désactivé, les prochains ne sont plus enregistrés. Présence et position : le serveur " +
-                    "compte les apps ouvertes et les trajets en cours, et l'équipe XRadar voit où tu es pendant que l'app " +
+                    "compte les apps ouvertes et les trajets en cours, et l'équipe EONA voit où tu es pendant que l'app " +
                     "est ouverte ; les positions sont effacées au bout de 30 jours. Temps d'utilisation : le temps passé " +
                     "dans l'app s'ajoute à ton compte.",
             ) {

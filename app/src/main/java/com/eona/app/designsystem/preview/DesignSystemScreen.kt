@@ -137,7 +137,7 @@ private fun Header() {
     val typography = EonaTheme.typography
     Column(verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.sm)) {
         Text("DESIGN SYSTEM", style = typography.caption, color = colors.accent)
-        Text("x_radar", style = typography.display, color = colors.textPrimary)
+        Text("EONA", style = typography.display, color = colors.textPrimary)
         Text(
             "Fondations visuelles — Phase 1",
             style = typography.callout,
