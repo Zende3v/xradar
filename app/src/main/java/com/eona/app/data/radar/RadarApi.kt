@@ -13,7 +13,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/** Thin HTTP client for the x_radar backend. */
+/** Thin HTTP client for the EONA backend. */
 class RadarApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
