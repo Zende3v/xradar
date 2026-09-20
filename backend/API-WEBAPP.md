@@ -141,6 +141,9 @@ compte. `PATCH /api/admin/accounts/:id` change `role`, `banned`, `displayName`.
 `lat`/`lon`/`speedKmh`/`positionAt` **pour les conducteurs qui partagent leur position** (null
 pour les autres). Un compte reste « en ligne » 90 secondes après son dernier signe de vie.
 
+Le détail du mécanisme (ce que l'app envoie, ce qui est écrit, quand c'est effacé, ce que ça pèse)
+est dans [POSITIONS.md](POSITIONS.md).
+
 `/positions` donne la trace d'un compte, du plus ancien au plus récent, 5000 points au maximum.
 Les positions sont effacées au bout de 30 jours (`POSITION_KEEP_DAYS`), et la suppression d'un
 compte efface les siennes immédiatement.
