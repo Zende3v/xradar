@@ -9,7 +9,7 @@ Guide unique du projet. App Android (Kotlin/Compose) + backend Node/Express + Po
 | Quoi | Où / commande |
 |---|---|
 | URL publique backend | `https://api.lrda-mercuriale.uk/` (Cloudflare Tunnel `eona`, service `eona-tunnel` → `127.0.0.1:8090`). Politique : `https://confidentialite.zylo-app.fr` (même tunnel → `127.0.0.1:9020`) |
-| SSH VPS | `ssh root@100.107.151.127` (IP Tailscale ; le PC doit être dans le tailnet) |
+| SSH VPS | `ssh root@193.168.146.56` (clé SSH ; le mot de passe est coupé) |
 | Code backend VPS | `/opt/eona-backend` (user `eona`) |
 | Service | `systemctl status eona-backend` |
 | Logs live | `journalctl -u eona-backend -f` |
@@ -64,11 +64,10 @@ app/                      app Android
 
 ## 2. Le VPS
 
-- Debian 13, i5-11400H 12 threads, 7,4 Go RAM + 7,6 Go swap, NVMe 460 Go.
-- Accès : **Tailscale uniquement** (`100.107.151.127`). Le port 22 public ne répond pas.
+- Debian 13, 8 vCPU, 16 Go RAM, NVMe 180 Go (RAID 10). Migré depuis l'ancien VPS le 20/09/2026 — voir [GUIDE.md](GUIDE.md).
+- Accès : **SSH par clé** (`193.168.146.56`). Machine dédiée à EONA, rien d'autre ne tourne dessus.
 - `ufw` actif. EONA n'ouvre **aucun** port : tout passe par Cloudflare Tunnel (connexion sortante). Backend (8090) et politique (9020) n'écoutent que sur `127.0.0.1`.
-- La machine héberge **d'autres projets** (Caddy sur 80/443, lazarus-server, medocs…). Ne pas y toucher, ne pas redémarrer Caddy pour EONA.
-- Services EONA lancés au boot : `eona-backend`, `eona-privacy`, `eona-tunnel`, `postgresql`, `tailscaled`, `cron` (tous `enabled`). Un reboot remet tout en route seul.
+- Services EONA lancés au boot : `eona-backend`, `eona-privacy`, `eona-tunnel`, `postgresql`, `cron` (tous `enabled`). Un reboot remet tout en route seul.
 
 ---
 
@@ -83,9 +82,6 @@ apt-get update
 # Node 20 (NodeSource) — le service utilise /usr/bin/node
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs postgresql postgresql-17-postgis-3 osm2pgsql osmium-tool curl python3
-# Tailscale
-curl -fsSL https://tailscale.com/install.sh | sh
-tailscale up
 ```
 
 ### 3.2 Utilisateur, dossiers, code
@@ -98,7 +94,7 @@ mkdir -p /opt/eona-backend/data/avatars /var/lib/eona-signs
 Depuis le PC (dossier du repo) :
 
 ```bash
-scp -r backend/src backend/bin backend/deploy backend/signalisation backend/scripts backend/package.json backend/package-lock.json root@100.107.151.127:/opt/eona-backend/
+scp -r backend/src backend/bin backend/deploy backend/signalisation backend/scripts backend/package.json backend/package-lock.json root@193.168.146.56:/opt/eona-backend/
 ```
 
 Sur le VPS :
@@ -237,12 +233,12 @@ Depuis le PC, dossier du repo.
 
 1. Sauvegarder le code en place (retour arrière) :
    ```bash
-   ssh root@100.107.151.127 "cd /opt/eona-backend && tar czf /opt/eona-backend-src-backup-\$(date +%Y%m%d-%H%M).tgz src package.json package-lock.json"
+   ssh root@193.168.146.56 "cd /opt/eona-backend && tar czf /opt/eona-backend-src-backup-\$(date +%Y%m%d-%H%M).tgz src package.json package-lock.json"
    ```
 2. Envoyer le code (le `rm` retire les fichiers supprimés dans le repo) :
    ```bash
-   ssh root@100.107.151.127 "rm -rf /opt/eona-backend/src"
-   scp -r backend/src backend/package.json backend/package-lock.json root@100.107.151.127:/opt/eona-backend/
+   ssh root@193.168.146.56 "rm -rf /opt/eona-backend/src"
+   scp -r backend/src backend/package.json backend/package-lock.json root@193.168.146.56:/opt/eona-backend/
    ```
    Pipeline signalisation modifié → envoyer aussi `backend/signalisation`.
 3. Sur le VPS :
@@ -341,7 +337,7 @@ Pas de sauvegarde automatique (choix assumé) : lancer la sauvegarde manuelle av
 ## 7. Surveiller
 
 ```bash
-systemctl status eona-backend eona-tunnel eona-privacy postgresql tailscaled --no-pager
+systemctl status eona-backend eona-tunnel eona-privacy postgresql --no-pager
 journalctl -u eona-backend -f                          # logs en direct
 journalctl -u eona-backend --since "-1 h" --no-pager | grep -iE "error|unavailable|failed"
 curl -s http://127.0.0.1:8090/health | python3 -m json.tool
@@ -445,8 +441,8 @@ adb -s <ID> install -r app/build/outputs/apk/release/app-release.apk
 ### Distribuer l'APK (lien temporaire)
 
 ```bash
-scp app/build/outputs/apk/release/app-release.apk root@100.107.151.127:/root/apk/
-ssh root@100.107.151.127 "ufw allow 8087/tcp && cd /opt/eona-backend && APK_DIR=/root/apk PORT=8087 nohup node scripts/apk-server.js > /var/log/eona-apk.log 2>&1 &"
+scp app/build/outputs/apk/release/app-release.apk root@193.168.146.56:/root/apk/
+ssh root@193.168.146.56 "ufw allow 8087/tcp && cd /opt/eona-backend && APK_DIR=/root/apk PORT=8087 nohup node scripts/apk-server.js > /var/log/eona-apk.log 2>&1 &"
 ```
 Lien : `http://45.80.23.8:8087/` (HTTP clair, sans auth ; seuls des `.apk` dans `/root/apk`). Couper : `pkill -f apk-server.js && ufw delete allow 8087/tcp`.
 
