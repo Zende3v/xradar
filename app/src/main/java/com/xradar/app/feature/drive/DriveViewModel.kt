@@ -141,6 +141,14 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private var ringLon = Double.NaN
     private var ringRetryAt = 0L
     private var lastRecalcAt = 0L
+    /** Where the last recalculation was asked from: the next one waits for real driving. */
+    private var recalcLat = Double.NaN
+    private var recalcLon = Double.NaN
+    private var recalcWaitMs = RECALC_COOLDOWN_MS
+    /** True once the driver has actually been on the route: before that the trip has not started. */
+    private var joinedRoute = false
+    /** When the current route started waiting to be joined (0: none waiting). */
+    private var waitingSince = 0L
     private var overspeeding = false
 
     // Active route as a measurable polyline + each maneuver's distance along it.
@@ -533,13 +541,47 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     Geo.haversine(sample.latitude, sample.longitude, it.lat, it.lon)
                 } ?: return@collect
                 val now = System.currentTimeMillis()
-                if (offBy > OFF_ROUTE_M && now - lastRecalcAt > RECALC_COOLDOWN_MS) {
-                    lastRecalcAt = now
-                    routingRepository.route(
-                        GeoPoint(sample.latitude, sample.longitude),
-                        GeoPoint(destination.lat, destination.lon),
-                        avoidOptions(),
-                    ).routeOrNull?.let { ActiveTripRepository.setRoute(it) }
+                // On the route: the trip has really started, and a detour may be corrected later.
+                if (offBy <= OFF_ROUTE_M) {
+                    joinedRoute = true
+                    recalcWaitMs = RECALC_COOLDOWN_MS
+                    return@collect
+                }
+                val speed = sample.speedMps ?: 0f
+                // Not joined yet: the driver is simply not there — in a building, a car park, a
+                // lane the routing does not know. Nothing to correct until they really drive, and
+                // a route nobody ever joins is dropped instead of waiting forever.
+                if (!joinedRoute) {
+                    if (waitingSince == 0L) waitingSince = now
+                    if (speed < DRIVE_MIN_SPEED_MS && now - waitingSince > TRIP_ABANDON_MS) {
+                        ActiveTripRepository.clear()
+                        return@collect
+                    }
+                }
+                if (speed < if (joinedRoute) DRIVE_MIN_SPEED_MS else RECALC_START_SPEED_MS) return@collect
+                // Standing still, or barely moved since the last one: asking again would give the
+                // same answer. Only real driving earns a new route.
+                val moved = if (recalcLat.isNaN()) {
+                    Double.MAX_VALUE
+                } else {
+                    Geo.haversine(recalcLat, recalcLon, sample.latitude, sample.longitude)
+                }
+                if (moved < if (joinedRoute) RECALC_MIN_MOVE_M else RECALC_START_MOVE_M) return@collect
+                if (now - lastRecalcAt < recalcWaitMs) return@collect
+                lastRecalcAt = now
+                recalcLat = sample.latitude
+                recalcLon = sample.longitude
+                val fresh = routingRepository.route(
+                    GeoPoint(sample.latitude, sample.longitude),
+                    GeoPoint(destination.lat, destination.lon),
+                    avoidOptions(),
+                ).routeOrNull
+                if (fresh != null) {
+                    recalcWaitMs = RECALC_COOLDOWN_MS
+                    ActiveTripRepository.setRoute(fresh)
+                } else {
+                    // No answer: wait longer each time instead of asking again straight away.
+                    recalcWaitMs = (recalcWaitMs * 2).coerceAtMost(RECALC_WAIT_MAX_MS)
                 }
             }
         }
@@ -551,6 +593,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Reset the turn-by-turn cursor whenever the route changes (new trip or recalc).
         viewModelScope.launch {
             ActiveTripRepository.route.collect { route ->
+                // Another route: it has to be joined in its turn (a recalculation can start on a
+                // road the driver is not on yet).
+                joinedRoute = false
+                waitingSince = 0L
                 stepIndex = 1
                 announcedFar = false
                 announcedNear = false
@@ -1321,6 +1367,15 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val AHEAD_CONE_DEG = 75.0
         const val OFF_ROUTE_M = 45.0
         const val RECALC_COOLDOWN_MS = 2_500L
+        /** After a failed recalculation the wait doubles, up to this. */
+        const val RECALC_WAIT_MAX_MS = 60_000L
+        /** Driving this far since the last recalculation earns another one. */
+        const val RECALC_MIN_MOVE_M = 150.0
+        /** Before the route is joined: clearly driving (18 km/h) and this far from the last try. */
+        const val RECALC_START_SPEED_MS = 5f
+        const val RECALC_START_MOVE_M = 300.0
+        /** A route never joined and nobody driving: the trip is dropped after this. */
+        const val TRIP_ABANDON_MS = 30 * 60_000L
         /** A trip's first route: asked again after these pauses before giving up. */
         val ROUTE_RETRY_MS = longArrayOf(1_200L, 3_000L, 6_000L)
         /** Route signs not loaded: asked again after 3 s, then less often, up to every 30 s. */
