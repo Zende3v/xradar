@@ -18,6 +18,9 @@ import { signRouter } from './signs/routes.js';
 import { speedLimitRouter } from './speedlimits/routes.js';
 import { speedLimitStore } from './speedlimits/store.js';
 import { bugRouter } from './bugs/routes.js';
+import { tripRouter } from './trips/routes.js';
+import { shareStore } from './trips/shares.js';
+import { sharePage } from './trips/page.js';
 import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
 
@@ -60,6 +63,7 @@ export function createApp() {
       live: liveStore.meta,
       routing: config.orsApiKey ? { provider: 'ors', ...orsKeysMeta() } : { provider: 'osrm' },
       traffic: { provider: config.tomtomApiKey ? 'tomtom' : null, probes: probeStore.meta.count },
+      trips: shareStore.meta,
       signs: { published },
       speedLimits: speedLimitStore.meta,
       fuel: fuelStore.meta,
@@ -69,6 +73,9 @@ export function createApp() {
 
   app.use('/api/accounts', accountRouter);
   app.use('/api/bugs', bugRouter);
+  app.use('/api/trips', tripRouter);
+  // The page behind a shared link: it opens the app, it never shows a position itself.
+  app.get('/t/:token', sharePage);
   app.use('/api/admin/accounts', adminAccountRouter);
   app.use('/api/live', liveRouter);
   app.use('/api/places', placeRouter);

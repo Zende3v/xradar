@@ -360,6 +360,13 @@ export const config = {
   bugPage: 50,
   bugResolvedDays: 90,
 
+  // Trip sharing ("Partager mon trajet"): a link lives until the driver arrives, and a quarter of
+  // an hour more so the follower sees the arrival; a trip that never ends stops here anyway.
+  shareMaxMs: 6 * H,
+  shareAfterArrivalMs: 15 * MIN,
+  // Where the link points: the page that opens the app.
+  shareBaseUrl: (process.env.SHARE_BASE_URL || process.env.PUBLIC_BASE_URL || 'https://api.lrda-mercuriale.uk').replace(/\/$/, ''),
+
   // Presence: an account counts as online (and on a trip or not) for 90 s after the app said so.
   liveTtlMs: 90 * 1000,
   // Positions shared by the drivers who turned them on: kept this long, then purged. A trace
