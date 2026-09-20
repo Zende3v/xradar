@@ -200,6 +200,8 @@ async function forgetInCrowd(ids) {
       await client.query('UPDATE crowd.report_voice SET voter_id = $2 WHERE voter_id = $1', [id, anonymous]);
       await client.query('UPDATE crowd.speed_limit_voice SET reporter_id = $2 WHERE reporter_id = $1', [id, anonymous]);
       await client.query('UPDATE crowd.bug_report SET account_id = NULL WHERE account_id = $1', [id]);
+      // A position says where someone was: it is deleted, never anonymised.
+      await client.query('DELETE FROM crowd.position WHERE account_id = $1', [id]);
     }
   });
 }

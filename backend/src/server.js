@@ -24,6 +24,20 @@ import { trafficRouter } from './traffic/routes.js';
 /** Builds the Express app (kept separate from bootstrap for testability). */
 export function createApp() {
   const app = express();
+  // The admin webapp runs in a browser on its own address: it may call the API only from the
+  // addresses WEBAPP_ORIGINS lists. Everything else (the apps) is not a browser and never asks.
+  app.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (origin && config.webappOrigins.includes(origin)) {
+      res.set('Access-Control-Allow-Origin', origin);
+      res.set('Vary', 'Origin');
+      res.set('Access-Control-Allow-Headers', 'authorization, content-type, x-admin-token');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+      res.set('Access-Control-Max-Age', '86400');
+      if (req.method === 'OPTIONS') return res.sendStatus(204);
+    }
+    next();
+  });
   // Profile pictures: served statically, and uploaded (base64) with a larger body
   // limit than the rest of the API — mounted before the global 16 kb JSON parser.
   app.use('/avatars', express.static(config.avatarsDir, { maxAge: '7d' }));

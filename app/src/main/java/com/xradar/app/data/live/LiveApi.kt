@@ -1,6 +1,7 @@
 package com.xradar.app.data.live
 
 import com.xradar.app.BuildConfig
+import com.xradar.app.core.model.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -11,8 +12,9 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Presence (`/api/live`): the app says it is open, and whether a trip runs. Counted by the
- * backend, shown to nobody, and no position goes with it.
+ * Presence (`/api/live`): the app says it is open, and whether a trip runs. What goes with it
+ * follows the privacy switches — a position only with "Présence et position", the time spent
+ * only with "Temps d'utilisation". The app never sends what it was not allowed to.
  */
 class LiveApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
@@ -21,8 +23,20 @@ class LiveApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    suspend fun presence(token: String, inTrip: Boolean): Boolean = withContext(Dispatchers.IO) {
-        val body = JSONObject().put("inTrip", inTrip).toString().toRequestBody(JSON)
+    suspend fun presence(
+        token: String,
+        inTrip: Boolean,
+        position: GeoPoint? = null,
+        speedKmh: Int? = null,
+        countTime: Boolean = false,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val json = JSONObject().put("inTrip", inTrip)
+        if (countTime) json.put("session", true)
+        if (position != null) {
+            json.put("lat", position.lat).put("lon", position.lon)
+            speedKmh?.let { json.put("speedKmh", it) }
+        }
+        val body = json.toString().toRequestBody(JSON)
         val req = Request.Builder().url("${baseUrl.trimEnd('/')}/api/live/presence")
             .header("Authorization", "Bearer $token")
             .post(body)

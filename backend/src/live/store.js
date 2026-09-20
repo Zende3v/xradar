@@ -23,6 +23,12 @@ class LiveStore {
     for (const [id, p] of this.byAccount) if (p.at < cutoff) this.byAccount.delete(id);
   }
 
+  /** Who has the app open now, newest first: [accountId, { at, inTrip }] (admin console). */
+  entries() {
+    this.prune();
+    return [...this.byAccount.entries()].sort((a, b) => b[1].at - a[1].at);
+  }
+
   /** Accounts with the app open now, and how many of them are on a trip. */
   get meta() {
     this.prune();

@@ -351,13 +351,21 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 refreshTraffic(routeVersion)
             }
         }
-        // Presence: the app says it is open, and whether a trip runs. Counted by the backend,
-        // shown to nobody, no position sent.
+        // Presence: the app says it is open, and whether a trip runs. The position goes with it
+        // only with "Présence et position", the time spent only with "Temps d'utilisation":
+        // both switches off, nothing is sent at all.
         viewModelScope.launch {
             while (true) {
-                // "Présence anonyme" off: no call at all.
-                AccountRepository.token?.takeIf { AppPreferences.settings.value.presence }?.let { token ->
-                    liveApi.presence(token, inTrip = ActiveTripRepository.destination.value != null)
+                val privacy = AppPreferences.settings.value
+                AccountRepository.token?.takeIf { privacy.presence || privacy.usageTime }?.let { token ->
+                    val fix = LocationRepository.location.value.takeIf { privacy.presence }
+                    liveApi.presence(
+                        token,
+                        inTrip = ActiveTripRepository.destination.value != null,
+                        position = fix?.let { GeoPoint(it.latitude, it.longitude) },
+                        speedKmh = fix?.speedKmh?.roundToInt()?.coerceAtLeast(0),
+                        countTime = privacy.usageTime,
+                    )
                 }
                 delay(PRESENCE_MS)
             }

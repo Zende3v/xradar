@@ -362,6 +362,14 @@ export const config = {
 
   // Presence: an account counts as online (and on a trip or not) for 90 s after the app said so.
   liveTtlMs: 90 * 1000,
+  // Positions shared by the drivers who turned them on: kept this long, then purged. A trace
+  // asked for by the console is cut at positionTraceMax points.
+  positionKeepDays: Number(process.env.POSITION_KEEP_DAYS) || 30,
+  positionTraceMax: 5000,
+
+  // Browsers only reach the API from the addresses listed here (the admin webapp), comma
+  // separated in WEBAPP_ORIGINS. Empty: no browser from another address can call the API.
+  webappOrigins: (process.env.WEBAPP_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean),
 
   // "Changer de pseudo": a client with access changes it at most once per
   // usernameChangeIntervalMs; the name left stays theirs usernameHoldMs (nobody else takes it

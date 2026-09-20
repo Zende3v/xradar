@@ -36,6 +36,7 @@ function genCode() {
 
 const EMPTY_STATS = Object.freeze({
   tripCount: 0,
+  appDurationSeconds: 0,
   distanceMeters: 0,
   driveDurationSeconds: 0,
   alertsTraversed: 0,
@@ -368,6 +369,24 @@ class AccountStore {
     account.stats.distanceMeters += m;
     this.scheduleSave();
     return { stats: { ...account.stats } };
+  }
+
+  /**
+   * The app is open and says so about every 30 s. The moment is always kept (last activity);
+   * the time between two pings only adds up to "Temps d'utilisation" when the driver turned that
+   * on ([counts]), and a gap longer than the presence TTL is a new session, not time spent.
+   */
+  recordActivity(id, counts, now = Date.now()) {
+    const account = this.get(id);
+    if (!account) return;
+    this.normalizeAccount(account);
+    const last = Date.parse(account.lastActiveAt ?? '');
+    if (counts && Number.isFinite(last)) {
+      const gap = now - last;
+      if (gap > 0 && gap <= config.liveTtlMs) account.stats.appDurationSeconds += Math.round(gap / 1000);
+    }
+    account.lastActiveAt = new Date(now).toISOString();
+    this.scheduleSave();
   }
 
   recordReportStat(id, kind) {

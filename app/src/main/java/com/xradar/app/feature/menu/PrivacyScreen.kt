@@ -86,12 +86,16 @@ fun PrivacyScreen(onBack: () -> Unit) {
             Group(
                 "Statistiques",
                 "Statistiques de conduite : tes trajets et ton temps de conduite, enregistrés sur ton compte (Menu ▸ " +
-                    "Statistiques) ; désactivé, les prochains ne sont plus enregistrés. Présence anonyme : le serveur compte " +
-                    "les apps ouvertes et les trajets en cours, sans aucune position.",
+                    "Statistiques) ; désactivé, les prochains ne sont plus enregistrés. Présence et position : le serveur " +
+                    "compte les apps ouvertes et les trajets en cours, et l'équipe XRadar voit où tu es pendant que l'app " +
+                    "est ouverte ; les positions sont effacées au bout de 30 jours. Temps d'utilisation : le temps passé " +
+                    "dans l'app s'ajoute à ton compte.",
             ) {
                 Switch("Statistiques de conduite", settings.drivingStats, { s, on -> s.copy(drivingStats = on) })
                 XRadarDivider(Modifier.padding(start = XRadarTheme.spacing.lg))
-                Switch("Présence anonyme", settings.presence, { s, on -> s.copy(presence = on) })
+                Switch("Présence et position", settings.presence, { s, on -> s.copy(presence = on) })
+                XRadarDivider(Modifier.padding(start = XRadarTheme.spacing.lg))
+                Switch("Temps d'utilisation", settings.usageTime, { s, on -> s.copy(usageTime = on) })
             }
 
             XRadarListGroup {

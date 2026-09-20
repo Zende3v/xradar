@@ -122,3 +122,19 @@ CREATE TABLE IF NOT EXISTS crowd.bug_report (
 );
 CREATE INDEX IF NOT EXISTS bug_report_recent ON crowd.bug_report (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS bug_report_author ON crowd.bug_report (account_id, created_at);
+
+-- ---- Presence and positions ---------------------------------------------------------------
+
+-- Where a driver was, each time the app said so (about every 30 s). Written only for a driver
+-- who turned "Ma présence et ma position" on, kept a few weeks, then purged. The live view is
+-- simply the last row of each account within crowd's TTL.
+CREATE TABLE IF NOT EXISTS crowd.position (
+    id bigserial PRIMARY KEY,
+    account_id text NOT NULL,
+    at timestamptz NOT NULL DEFAULT now(),
+    geom geometry(Point, 4326) NOT NULL,
+    speed_kmh smallint,
+    in_trip boolean NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS position_account ON crowd.position (account_id, at DESC);
+CREATE INDEX IF NOT EXISTS position_recent ON crowd.position (at DESC);

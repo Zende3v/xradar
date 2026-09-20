@@ -83,9 +83,11 @@ data class AppSettings(
     val tripSuggestions: Boolean = true,
     /** "Statistiques de conduite": trips and driving time are recorded and sent to the account. */
     val drivingStats: Boolean = true,
-    /** "Présence anonyme": the backend counts the app open and a trip running (no position).
-     *  Off unless the driver turns it on: counting is ours, not theirs. */
+    /** "Présence et position": the backend counts the app open and a trip running, and the
+     *  XRadar team sees where this driver is. Off unless the driver turns it on. */
     val presence: Boolean = false,
+    /** "Temps d'utilisation": the time spent with the app open adds up on the account. */
+    val usageTime: Boolean = false,
 )
 
 /** App-scoped preferences, backed by SharedPreferences. Init once from a Context. */
@@ -125,6 +127,7 @@ object AppPreferences {
             tripSuggestions = p.getBoolean("tripSuggestions", true),
             drivingStats = p.getBoolean("drivingStats", true),
             presence = p.getBoolean("presence", false),
+            usageTime = p.getBoolean("usageTime", false),
         )
     }
 
@@ -173,6 +176,7 @@ object AppPreferences {
             putBoolean("tripSuggestions", updated.tripSuggestions)
             putBoolean("drivingStats", updated.drivingStats)
             putBoolean("presence", updated.presence)
+            putBoolean("usageTime", updated.usageTime)
             apply()
         }
     }
