@@ -173,6 +173,31 @@ vide comme une anomalie.
 
 ---
 
+## 5 bis. Partage de trajet
+
+Un conducteur ouvre un lien sur le trajet qu'il conduit, quelqu'un d'autre le suit en direct. Tout
+vit en mémoire, rien n'est écrit.
+
+| Besoin | Appel | Droits |
+|---|---|---|
+| Ouvrir un lien | `POST /api/trips/share` `{toLabel?, destination?, route?}` | compte |
+| Envoyer sa position | `PATCH /api/trips/share` `{lat, lon, bearing?, remainingM?, etaS?, arrived?}` | compte |
+| Son lien en cours | `GET /api/trips/share` | compte |
+| Arrêter | `DELETE /api/trips/share` | compte |
+| Suivre un trajet | `GET /api/trips/shared/:token` | compte |
+
+Un conducteur n'a qu'un lien à la fois : en rouvrir un remplace le précédent, qui cesse de
+fonctionner. Le lien meurt 15 minutes après l'arrivée, 6 heures au plus après sa création.
+
+`GET /t/:token` est la page publique du lien : elle ouvre l'app et ne montre aucune position
+elle-même. Elle répond 410 quand le partage est terminé.
+
+Le suiveur reçoit `name`, `toLabel`, `destination`, `route`, `position`, `remainingM`, `etaAt`
+et `arrived` — jamais la vitesse, jamais l'historique. `/health` compte les partages en cours
+dans `trips.shares`.
+
+---
+
 ## 6. Signalisation (mapper)
 
 Lecture, comme avant :

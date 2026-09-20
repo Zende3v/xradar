@@ -124,6 +124,12 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <p>La fonction <strong>« Temps d'utilisation »</strong> est également <strong>désactivée par défaut</strong>.</p>
 <p>Lorsqu'elle est active, le temps passé avec l'application ouverte est cumulé sur le compte de l'utilisateur, sous la forme d'une durée totale. Aucun détail de session, aucun horaire d'ouverture et de fermeture ne sont conservés.</p>
 <p>Indépendamment de ces deux fonctions, la date de dernière activité du compte est mise à jour lorsque l'application communique avec le serveur ; elle est nécessaire à la gestion des comptes et des essais gratuits.</p>
+<h2>8 ter. Partager son trajet</h2>
+<p>La fonction <strong>« Partager mon trajet »</strong> n'est utilisée que lorsque l'utilisateur crée lui-même un lien, pendant un trajet.</p>
+<p>Tant que le lien est actif, la personne qui l'ouvre voit : le pseudo de l'utilisateur, sa position actuelle, l'itinéraire suivi, la destination, la distance restante et l'heure d'arrivée estimée.</p>
+<p>Un compte EONA est nécessaire pour ouvrir un lien de trajet. Le nombre de personnes qui suivent le trajet est indiqué à l'utilisateur, sans leur identité.</p>
+<p>Ces informations sont conservées <strong>en mémoire uniquement</strong>, jamais enregistrées en base de données. Le lien cesse de fonctionner <strong>quinze minutes après l'arrivée</strong>, au plus tard <strong>six heures</strong> après sa création, ou immédiatement si l'utilisateur arrête le partage.</p>
+<p>Aucun historique du trajet partagé n'est conservé.</p>
 <h2>9. Télémétrie</h2>
 <p>EONA utilise une télémétrie limitée destinée au fonctionnement du service.</p>
 <p>Elle ne comprend :</p>
@@ -184,6 +190,7 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <tr><td>Signalements</td><td>90 jours après clôture</td></tr>
 <tr><td>Présence (décompte des applications ouvertes)</td><td>90 secondes en mémoire</td></tr>
 <tr><td>Positions partagées (« Présence et position »)</td><td>30 jours, puis suppression automatique</td></tr>
+<tr><td>Trajet partagé par lien</td><td>En mémoire, jusqu'à 15 minutes après l'arrivée (6 heures au maximum)</td></tr>
 <tr><td>Temps d'utilisation cumulé</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
 <tr><td>Sondes de trafic</td><td>30 minutes en mémoire</td></tr>
 <tr><td>Statistiques de conduite</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
