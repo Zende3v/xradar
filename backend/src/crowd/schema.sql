@@ -138,3 +138,34 @@ CREATE TABLE IF NOT EXISTS crowd.position (
 );
 CREATE INDEX IF NOT EXISTS position_account ON crowd.position (account_id, at DESC);
 CREATE INDEX IF NOT EXISTS position_recent ON crowd.position (at DESC);
+
+-- ---- Signalisation corrected by hand ("mapper") --------------------------------------------
+
+-- What the team fixed on top of OpenStreetMap: a sign OSM does not have (add), a sign that is
+-- wrong (edit), a sign that is not there (hide). These rows are the truth and never depend on a
+-- build: the weekly rebuild replays them onto the fresh signalisation (signalisation/edits.sql),
+-- and a failed rebuild changes nothing here. [was] is what the sign looked like when the
+-- correction was made, to find it again when its id changes; when it cannot be found with
+-- certainty the row is kept, marked "conflict", and nothing is applied by itself.
+CREATE TABLE IF NOT EXISTS crowd.sign_edit (
+    id uuid PRIMARY KEY,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    -- add, edit or hide.
+    op text NOT NULL,
+    -- The sign in signs.sign this row is about; for an "add", the id it was given.
+    target_id text NOT NULL,
+    kind text,
+    value smallint,
+    course real,
+    geom geometry(Point, 4326),
+    was jsonb NOT NULL DEFAULT '{}',
+    author_id text,
+    note text,
+    -- applied (on the live signalisation), conflict (sign not found again), reverted (undone).
+    status text NOT NULL DEFAULT 'applied',
+    conflict text
+);
+CREATE INDEX IF NOT EXISTS sign_edit_status ON crowd.sign_edit (status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS sign_edit_target ON crowd.sign_edit (target_id);
+CREATE INDEX IF NOT EXISTS sign_edit_geom ON crowd.sign_edit USING gist (geom);

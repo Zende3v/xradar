@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Signalisation v2 — weekly rebuild: fresh France extract, import, build (signs, then nearby
-# services), checks, publish.
+# services), checks, corrections made by hand replayed, publish.
 # Any failure stops here and the published version stays. Run as root (cron.d/xradar-signs).
 #
 set -euo pipefail
@@ -31,6 +31,9 @@ psql_xradar -f "$HERE/places.sql"
 
 echo "[rebuild] checking"
 psql_xradar -f "$HERE/checks.sql"
+
+echo "[rebuild] replaying the corrections made by hand"
+psql_xradar -f "$HERE/edits.sql"
 
 echo "[rebuild] publishing"
 psql_xradar -f "$HERE/publish.sql"

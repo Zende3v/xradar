@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
+import { authAccount, isAdminRequest } from '../accounts/auth.js';
+import { signEditStore } from './edits.js';
 import * as postgis from './postgis.js';
 
 export const signRouter = Router();
@@ -60,3 +62,68 @@ signRouter.get('/limit', guarded(async (req, res) => {
   const road = await postgis.roadAt(lat, lon, { bearing, previousWayId });
   res.json({ v: road?.limit ?? null, way: road?.wayId ?? null, source: 'postgis' });
 }));
+
+// ---- Corrections by hand ("mapper", admins only) --------------------------------------------
+
+/**
+ * GET /api/signs/edits?status=applied|conflict|reverted — the corrections, newest first.
+ * A "conflict" row is one the last rebuild could not place again: the sign it fixed is gone or
+ * cannot be told apart from another. It is kept, and nothing is applied by itself.
+ */
+signRouter.get('/edits', guarded(async (req, res) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
+  const status = ['applied', 'conflict', 'reverted'].includes(req.query.status) ? req.query.status : null;
+  const edits = await signEditStore.list({ status, limit: req.query.limit });
+  res.json({ count: edits.length, edits });
+}));
+
+/**
+ * POST /api/signs/edits  { op, targetId?, kind?, value?, course?, lat?, lon?, note? }
+ * op = add (a sign OSM does not have), edit (fix one), hide (it is not there). The signalisation
+ * carries it at once, and the weekly rebuild replays it.
+ */
+signRouter.post('/edits', guarded(async (req, res) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
+  const result = await signEditStore.create({
+    op: String(req.body?.op || ''),
+    targetId: req.body?.targetId ? String(req.body.targetId) : null,
+    kind: req.body?.kind ? String(req.body.kind) : undefined,
+    value: numberOrNull(req.body?.value),
+    course: numberOrNull(req.body?.course),
+    lat: Number(req.body?.lat),
+    lon: Number(req.body?.lon),
+    note: req.body?.note,
+    authorId: authAccount(req)?.id ?? null,
+  });
+  if (result.error) return res.status(result.error === 'sign not found' ? 404 : 400).json(result);
+  res.status(201).json(result);
+}));
+
+/** PATCH /api/signs/edits/:id — change what a correction says (not a hide). */
+signRouter.patch('/edits/:id', guarded(async (req, res) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
+  const result = await signEditStore.update(req.params.id, {
+    kind: req.body?.kind ? String(req.body.kind) : undefined,
+    value: numberOrNull(req.body?.value),
+    course: numberOrNull(req.body?.course),
+    lat: Number(req.body?.lat),
+    lon: Number(req.body?.lon),
+    note: req.body?.note,
+  });
+  if (result.error) return res.status(result.error === 'not found' ? 404 : 400).json(result);
+  res.json(result);
+}));
+
+/** DELETE /api/signs/edits/:id — undo it: the sign goes back to what OpenStreetMap says. */
+signRouter.delete('/edits/:id', guarded(async (req, res) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
+  const result = await signEditStore.revert(req.params.id);
+  if (result.error) return res.status(result.error === 'not found' ? 404 : 400).json(result);
+  res.json(result);
+}));
+
+function numberOrNull(value) {
+  if (value == null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}

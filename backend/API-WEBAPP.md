@@ -30,10 +30,9 @@ suppression de comptes. La webapp a donc besoin d'un petit serveur à elle (Node
 qui garde le token et relaie les appels. Le navigateur parle à ce serveur, jamais directement au
 backend XRadar.
 
-**CORS : le backend n'envoie aucun en-tête `Access-Control-Allow-Origin` aujourd'hui.** Un appel
-`fetch` depuis une page servie sur un autre domaine sera bloqué par le navigateur. Deux sorties :
-passer par le serveur de la webapp (recommandé, et obligatoire pour le token admin), ou demander à
-Arthur d'ajouter CORS pour le domaine de la webapp.
+**CORS** : le backend répond aux navigateurs venant des adresses listées dans `WEBAPP_ORIGINS`
+(côté serveur, séparées par des virgules). Donne ton adresse exacte à Arthur, scheme compris —
+`https://console.exemple.fr`. Toute autre adresse est refusée par le navigateur.
 
 Erreurs : `401` pas authentifié, `403` pas les droits (ou compte banni), `404` inconnu, `429`
 trop de demandes, `503` base ou service momentanément indisponible. Le corps est toujours
@@ -131,22 +130,30 @@ compte. `PATCH /api/admin/accounts/:id` change `role`, `banned`, `displayName`.
 - **Quotas du jour** (invités) : `usage.reports`, `usage.trips`.
 - **Parrainage** : `referralCodes[]`.
 
-### Ce qui n'existe pas, contrairement à ce qui a été demandé
+### Qui est en ligne, et où
 
-- **La position des utilisateurs.** Aucune position n'est enregistrée, ni en direct ni en
-  historique. `POST /api/live/position` existe encore pour les vieilles versions mais **jette** la
-  position, et `GET /api/live/near` répond toujours une liste vide. Les trajets gardent seulement
-  des libellés de lieux (« Ma position » → « Rennes »), pas de coordonnées.
-- **La durée des sessions.** Rien ne mesure le temps passé dans l'app. Ce qui s'en approche :
-  `stats.driveDurationSeconds`, le temps passé à rouler.
-- **La liste des utilisateurs en ligne.** Le backend sait combien de comptes ont l'app ouverte et
-  combien roulent (`/health` → `live.online`, `live.inTrip`), mais **qui** n'est pas exposé. C'est
-  gardé en mémoire 90 secondes, jamais écrit sur disque.
-- **L'adresse IP, le modèle d'appareil, la version de l'app.** Sauf dans un rapport de bug, où
-  l'app les joint volontairement.
+| Besoin | Appel | Droits |
+|---|---|---|
+| Qui a l'app ouverte maintenant | `GET /api/live/online` | admin |
+| Où un compte est passé | `GET /api/live/positions?accountId=..&from=..&to=..` | admin |
 
-Tout ça peut s'ajouter, mais c'est un choix d'Arthur : ça change la politique de confidentialité
-et le mot « anonyme » dans les réglages.
+`/online` donne, par compte : `username`, `role`, `platform`, `inTrip`, `lastSeenAt`, et
+`lat`/`lon`/`speedKmh`/`positionAt` **pour les conducteurs qui partagent leur position** (null
+pour les autres). Un compte reste « en ligne » 90 secondes après son dernier signe de vie.
+
+`/positions` donne la trace d'un compte, du plus ancien au plus récent, 5000 points au maximum.
+Les positions sont effacées au bout de 30 jours (`POSITION_KEEP_DAYS`), et la suppression d'un
+compte efface les siennes immédiatement.
+
+### Ce qui n'existe toujours pas
+
+- **L'adresse IP**, le **modèle d'appareil** et la **version de l'app** par compte. Le modèle et la
+  version n'apparaissent que dans un rapport de bug, où l'app les joint volontairement.
+- **La durée d'une session vue comme un événement** (début, fin, appareil). Ce qui existe :
+  `stats.appDurationSeconds`, le temps cumulé passé dans l'app, et `lastActiveAt`.
+- **Les coordonnées de départ et d'arrivée des trajets enregistrés** : un trajet garde des
+  libellés de lieux (« Ma position » → « Rennes »), pas de points. La trace, elle, est dans
+  `/api/live/positions`.
 
 ### Confidentialité — ce que les réglages de l'app changent
 
@@ -156,7 +163,8 @@ vide comme une anomalie.
 | Réglage dans l'app | Par défaut | Effet quand il est éteint |
 |---|---|---|
 | Statistiques de conduite | activé | Aucun trajet, aucune statistique envoyés : `stats` et `trips` restent vides |
-| Présence anonyme | **désactivé** | Aucun ping de présence : le compte ne compte pas dans `live.online` |
+| Présence et position | **désactivé** | Aucune position : le compte n'apparaît pas sur la carte de `/api/live/online` et n'a aucune trace |
+| Temps d'utilisation | **désactivé** | `stats.appDurationSeconds` n'augmente pas ; `lastActiveAt` reste tenu à jour dès que l'app appelle le serveur |
 | Aide au trafic partagé | activé | Aucun ralentissement remonté : moins de bouchons détectés automatiquement |
 | Suggestions de trajets | activé | Ne change rien côté serveur : les destinations récentes restent sur le téléphone |
 
@@ -164,9 +172,7 @@ vide comme une anomalie.
 
 ## 6. Signalisation (mapper)
 
-C'est la partie **qui n'existe pas encore** côté API.
-
-Ce qui existe, en lecture seule :
+Lecture, comme avant :
 
 - `GET /api/signs/near?lat=..&lon=..&radius=..` — panneaux autour d'un point (jusqu'à 120 km,
   8000 éléments).
@@ -174,38 +180,67 @@ Ce qui existe, en lecture seule :
   d'un itinéraire, dans l'ordre.
 - `GET /api/signs/limit?lat=..&lon=..&bearing=..` — la limite sous le conducteur.
 
-Aucune route n'ajoute, ne modifie ni ne supprime un panneau. Et surtout : **le schéma `signs` de
-PostGIS est reconstruit entièrement chaque dimanche à partir d'un extrait OpenStreetMap**. Une
-modification écrite directement dedans serait effacée à la reconstruction suivante.
+Écriture, réservée aux admins :
 
-La bonne façon de faire, et c'est déjà le modèle des limites de vitesse : une table de corrections
-par-dessus (schéma `crowd`), que la lecture applique sur la donnée OSM. Il faut donc, à valider
-avec Arthur :
+| Besoin | Appel |
+|---|---|
+| Voir les corrections | `GET /api/signs/edits?status=applied\|conflict\|reverted` |
+| Corriger | `POST /api/signs/edits` `{op, targetId?, kind?, value?, course?, lat?, lon?, note?}` |
+| Changer une correction | `PATCH /api/signs/edits/:id` |
+| Annuler | `DELETE /api/signs/edits/:id` |
 
-1. une table `crowd.sign_edit` (ajout, modification, suppression d'un panneau, avec auteur, date,
-   statut) ;
-2. des routes `POST` / `PATCH` / `DELETE /api/signs/edits` réservées aux admins ;
-3. la prise en compte de ces corrections dans `signs/postgis.js` (`near`, `route`, `limit`), comme
-   `speed_limit_change` l'est déjà ;
-4. la reconstruction hebdomadaire qui conserve la table de corrections.
+Trois opérations (`op`) :
+
+- **`add`** — un panneau qu'OpenStreetMap n'a pas. Demande `kind`, `lat`, `lon`, et `value` pour
+  une limite (`speed_sign`), `course` pour le sens auquel il s'adresse.
+- **`edit`** — corriger un panneau existant : `targetId` (son `id` renvoyé par `/near`) plus ce
+  qui change.
+- **`hide`** — le panneau n'existe pas sur le terrain : `targetId` seul.
+
+`kind` vaut `traffic_signals`, `stop`, `give_way`, `crossing`, `roundabout`, `construction`,
+`no_entry`, `level_crossing` ou `speed_sign`.
+
+```bash
+curl -s -X POST https://api.lrda-mercuriale.uk/api/signs/edits \
+  -H "x-admin-token: $ADMIN_TOKEN" -H 'content-type: application/json' \
+  -d '{"op":"add","kind":"stop","lat":48.1173,"lon":-1.6778,"course":90,"note":"vu sur place"}'
+```
+
+### Comment ça tient dans le temps
+
+Les corrections vivent dans leur propre table (`crowd.sign_edit`), séparée de la donnée
+OpenStreetMap. Deux moments :
+
+1. **Tout de suite** — la correction est écrite et appliquée à la signalisation publiée dans la
+   même transaction. Les apps la voient à la requête suivante, sans attendre.
+2. **À chaque reconstruction** (dimanche, à partir d'un extrait OSM frais) — les corrections sont
+   rejouées sur la donnée neuve avant publication. La table des corrections n'est jamais
+   modifiée par la reconstruction, et une reconstruction qui échoue s'arrête avant de publier :
+   la signalisation en service et les corrections restent intactes.
+
+Rattachement d'une correction à son panneau : l'identifiant d'un panneau est calculé à partir de
+ce qu'il est (type, valeur, position au pas de 25 m, orientation), donc il survit en général à
+une reconstruction. Sinon, le panneau est recherché par ce qu'il était : même type, même valeur,
+à moins de 30 m, orienté à moins de 45° près.
+
+**Si le panneau a disparu, ou si plusieurs candidats se ressemblent, rien n'est appliqué.** La
+correction est conservée et passe en `status: "conflict"`, avec `conflict` qui dit pourquoi. La
+console doit lister ces conflits : c'est un humain qui tranche — refaire la correction sur le
+bon panneau, ou l'annuler.
 
 ---
 
-## 7. À ajouter pour la webapp — récapitulatif
+## 7. Ce qui manque encore
 
-À faire valider par Arthur avant de coder quoi que ce soit côté backend :
+À faire valider par Arthur :
 
-1. **CORS** pour le domaine de la webapp (ou tout passe par le serveur de la webapp).
-2. **Liste globale des signalements** avec filtres, pagination, historique des fermés et auteur visible pour les admins.
-3. **Écriture de la signalisation** : table de corrections + routes admin (section 6).
-4. **Pagination et recherche** sur `/api/admin/accounts` : aujourd'hui tout arrive d'un coup.
-5. **Liste des comptes en ligne** et **durée de session**, si c'est vraiment voulu — décision de
-   confidentialité, pas seulement technique.
-6. **Compte de service** pour la webapp plutôt que le `ADMIN_TOKEN` partagé, avec ses propres
+1. **Liste globale des signalements** avec filtres, pagination, historique des fermés et auteur
+   visible pour les admins.
+2. **Pagination et recherche** sur `/api/admin/accounts` : aujourd'hui tout arrive d'un coup.
+3. **Compte de service** pour la webapp plutôt que le `ADMIN_TOKEN` partagé, avec ses propres
    droits et sa propre révocation.
 
 ---
-
 ## 8. Limites et bonnes manières
 
 - Les itinéraires (`/api/route`) sont plafonnés : 10 par minute et 120 par heure et par compte, et
