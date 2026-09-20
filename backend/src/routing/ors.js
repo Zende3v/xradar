@@ -4,46 +4,115 @@ import { config } from '../config.js';
 export const ORS_AVOID = { tolls: 'tollways', highways: 'highways', ferries: 'ferries' };
 
 /**
- * The day's ORS calls, against config.orsDailyBudget. ORS gives a free plan a fixed number of
- * routes a day, counted on UTC days: we stop short of it so a burst can never leave the app
- * without routing until the next reset, and so the rerouting around traffic keeps its share.
+ * The ORS keys and what is left of each one today. ORS gives a free plan a fixed number of
+ * routes a day, counted on UTC days: each key keeps to config.orsDailyBudget, under that quota,
+ * so a burst can never leave the app without routing and the rerouting around traffic keeps its
+ * share. A key ORS refuses (quota spent, too many calls at once) is set aside and the next key
+ * takes over until it is worth trying again — the spare only serves while the first is blocked.
  */
-const budget = { day: '', used: 0, warned: false };
+const keys = config.orsApiKeys.map((key) => ({ key, day: '', used: 0, blockedUntil: 0, warned: false }));
 
-/** A request that was never sent: postORS answers with it once the day's budget is spent. */
-const SPENT = { ok: false, status: 429, budgetSpent: true, text: async () => 'ORS daily budget spent' };
+/** A request that was never sent: postORS answers with it when no key can serve. */
+const SPENT = {
+  ok: false,
+  status: 429,
+  budgetSpent: true,
+  text: async () => 'ORS keys exhausted',
+  json: async () => ({ error: 'ORS keys exhausted' }),
+};
 
-function take() {
-  const day = new Date().toISOString().slice(0, 10); // ORS counts on UTC days
-  if (budget.day !== day) {
-    budget.day = day;
-    budget.used = 0;
-    budget.warned = false;
-  }
-  if (budget.used >= config.orsDailyBudget) {
-    if (!budget.warned) {
-      budget.warned = true;
-      console.warn(`[route] budget ORS du jour atteint (${config.orsDailyBudget}) — plus d'appel jusqu'à minuit UTC`);
+const utcDay = () => new Date().toISOString().slice(0, 10);
+
+/** The key to use now: the first one with budget left and not set aside. Null when none can. */
+function pick() {
+  const day = utcDay();
+  const now = Date.now();
+  for (const k of keys) {
+    if (k.day !== day) {
+      // Midnight UTC: ORS counts again, and a key set aside for its quota may serve once more.
+      k.day = day;
+      k.used = 0;
+      k.warned = false;
+      k.blockedUntil = 0;
     }
-    return false;
+    if (k.blockedUntil > now) continue;
+    if (k.used >= config.orsDailyBudget) {
+      if (!k.warned) {
+        k.warned = true;
+        console.warn(`[route] budget du jour atteint sur la clé ORS n°${keys.indexOf(k) + 1} (${config.orsDailyBudget})`);
+      }
+      continue;
+    }
+    return k;
   }
-  budget.used += 1;
-  return true;
+  return null;
 }
 
-/** What the day's budget has left, for /health. */
-export function orsBudgetLeft() {
-  const day = new Date().toISOString().slice(0, 10);
-  return budget.day === day ? Math.max(0, config.orsDailyBudget - budget.used) : config.orsDailyBudget;
+/** How long to set a key aside after ORS refused it (ms); 0 when the failure is not the key's. */
+function blockMs(status, detail) {
+  if (status === 429) return config.orsKeyPauseMs; // too many calls at once: a short pause
+  if (status !== 403) return 0;
+  if (/quota/i.test(detail)) {
+    // Spent for the day: nothing to retry before ORS counts again, at midnight UTC.
+    const d = new Date();
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - Date.now();
+  }
+  return config.orsKeyBlockMs; // refused for another reason (key disabled, wrong plan)
 }
 
-export function postORS(body) {
-  if (!take()) return Promise.resolve(SPENT);
-  return fetch(`${config.orsUrl.replace(/\/$/, '')}/v2/directions/driving-car/geojson`, {
+/** One call with one key. A refusal comes back readable, its body already in hand. */
+async function send(key, body) {
+  const r = await fetch(`${config.orsUrl.replace(/\/$/, '')}/v2/directions/driving-car/geojson`, {
     method: 'POST',
-    headers: { Authorization: config.orsApiKey, 'Content-Type': 'application/json' },
+    headers: { Authorization: key, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  if (r.ok) return r;
+  const detail = await r.text().catch(() => '');
+  return {
+    ok: false,
+    status: r.status,
+    detail,
+    text: async () => detail,
+    json: async () => JSON.parse(detail),
+  };
+}
+
+/** How many keys there are, how many can serve now, and the routes left today, for /health. */
+export function orsKeysMeta() {
+  const day = utcDay();
+  const now = Date.now();
+  const left = keys.map((k) => (k.day === day ? Math.max(0, config.orsDailyBudget - k.used) : config.orsDailyBudget));
+  const usable = keys.map((k, i) => (k.blockedUntil <= now ? left[i] : 0));
+  return {
+    keys: keys.length,
+    ready: usable.filter((n) => n > 0).length,
+    // What can really be asked now: a key set aside counts for nothing until it comes back.
+    budgetLeft: usable.reduce((a, b) => a + b, 0),
+  };
+}
+
+/** The day's routes still available across every key, for /health. */
+export function orsBudgetLeft() {
+  return orsKeysMeta().budgetLeft;
+}
+
+export async function postORS(body) {
+  let refusal = SPENT;
+  for (;;) {
+    const state = pick();
+    if (!state) return refusal;
+    state.used += 1;
+    const r = await send(state.key, body);
+    if (r.ok) return r;
+    const pause = blockMs(r.status, r.detail || '');
+    if (!pause) return r; // the call itself went wrong: another key would fail the same way
+    state.blockedUntil = Date.now() + pause;
+    console.warn(
+      `[route] clé ORS n°${keys.indexOf(state) + 1} écartée ${Math.round(pause / 60000)} min (HTTP ${r.status}) — passage à la suivante`,
+    );
+    refusal = r;
+  }
 }
 
 /** A counter-clockwise square around a point, as one GeoJSON polygon ([lon, lat]) for avoid_polygons. */

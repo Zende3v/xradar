@@ -35,6 +35,7 @@ export const config = {
   routeAccountsMax: 2000,
   // Calls to ORS a day, under the free plan's own quota (2000, reset at midnight UTC): the rest
   // is the margin that keeps the rerouting around traffic, and the other drivers, working.
+  // Per key: two keys give 3000 routes a day.
   orsDailyBudget: Number(process.env.ORS_DAILY_BUDGET) || 1500,
 
   // Routing engine, proxied by /api/route. Defaults to the free public OSRM
@@ -45,6 +46,13 @@ export const config = {
   // OpenRouteService: preferred routing provider when a key is set (better quality,
   // supports avoiding tolls/motorways). Falls back to OSRM when ORS_API_KEY is absent.
   orsApiKey: process.env.ORS_API_KEY || null,
+  // A spare key (ORS_API_KEY_2, then _3) takes over while the one before it is refused — its
+  // quota spent for the day, or too many calls at once. Set in the service environment only.
+  orsApiKeys: [process.env.ORS_API_KEY, process.env.ORS_API_KEY_2, process.env.ORS_API_KEY_3].filter(Boolean),
+  // A key refused for too many calls at once waits this long; refused for anything else (key
+  // disabled, plan changed), this long. A spent quota waits for midnight UTC on its own.
+  orsKeyPauseMs: 60 * 1000,
+  orsKeyBlockMs: 60 * MIN,
   orsUrl: process.env.ORS_URL || 'https://api.openrouteservice.org',
 
   // TomTom Traffic on the route being followed (key from the service environment, never versioned).

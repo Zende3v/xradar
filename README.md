@@ -142,9 +142,11 @@ cd /opt/xradar-backend && bash deploy/setup-admin.sh   # installe le .service, c
 Autres secrets, un fichier par sujet dans `/etc/systemd/system/xradar-backend.service.d/` :
 
 ```bash
+install -m 600 /dev/null /etc/systemd/system/xradar-backend.service.d/ors.conf
 cat > /etc/systemd/system/xradar-backend.service.d/ors.conf <<'EOF'
 [Service]
 Environment=ORS_API_KEY=ta_cle_openrouteservice
+Environment=ORS_API_KEY_2=ta_cle_de_secours
 EOF
 cat > /etc/systemd/system/xradar-backend.service.d/smtp.conf <<'EOF'
 [Service]
@@ -165,6 +167,8 @@ systemctl daemon-reload && systemctl restart xradar-backend
 | `PORT` / `HOST` | écoute locale | `8090` / `127.0.0.1` (via le .service) |
 | `ADMIN_TOKEN` | API admin + CLI + modération | absent = API admin coupée |
 | `ORS_API_KEY` / `ORS_URL` | itinéraires OpenRouteService | absent = OSRM public |
+| `ORS_API_KEY_2` (et `_3`) | clé de secours : elle prend le relais dès que la précédente est refusée (quota du jour épuisé, trop d'appels d'un coup), jusqu'à minuit UTC | — |
+| `ORS_DAILY_BUDGET` | appels ORS par clé et par jour, sous le quota du plan gratuit (2000) | `1500` |
 | `OSRM_URL` | OSRM de repli | `https://router.project-osrm.org` |
 | `PGHOST` / `PGDATABASE` | base | `/var/run/postgresql` / `xradar` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
