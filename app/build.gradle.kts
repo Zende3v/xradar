@@ -16,12 +16,12 @@ plugins {
 }
 
 android {
-    namespace = "com.xradar.app"
+    namespace = "com.eona.app"
     compileSdk = 37
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "com.xradar.app"
+        applicationId = "com.eona.app"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

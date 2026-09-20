@@ -1,11 +1,11 @@
 <resources>
     <!--
       Minimal platform theme (no com.google.android.material dependency).
-      The real design system lives in Compose (XRadarTheme). This only styles
+      The real design system lives in Compose (EonaTheme). This only styles
       the window before the first Compose frame and keeps system bars transparent
       for edge-to-edge rendering.
     -->
-    <style name="Theme.XRadar" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.Eona" parent="android:Theme.DeviceDefault.NoActionBar">
         <item name="android:windowBackground">@color/xr_window_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
