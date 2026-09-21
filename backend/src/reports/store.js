@@ -18,7 +18,8 @@ const PUBLIC_COLUMNS = `
   r.id, r.type, r.status, ST_Y(r.geom) AS lat, ST_X(r.geom) AS lon, r.course, r.direction, r.bearing,
   (extract(epoch FROM r.created_at) * 1000)::bigint AS created_at,
   (extract(epoch FROM r.expires_at) * 1000)::bigint AS expires_at,
-  r.confirmations, r.contradictions, r.reporters, r.reporter_id, r.reporter_role, r.street, r.side`;
+  r.confirmations, r.contradictions, r.reporters, r.reporter_id, r.reporter_role, r.street, r.side,
+  r.severity`;
 
 /**
  * Drivers' reports, in PostGIS (schema crowd). A report is scored with reports/score.js and
@@ -56,7 +57,10 @@ class ReportStore {
    * A driver reports [type] where they are. Returns { report, merged, authorFirstConfirmed }
    * (the event's author, when this voice is its first confirmation), or null when invalid.
    */
-  async add({ type, lat, lon, reporterId = null, reporterRole = 'guest', plate = null, street = null, side = null, direction = 'same', bearing = null }) {
+  async add({
+    type, lat, lon, reporterId = null, reporterRole = 'guest', plate = null, street = null,
+    side = null, direction = 'same', bearing = null, severity = null,
+  }) {
     if (!VALID_TYPES.has(type) || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
     const dir = direction === 'opposite' ? 'opposite' : 'same';
     const reporterCourse = Number.isFinite(bearing) ? norm(bearing) : null;
@@ -72,18 +76,23 @@ class ReportStore {
       const same = byPlate ? null : await findSame(client, { type, lat, lon, course, wayId });
       if (same) {
         const outcome = await addVoice(client, same, reporterId, 'merged', MOVING.has(type) ? { lat, lon, wayId } : null);
+        // Two drivers, two words for the same jam: the worse one wins, it is what slows traffic.
+        if (type === 'traffic_jam' && severity && worse(severity, same.severity)) {
+          await client.query('UPDATE crowd.report SET severity = $2 WHERE id = $1', [same.id, severity]);
+        }
         return { report: await publicReport(client, same.id), merged: true, authorFirstConfirmed: outcome.firstConfirmation ? same.reporter_id : null };
       }
       const id = randomUUID();
       const now = Date.now();
       await client.query(
         `INSERT INTO crowd.report (id, type, geom, geom_m, course, direction, bearing, way_id, expires_at,
-                                   reporter_id, reporter_role, plate, street, side)
+                                   reporter_id, reporter_role, plate, street, side, severity)
          VALUES ($1, $2, ST_SetSRID(ST_MakePoint($4, $3), 4326), ${at('$4', '$3')}, $5, $6, $7, $8, to_timestamp($9 / 1000.0),
-                 $10, $11, $12, $13, $14)`,
+                 $10, $11, $12, $13, $14, $15)`,
         [id, type, lat, lon, course, dir, reporterCourse, wayId, expiryAfter(scoreModel(type), now, 0, 0),
           reporterId, reporterRole, type === 'voiture_radar' ? plate : null,
-          type === 'camera' ? street : null, type === 'camera' ? side : null],
+          type === 'camera' ? street : null, type === 'camera' ? side : null,
+          type === 'traffic_jam' ? severity : null],
       );
       if (reporterId) {
         await client.query(`INSERT INTO crowd.report_voice (report_id, voter_id, voice) VALUES ($1, $2, 'reported')`, [id, reporterId]);
@@ -204,7 +213,7 @@ class ReportStore {
       `WITH line AS (SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 2154) AS g),
        piece AS (SELECT ST_Subdivide(line.g, 64) AS g FROM line)
        SELECT DISTINCT ON (r.id) r.id, ST_Y(r.geom) AS lat, ST_X(r.geom) AS lon, r.course,
-              r.reporters, r.confirmations, r.reporter_role
+              r.reporters, r.confirmations, r.reporter_role, r.severity
        FROM piece JOIN crowd.report r ON ST_DWithin(r.geom_m, piece.g, $3)
        WHERE r.status = 'live' AND r.expires_at > now() AND r.type = $2`,
       [JSON.stringify(line), type, bufferM],
@@ -231,6 +240,14 @@ class ReportStore {
 }
 
 /** The live report this one would duplicate, locked for update; null when it is a new event. */
+/** How bad a jam is, worst last: a standstill beats a heavy one, which beats a light one. */
+const SEVERITY_ORDER = ['light', 'heavy', 'standstill'];
+
+/** True when [next] is worse than [current] (unknown counts as the mildest). */
+function worse(next, current) {
+  return SEVERITY_ORDER.indexOf(next) > SEVERITY_ORDER.indexOf(current ?? null);
+}
+
 async function findSame(client, { type, lat, lon, course, wayId }) {
   const { rows } = await client.query(
     `SELECT r.* FROM crowd.report r
@@ -335,6 +352,7 @@ function toPublic(row, now) {
     course: row.course,
     street: row.street,
     side: row.side,
+    severity: row.severity ?? null,
     // Intrinsic score: time + crowd. The app multiplies it by the road, direction and
     // distance factors, which depend on the driver asking.
     score: Math.round(crowdScore(model, now - createdAt, row.confirmations, row.contradictions)),

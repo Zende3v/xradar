@@ -70,6 +70,8 @@ reportRouter.post('/', guarded(async (req, res) => {
     plate: req.body?.plate ? String(req.body.plate).trim() : null,
     street: req.body?.street ? String(req.body.street).trim() : null,
     side: req.body?.side === 'left' || req.body?.side === 'right' ? req.body.side : null,
+    // "Embouteillage": how bad it is, which weighs on the routing around it.
+    severity: ['light', 'heavy', 'standstill'].includes(req.body?.severity) ? req.body.severity : null,
     // Which way the reporter was facing, and their course — both optional.
     direction: req.body?.direction === 'opposite' ? 'opposite' : 'same',
     bearing: req.body?.bearing != null && Number.isFinite(bearing) ? bearing : null,

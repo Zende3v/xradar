@@ -86,6 +86,8 @@ export const config = {
   // On a route: within crowdOnRouteM, for its way (crowdSameWayDeg).
   crowdJamHalfLengthM: 500,
   crowdJamDefaultDelayS: 180,
+  // What an "Embouteillage" costs when no probe measured it, by what the driver saw.
+  crowdJamDelayS: { light: 90, heavy: 240, standstill: 600 },
   crowdOnRouteM: 60,
   crowdSameWayDeg: 60,
   // Slowdown probes ("Partager les ralentissements", traffic/probes.js): anonymous, in memory,
@@ -139,6 +141,21 @@ export const config = {
   placeLimit: 20,
   // Places sent to a client asking for a pool (?pool=1), which ranks them itself.
   placePoolLimit: 60,
+  // Search (/api/search): what a driver types is rarely an address, so a place search
+  // (Photon, OpenStreetMap) and the official address search (Base Adresse Nationale) answer
+  // together. Both are free and need no key; the answers are kept a few minutes.
+  photonUrl: process.env.PHOTON_URL || 'https://photon.komoot.io',
+  banUrl: process.env.BAN_URL || 'https://api-adresse.data.gouv.fr',
+  searchMinChars: 2,
+  searchLimit: 8,
+  searchMaxLimit: 15,
+  searchSourceLimit: 10,
+  searchTimeoutMs: 6000,
+  searchCacheMs: 5 * MIN,
+  searchCacheMax: 500,
+  searchSameSpotM: 60,
+  searchPerMinute: 40,
+
   // Identifies us to the open-data servers we download from.
   placeUserAgent: process.env.PLACE_USER_AGENT || 'EONA/1.0 (+https://api.lrda-mercuriale.uk)',
 

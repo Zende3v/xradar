@@ -19,6 +19,7 @@ import { speedLimitRouter } from './speedlimits/routes.js';
 import { speedLimitStore } from './speedlimits/store.js';
 import { bugRouter } from './bugs/routes.js';
 import { tripRouter } from './trips/routes.js';
+import { searchRouter } from './search/routes.js';
 import { shareStore } from './trips/shares.js';
 import { sharePage } from './trips/page.js';
 import { probeStore } from './traffic/probes.js';
@@ -74,6 +75,7 @@ export function createApp() {
   app.use('/api/accounts', accountRouter);
   app.use('/api/bugs', bugRouter);
   app.use('/api/trips', tripRouter);
+  app.use('/api/search', searchRouter);
   // The page behind a shared link: it opens the app, it never shows a position itself.
   app.get('/t/:token', sharePage);
   app.use('/api/admin/accounts', adminAccountRouter);

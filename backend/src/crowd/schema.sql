@@ -34,8 +34,13 @@ CREATE TABLE IF NOT EXISTS crowd.report (
     reporter_role text NOT NULL DEFAULT 'guest',
     plate text,
     street text,
-    side text
+    side text,
+    -- "Embouteillage" only: light, heavy or standstill, as the driver saw it.
+    severity text
 );
+-- Added after the table existed: an older database gets the column here.
+ALTER TABLE crowd.report ADD COLUMN IF NOT EXISTS severity text;
+
 CREATE INDEX IF NOT EXISTS report_live_geom ON crowd.report USING gist (geom_m) WHERE status = 'live';
 CREATE INDEX IF NOT EXISTS report_status ON crowd.report (status, expires_at);
 CREATE INDEX IF NOT EXISTS report_closed ON crowd.report (closed_at) WHERE status <> 'live';

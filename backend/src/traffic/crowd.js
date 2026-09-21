@@ -18,7 +18,8 @@ const MIN_SPEED_KMH = 3;
  * TomTom: confirmed "Bouchon" reports on it, the same way (2 drivers, an admin's, or made from
  * probes), and slowdowns probeClusterMinDrivers drivers measured. Stretches in metres along
  * the route, with the time they cost: measured from the probes' speeds against the road's
- * limit when there are some, crowdJamDefaultDelayS for a report without.
+ * limit when there are some, and from what the driver said otherwise (léger, important, à
+ * l’arrêt: crowdJamDelayS).
  */
 export async function crowdAlong(path) {
   if (path.points.length < 2) return [];
@@ -32,9 +33,14 @@ export async function crowdAlong(path) {
   const reports = await reportStore.liveAlong('traffic_jam', lineOf(path), config.crowdOnRouteM);
   const confirmed = reports
     .filter((r) => r.reporters >= 2 || r.confirmations >= 1 || r.reporter_role === 'admin' || r.reporter_role === 'system')
-    .map((r) => onRoute(r.lat, r.lon, r.course, config.crowdSameWayDeg))
-    .filter((along) => along != null)
-    .map((along) => ({ fromM: along - config.crowdJamHalfLengthM, toM: along + config.crowdJamHalfLengthM }));
+    .map((r) => ({ along: onRoute(r.lat, r.lon, r.course, config.crowdSameWayDeg), severity: r.severity }))
+    .filter((r) => r.along != null)
+    .map((r) => ({
+      fromM: r.along - config.crowdJamHalfLengthM,
+      toM: r.along + config.crowdJamHalfLengthM,
+      // What the driver saw decides the cost when no probe measured the jam.
+      delayS: config.crowdJamDelayS[r.severity] ?? config.crowdJamDefaultDelayS,
+    }));
 
   const probes = probeStore.recent()
     .map((p) => ({ ...p, along: onRoute(p.lat, p.lon, p.course, config.probeSameWayDeg) }))
@@ -65,7 +71,7 @@ export async function crowdAlong(path) {
     for (const zone of reported) zone.measured = true;
   }
   for (const zone of confirmed) {
-    if (!zone.measured) zones.push({ fromM: zone.fromM, toM: zone.toM, delayS: config.crowdJamDefaultDelayS });
+    if (!zone.measured) zones.push({ fromM: zone.fromM, toM: zone.toM, delayS: zone.delayS });
   }
 
   // Overlapping zones are one jam: its extent, the worst of their delays.
