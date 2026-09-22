@@ -130,6 +130,16 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <p>Un compte EONA est nécessaire pour ouvrir un lien de trajet. Le nombre de personnes qui suivent le trajet est indiqué à l'utilisateur, sans leur identité.</p>
 <p>Ces informations sont conservées <strong>en mémoire uniquement</strong>, jamais enregistrées en base de données. Le lien cesse de fonctionner <strong>quinze minutes après l'arrivée</strong>, au plus tard <strong>six heures</strong> après sa création, ou immédiatement si l'utilisateur arrête le partage.</p>
 <p>Aucun historique du trajet partagé n'est conservé.</p>
+<h2>8 quater. Création du compte et informations techniques</h2>
+<p>À la création du compte et à chaque connexion, l'application transmet ce que le système lui donne d'elle-même : le modèle de l'appareil, la version du système d'exploitation, la version d'EONA, la langue et la région configurées, ainsi que l'identifiant d'installation de l'application.</p>
+<p>Ces informations servent à l'assistance et au diagnostic : comprendre un bug propre à un modèle ou à une version, et vérifier qu'une fonction se comporte correctement sur les appareils utilisés.</p>
+<p><strong>Aucun identifiant publicitaire n'est collecté</strong>, et aucune de ces informations n'est utilisée à des fins de publicité ou de profilage.</p>
+<p>La méthode utilisée pour créer le compte est également conservée : adresse e-mail, ou fournisseur d'identité tiers.</p>
+<h2>8 quinquies. Connexion avec Google</h2>
+<p>L'utilisateur peut créer son compte ou se connecter avec un compte Google. Dans ce cas, Google transmet à EONA un identifiant de compte, l'adresse e-mail associée et, le cas échéant, le nom du profil. Ces informations sont vérifiées auprès de Google par le serveur d'EONA.</p>
+<p>Si l'adresse e-mail correspond à un compte EONA existant, le compte Google y est rattaché : aucun second compte n'est créé.</p>
+<p>L'utilisateur peut dissocier son compte Google à tout moment depuis Menu ▸ Mon compte, dès lors qu'il conserve un autre moyen de connexion. La connexion à Google est alors oubliée sur l'appareil.</p>
+<p>L'utilisation de ce service est soumise à la politique de confidentialité de Google.</p>
 <h2>9. Télémétrie</h2>
 <p>EONA utilise une télémétrie limitée destinée au fonctionnement du service.</p>
 <p>Elle ne comprend :</p>
@@ -191,6 +201,8 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <tr><td>Présence (décompte des applications ouvertes)</td><td>90 secondes en mémoire</td></tr>
 <tr><td>Positions partagées (« Présence et position »)</td><td>30 jours, puis suppression automatique</td></tr>
 <tr><td>Trajet partagé par lien</td><td>En mémoire, jusqu'à 15 minutes après l'arrivée (6 heures au maximum)</td></tr>
+<tr><td>Informations techniques de l'appareil (modèle, système, version, langue)</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
+<tr><td>Compte Google rattaché</td><td>Jusqu'à dissociation ou suppression du compte</td></tr>
 <tr><td>Temps d'utilisation cumulé</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
 <tr><td>Sondes de trafic</td><td>30 minutes en mémoire</td></tr>
 <tr><td>Statistiques de conduite</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
