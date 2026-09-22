@@ -1,0 +1,16 @@
+[Unit]
+Description=EONA - conditions generales d utilisation (port 9021)
+After=network.target
+
+[Service]
+User=eona
+Group=eona
+ExecStart=/usr/bin/python3 -m http.server 9021 --bind 127.0.0.1 --directory /opt/eona-backend/cgu
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

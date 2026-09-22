@@ -9,4 +9,6 @@ ingress:
     service: http://127.0.0.1:8090
   - hostname: confidentialite.zylo-app.fr
     service: http://127.0.0.1:9020
+  - hostname: cgu.zylo-app.fr
+    service: http://127.0.0.1:9021
   - service: http_status:404

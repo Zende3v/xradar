@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
 import { haversine } from '../radars/geo.js';
+import { fold, score } from './rank.js';
 
 export const searchRouter = Router();
 
@@ -47,7 +48,7 @@ searchRouter.get('/', async (req, res) => {
     }),
   ]);
 
-  const results = merge(places, addresses, around);
+  const results = merge(places, addresses, around, query);
   keep(key, results);
   res.json({ count: Math.min(results.length, limit), results: results.slice(0, limit) });
 });
@@ -91,6 +92,14 @@ function photonPlace(feature) {
     subtitle: where,
     lat,
     lon,
+    // Where it is, for the line under the name.
+    city: p.city ?? p.county ?? null,
+    address: [p.housenumber, p.street].filter(Boolean).join(' ') || null,
+    postcode: p.postcode ?? null,
+    // What kind of place it is, in the app's words ("Lycée", "Gare", "Supermarché"…).
+    category: categoryLabel(p.osm_key, p.osm_value),
+    osmKey: p.osm_key ?? null,
+    osmValue: p.osm_value ?? null,
     // A named place (school, shop, station…) is what a driver usually means.
     named: Boolean(p.name),
     source: 'osm',
@@ -102,6 +111,8 @@ async function fromBAN(query, around) {
   const url = new URL(`${config.banUrl.replace(/\/$/, '')}/search/`);
   url.searchParams.set('q', query);
   url.searchParams.set('limit', String(config.searchSourceLimit));
+  // Someone typing: the BAN answers on a half-written address too.
+  url.searchParams.set('autocomplete', '1');
   if (around) {
     url.searchParams.set('lat', String(around.lat));
     url.searchParams.set('lon', String(around.lon));
@@ -121,52 +132,97 @@ async function fromBAN(query, around) {
     return {
       id: `ban:${p.id ?? `${lat},${lon}`}`,
       name,
-      subtitle: p.context ? `${p.postcode ?? ''} ${p.city ?? ''} · ${p.context}`.trim() : (p.label ?? ''),
+      subtitle: [p.postcode, p.city].filter(Boolean).join(' '),
       lat,
       lon,
+      city: p.city ?? null,
+      address: p.name ?? null,
+      postcode: p.postcode ?? null,
+      category: p.type === 'municipality' ? 'Commune' : 'Adresse',
+      osmKey: null,
+      osmValue: null,
       named: false,
-      score: Number(p.score) || 0,
       source: 'ban',
     };
   }).filter(Boolean);
 }
 
 /**
- * The two lists into one. A place named like what was typed comes first, then the addresses;
- * inside each, the nearest to the driver wins. The same spot found twice is kept once.
+ * The two lists into one, best first. Each answer is scored on four things (see rank.js): how
+ * close it is, how well its name matches, what kind of place it is, and where its own source
+ * ranked it. The same spot found twice is kept once — the better-scored one.
  */
-function merge(places, addresses, around) {
-  const words = [];
-  const ranked = [...places, ...addresses].map((item) => ({
-    ...item,
-    distanceM: around ? Math.round(haversine(around.lat, around.lon, item.lat, item.lon)) : null,
+function merge(places, addresses, around, query) {
+  const scored = [places, addresses].flatMap((list) => list.map((item, index) => {
+    const distanceM = around ? Math.round(haversine(around.lat, around.lon, item.lat, item.lon)) : null;
+    const { score: value } = score({ ...item, distanceM }, { query, index, total: list.length });
+    return { ...item, distanceM, score: value };
   }));
-  ranked.sort((a, b) => {
-    if (a.named !== b.named) return a.named ? -1 : 1;
-    if (a.source !== b.source) return a.source === 'osm' ? -1 : 1;
-    if (a.distanceM != null && b.distanceM != null && a.distanceM !== b.distanceM) {
-      return a.distanceM - b.distanceM;
-    }
-    return (b.score ?? 0) - (a.score ?? 0);
-  });
+  scored.sort((a, b) => b.score - a.score);
+
   const out = [];
-  for (const item of ranked) {
-    const twin = out.find((kept) => haversine(kept.lat, kept.lon, item.lat, item.lon) < config.searchSameSpotM
-      && similar(kept.name, item.name));
+  for (const item of scored) {
+    // The same place under two names — a school and its buildings, a station and its entrances —
+    // counts once: near each other, and named the same for the first few words.
+    const twin = out.find((kept) => {
+      const metres = haversine(kept.lat, kept.lon, item.lat, item.lon);
+      if (metres < config.searchSameSpotM && similar(kept.name, item.name)) return true;
+      return metres < config.searchSameNameM && head(kept.name) === head(item.name);
+    });
     if (twin) continue;
     out.push(item);
     if (out.length >= config.searchMaxLimit) break;
   }
-  void words;
-  return out.map(({ named, score, ...rest }) => rest);
+  return out.map(({ named, osmKey, osmValue, score: value, ...rest }) => ({
+    ...rest,
+    // One line under the name: what it is, its street, its town.
+    subtitle: [rest.category, rest.address, rest.city].filter(Boolean).join(' · '),
+  }));
 }
 
-/** Two names for the same thing: one contains the other, ignoring case and accents. */
+/** What an OpenStreetMap tag is called in the app, under the name of the place. */
+function categoryLabel(key, value) {
+  if (!key || !value) return null;
+  return CATEGORY.get(`${key}:${value}`) ?? CATEGORY.get(key) ?? null;
+}
+
+const CATEGORY = new Map(Object.entries({
+  'amenity:school': 'École', 'amenity:college': 'Collège', 'amenity:university': 'Université',
+  'amenity:kindergarten': 'Crèche', 'amenity:hospital': 'Hôpital', 'amenity:clinic': 'Clinique',
+  'amenity:pharmacy': 'Pharmacie', 'amenity:doctors': 'Cabinet médical', 'amenity:townhall': 'Mairie',
+  'amenity:police': 'Police', 'amenity:fire_station': 'Pompiers', 'amenity:post_office': 'Poste',
+  'amenity:fuel': 'Station-service', 'amenity:charging_station': 'Borne de recharge',
+  'amenity:parking': 'Parking', 'amenity:restaurant': 'Restaurant', 'amenity:cafe': 'Café',
+  'amenity:bar': 'Bar', 'amenity:fast_food': 'Restauration rapide', 'amenity:bank': 'Banque',
+  'amenity:library': 'Bibliothèque', 'amenity:theatre': 'Théâtre', 'amenity:cinema': 'Cinéma',
+  'amenity:place_of_worship': 'Lieu de culte', 'amenity:bus_station': 'Gare routière',
+  'amenity:marketplace': 'Marché', 'amenity:atm': 'Distributeur',
+  'railway:station': 'Gare', 'railway:halt': 'Halte ferroviaire', 'railway:tram_stop': 'Arrêt de tram',
+  'railway:subway_entrance': 'Métro', 'aeroway:aerodrome': 'Aéroport', 'aeroway:terminal': 'Terminal',
+  'highway:bus_stop': 'Arrêt de bus', 'highway:services': 'Aire de service', 'highway:rest_area': 'Aire de repos',
+  'tourism:hotel': 'Hôtel', 'tourism:museum': 'Musée', 'tourism:attraction': 'Site touristique',
+  'tourism:camp_site': 'Camping', 'tourism:viewpoint': 'Point de vue',
+  'leisure:sports_centre': 'Centre sportif', 'leisure:stadium': 'Stade', 'leisure:swimming_pool': 'Piscine',
+  'leisure:park': 'Parc', 'shop:supermarket': 'Supermarché', 'shop:mall': 'Centre commercial',
+  'shop:bakery': 'Boulangerie', 'shop:convenience': 'Supérette', 'shop:car_repair': 'Garage',
+  'office:government': 'Administration',
+  'place:city': 'Ville', 'place:town': 'Commune', 'place:village': 'Village', 'place:hamlet': 'Hameau',
+  'place:locality': 'Lieu-dit', 'place:suburb': 'Quartier', 'place:neighbourhood': 'Quartier',
+  'place:isolated_dwelling': 'Lieu-dit', 'place:farm': 'Ferme',
+  amenity: 'Service', shop: 'Commerce', tourism: 'Tourisme', leisure: 'Loisirs', office: 'Bureau',
+  railway: 'Transport', aeroway: 'Aéroport', place: 'Lieu', building: 'Bâtiment', highway: 'Route',
+}));
+
+/** The first words of a name, which is what tells two places apart ("lycee adolphe cherioux"). */
+function head(name) {
+  return fold(name).split(' ').slice(0, 3).join(' ');
+}
+
+/** Two names for the same thing: one contains the other, accents and punctuation aside. */
 function similar(a, b) {
-  const clean = (text) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-  const first = clean(a);
-  const second = clean(b);
-  return first.includes(second) || second.includes(first);
+  const first = fold(a);
+  const second = fold(b);
+  return Boolean(first) && Boolean(second) && (first.includes(second) || second.includes(first));
 }
 
 // ---- Cache and ceiling -------------------------------------------------------------------

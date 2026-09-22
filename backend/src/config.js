@@ -154,6 +154,8 @@ export const config = {
   searchCacheMs: 5 * MIN,
   searchCacheMax: 500,
   searchSameSpotM: 60,
+  // Same name, this close: one place with several entrances or buildings.
+  searchSameNameM: 400,
   searchPerMinute: 40,
 
   // Identifies us to the open-data servers we download from.

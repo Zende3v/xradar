@@ -208,6 +208,20 @@ async function forgetInCrowd(ids) {
 
 // ---- Statistics (everyone, server-side) -------------------------------------
 
+/**
+ * POST /api/accounts/me/terms  { version }
+ * The driver accepted the terms in the app: which version, and when. Kept as proof, nothing else.
+ */
+accountRouter.post('/me/terms', (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'account required' });
+  const version = String(req.body?.version ?? '').trim().slice(0, 20);
+  if (!version) return res.status(400).json({ error: 'version required' });
+  const terms = accountStore.recordTerms(account.id, version);
+  if (!terms) return res.status(404).json({ error: 'not found' });
+  res.json({ terms });
+});
+
 /** GET /api/accounts/me/stats — totals + trip history. */
 accountRouter.get('/me/stats', (req, res) => {
   const account = authAccount(req);

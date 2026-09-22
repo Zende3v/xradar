@@ -389,6 +389,15 @@ class AccountStore {
     this.scheduleSave();
   }
 
+  /** The terms accepted by [id]: the version and the moment, kept as proof. */
+  recordTerms(id, version) {
+    const account = this.get(id);
+    if (!account) return null;
+    account.terms = { version, acceptedAt: new Date().toISOString() };
+    this.scheduleSave();
+    return { ...account.terms };
+  }
+
   recordReportStat(id, kind) {
     const account = this.get(id);
     if (!account || !Object.hasOwn(EMPTY_STATS, kind)) return;
