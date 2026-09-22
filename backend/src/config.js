@@ -342,6 +342,23 @@ export const config = {
   // A referral code grants this much Client access. Payments will use the same
   // subscription end date when the payment portal is added.
   referralSubscriptionMonths: Number(process.env.REFERRAL_SUBSCRIPTION_MONTHS) || 6,
+  // How long a code stays usable once minted, changed by an admin from the app between a
+  // month and a year. A new duration applies to the codes minted after it; the ones already
+  // handed out keep their own date unless someone extends them.
+  referralValidityMonths: Number(process.env.REFERRAL_VALIDITY_MONTHS) || 3,
+  referralValidityMinMonths: 1,
+  referralValidityMaxMonths: 12,
+  // "Se connecter avec Google": the client ids of our own apps, comma separated in the service
+  // environment (GOOGLE_CLIENT_IDS). Empty: the endpoint refuses, and the app hides the button.
+  googleClientIds: (process.env.GOOGLE_CLIENT_IDS || '').split(',').map((id) => id.trim()).filter(Boolean),
+  googleKeysUrl: process.env.GOOGLE_KEYS_URL || 'https://www.googleapis.com/oauth2/v3/certs',
+  googleKeysTtlMs: 60 * MIN,
+
+  // The settings an admin changes, and the trace of who changed what.
+  settingsFile: process.env.SETTINGS_FILE || './data/settings.json',
+  settingsHistoryMax: 200,
+  // What is kept of a code's own life: minted, extended, revoked, regenerated.
+  referralHistoryMax: 50,
   // Keep a useful but bounded server-side journey history per account.
   accountTripHistoryMax: Number(process.env.ACCOUNT_TRIP_HISTORY_MAX) || 200,
   // Admin API token. Admin endpoints are DISABLED unless this is set (env).

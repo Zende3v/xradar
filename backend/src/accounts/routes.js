@@ -6,6 +6,8 @@ import { transaction } from '../crowd/schema.js';
 import { liveStore } from '../live/store.js';
 import { authAccount, publicView } from './auth.js';
 import { accountStore } from './store.js';
+import { verifyGoogleToken } from './google.js';
+import { settingsStore } from './settings.js';
 import { mailer } from '../mailer.js';
 
 export const accountRouter = Router();
@@ -31,6 +33,10 @@ function selfView(a) {
     usernameChangeableAt: accountStore.usernameChangeableAt(a),
     // A guest's daily limits and today's use; null for clients and admins.
     limits: accountStore.limitsFor(a),
+    // How this account was opened, and which providers it can sign in with.
+    signupMethod: a.signupMethod ?? null,
+    providers: (a.providers ?? []).map((link) => ({ provider: link.provider, email: link.email, linkedAt: link.linkedAt })),
+    hasPassword: Boolean(a.passwordHash),
   };
 }
 
@@ -53,7 +59,7 @@ accountRouter.post('/auth', (req, res) => {
   if (!deviceId || deviceId.length > 128) {
     return res.status(400).json({ error: 'deviceId is required' });
   }
-  const account = accountStore.auth(deviceId, { platform: req.body?.platform });
+  const account = accountStore.auth(deviceId, { platform: req.body?.platform, ...(req.body?.app ?? {}) });
   if (account.banned) return res.status(403).json({ error: 'banned', account: publicView(account) });
   const token = accountStore.issueToken(account.id);
   res.json({ account: selfView(account), token });
@@ -96,6 +102,8 @@ accountRouter.post('/register', (req, res) => {
     password: req.body?.password,
     username: String(req.body?.username || '').trim(),
     referralCode: referral || null,
+    // What the app knows of itself, for the admin card.
+    app: req.body?.app ?? null,
   });
   if (result.error) return res.status(400).json({ error: result.error });
   const token = accountStore.issueToken(result.account.id);
@@ -142,6 +150,52 @@ accountRouter.post('/login', (req, res) => {
   if (result.error) return res.status(401).json({ error: result.error });
   const token = accountStore.issueToken(result.account.id);
   res.json({ account: selfView(result.account), token });
+});
+
+/**
+ * POST /api/accounts/google  { idToken, deviceId?, app? }
+ * "Se connecter avec Google". The identity token is checked against Google here, on the
+ * server: nothing the app claims about the person is taken on trust. An address already
+ * known signs into that account instead of making a second one.
+ */
+accountRouter.post('/google', async (req, res) => {
+  const checked = await verifyGoogleToken(req.body?.idToken);
+  if (checked.error) return res.status(401).json({ error: checked.error });
+  const outcome = accountStore.signInWithProvider(checked.identity, {
+    deviceId: req.body?.deviceId ? String(req.body.deviceId).trim() : null,
+    app: req.body?.app ?? null,
+  });
+  if (outcome.account.banned) return res.status(403).json({ error: 'banned' });
+  const token = accountStore.issueToken(outcome.account.id);
+  res.status(outcome.created ? 201 : 200).json({
+    account: selfView(outcome.account),
+    token,
+    created: outcome.created,
+    linked: outcome.linked,
+  });
+});
+
+/**
+ * POST /api/accounts/me/link/google  { idToken }
+ * Ties a Google account to the one already signed in, so either way in works afterwards.
+ */
+accountRouter.post('/me/link/google', async (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'unauthorized' });
+  const checked = await verifyGoogleToken(req.body?.idToken);
+  if (checked.error) return res.status(401).json({ error: checked.error });
+  const result = accountStore.linkProvider(account.id, checked.identity);
+  if (result.error) return res.status(409).json({ error: result.error });
+  res.json({ account: selfView(result.account) });
+});
+
+/** DELETE /api/accounts/me/link/google — unties it, unless it is the only way in. */
+accountRouter.delete('/me/link/google', (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'unauthorized' });
+  const result = accountStore.unlinkProvider(account.id, 'google');
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json({ account: selfView(result.account) });
 });
 
 /** GET /api/accounts/me — current account from the Bearer token / deviceId. */
@@ -264,6 +318,43 @@ accountRouter.post('/referrals', (req, res) => {
   const result = accountStore.createReferral(account.id);
   if (result.error) return res.status(400).json({ error: result.error });
   res.status(201).json(result);
+});
+
+/**
+ * PATCH /api/accounts/referrals/:code  { action: "extend" | "revoke" | "regenerate", months? }
+ * Extends a code, stops it, or replaces it with a fresh one. Every action is kept in the code's
+ * own history, with who did it and when.
+ */
+accountRouter.patch('/referrals/:code', (req, res) => {
+  const account = authAccount(req);
+  if (account?.role !== 'admin') return res.status(403).json({ error: 'admin only' });
+  const result = accountStore.actOnReferral(account.id, req.params.code, {
+    action: String(req.body?.action ?? ''),
+    months: req.body?.months,
+  });
+  if (result.error) return res.status(result.error === 'code not found' ? 404 : 400).json({ error: result.error });
+  res.json(result);
+});
+
+/** GET /api/accounts/referrals/settings — the duration new codes get, its range, and the log. */
+accountRouter.get('/referrals/settings', (req, res) => {
+  const account = authAccount(req);
+  if (account?.role !== 'admin') return res.status(403).json({ error: 'admin only' });
+  res.json({ settings: settingsStore.meta });
+});
+
+/**
+ * PUT /api/accounts/referrals/settings  { validityMonths }
+ * How long the codes minted from now on stay usable, between a month and a year. The codes
+ * already handed out keep their own date: only "extend" moves one.
+ */
+accountRouter.put('/referrals/settings', (req, res) => {
+  const account = authAccount(req);
+  if (account?.role !== 'admin') return res.status(403).json({ error: 'admin only' });
+  const months = Number(req.body?.validityMonths);
+  if (!Number.isFinite(months)) return res.status(400).json({ error: 'validityMonths required' });
+  const changed = settingsStore.setReferralValidity(months, account.username ?? account.id);
+  res.json({ settings: settingsStore.meta, changed });
 });
 
 /** POST /api/accounts/logout — revoke the current Bearer token. */

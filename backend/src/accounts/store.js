@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
 import { haversine } from '../radars/geo.js';
+import { settingsStore } from './settings.js';
 
 export const ROLES = ['guest', 'client', 'admin'];
 
@@ -83,10 +84,47 @@ function parisDay(now) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(now);
 }
 
+/**
+ * What the app says about itself when someone signs up or signs in: the phone, its system,
+ * the version of EONA and the language of the device. Nothing is guessed, nothing is asked
+ * of the system beyond what it hands over freely — no advertising identifier, ever.
+ */
+function appInfo(value) {
+  const text = (field, max = 60) => {
+    const raw = value?.[field];
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim().slice(0, max);
+    return trimmed || null;
+  };
+  const info = {
+    platform: text('platform', 16),
+    model: text('model', 60),
+    osVersion: text('osVersion', 30),
+    appVersion: text('appVersion', 30),
+    locale: text('locale', 20),
+    region: text('region', 10),
+  };
+  return Object.values(info).some(Boolean) ? info : null;
+}
+
 /** A phone is remembered by a hash of its device id, never by the id itself. */
 function deviceKey(deviceId) {
   return createHash('sha256').update(String(deviceId)).digest('hex');
 }
+/** A referral code may be used while it is active, not revoked, and not past its date. */
+function usableReferral(entry) {
+  if (!entry || entry.active === false) return false;
+  if (!entry.expiresAt) return true; // minted before durations existed: no end date
+  return Date.parse(entry.expiresAt) > Date.now();
+}
+
+/** One line in a code's own history, newest first. */
+function noteReferral(entry, line) {
+  if (!Array.isArray(entry.history)) entry.history = [];
+  entry.history.unshift(line);
+  entry.history = entry.history.slice(0, config.referralHistoryMax);
+}
+
 /**
  * Account store. Device-based identity: each app install authenticates with a
  * deviceId and gets a `guest` account by default. Roles (client/admin) are
@@ -101,6 +139,7 @@ class AccountStore {
     this.heldUsernames = new Map(); // lowercase -> { accountId, until } (names just left)
     this.sessions = new Map(); // token -> { accountId, expiresAt }
     this.deviceTrials = new Map(); // hashed deviceId -> end of the first trial on that phone (ISO)
+    this.byProvider = new Map(); // "google:123…" -> account
     this.saveTimer = null;
   }
 
@@ -144,6 +183,7 @@ class AccountStore {
     if (account.trips.length > config.accountTripHistoryMax) account.trips = account.trips.slice(0, config.accountTripHistoryMax);
     account.stats = statsShape(account.stats);
     if (!Array.isArray(account.referralCodes)) account.referralCodes = [];
+    if (!Array.isArray(account.providers)) account.providers = [];
     // Names left once, held for their owner a while: the lapsed ones go.
     account.heldUsernames = (Array.isArray(account.heldUsernames) ? account.heldUsernames : [])
       .filter((held) => held?.lower && Date.parse(held.until) > Date.now());
@@ -159,6 +199,7 @@ class AccountStore {
     if (account.deviceId) this.byDevice.set(account.deviceId, account);
     if (account.usernameLower) this.byUsername.set(account.usernameLower, account);
     if (account.emailLower) this.byEmail.set(account.emailLower, account);
+    for (const link of account.providers ?? []) this.byProvider.set(`${link.provider}:${link.subject}`, account);
     for (const held of account.heldUsernames) this.heldUsernames.set(held.lower, { accountId: account.id, until: held.until });
     this.noteDeviceTrial(account);
   }
@@ -183,6 +224,7 @@ class AccountStore {
     if (account.deviceId) this.byDevice.delete(account.deviceId);
     if (account.usernameLower) this.byUsername.delete(account.usernameLower);
     if (account.emailLower) this.byEmail.delete(account.emailLower);
+    for (const link of account.providers ?? []) this.byProvider.delete(`${link.provider}:${link.subject}`);
     for (const held of account.heldUsernames ?? []) {
       if (this.heldUsernames.get(held.lower)?.accountId === account.id) this.heldUsernames.delete(held.lower);
     }
@@ -207,10 +249,13 @@ class AccountStore {
   /** Auth by device: return the existing account (touch lastSeen) or create a guest. */
   auth(deviceId, meta = {}) {
     const now = new Date().toISOString();
+    const app = appInfo(meta);
     let account = this.byDevice.get(deviceId);
     if (account) {
       account.lastSeenAt = now;
       if (meta.platform) account.platform = meta.platform;
+      // The phone and the version move on: the card follows.
+      if (app) account.app = { ...account.app, ...app };
       this.scheduleSave();
       return account;
     }
@@ -220,6 +265,8 @@ class AccountStore {
       role: 'guest',
       displayName: null,
       platform: meta.platform ?? null,
+      app,
+      signupMethod: 'device',
       banned: false,
       createdAt: now,
       lastSeenAt: now,
@@ -406,14 +453,24 @@ class AccountStore {
     this.scheduleSave();
   }
 
+  /** The code and whoever minted it, while it may still be used: active, not revoked, not expired. */
   findReferral(code) {
     const normalized = String(code || '').trim().toUpperCase();
     if (!normalized) return null;
     for (const owner of this.byId.values()) {
-      const referral = owner.referralCodes?.find((entry) => entry.code === normalized && entry.active !== false);
+      const referral = owner.referralCodes?.find((entry) => entry.code === normalized && usableReferral(entry));
       if (referral) return { owner, referral };
     }
     return null;
+  }
+
+  /** One code of [ownerId], usable or not: what the admin screen acts on. */
+  referralOf(ownerId, code) {
+    const owner = this.get(ownerId);
+    if (!owner || owner.role !== 'admin') return null;
+    this.normalizeAccount(owner);
+    const normalized = String(code || '').trim().toUpperCase();
+    return owner.referralCodes.find((entry) => entry.code === normalized) ?? null;
   }
 
   createReferral(ownerId) {
@@ -424,16 +481,70 @@ class AccountStore {
     do {
       code = `XR-${randomBytes(4).toString('hex').toUpperCase()}`;
     } while (this.findReferral(code));
+    const now = new Date().toISOString();
+    const validity = settingsStore.referralValidityMonths;
     const referral = {
       code,
       active: true,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      // What the code grants once used…
       months: config.referralSubscriptionMonths,
+      // …and how long it may be used at all.
+      validityMonths: validity,
+      expiresAt: addMonths(now, validity),
       redemptions: [],
+      history: [{ at: now, action: 'created', by: owner.username ?? owner.id, months: validity }],
     };
     owner.referralCodes.unshift(referral);
     this.scheduleSave();
     return { referral };
+  }
+
+  /**
+   * Acts on one code: "extend" pushes its end further by [months], "revoke" stops it at once,
+   * "regenerate" revokes it and mints a fresh one. Every action is written in the code's history
+   * with its author and the moment.
+   */
+  actOnReferral(ownerId, code, { action, months }) {
+    const owner = this.get(ownerId);
+    if (!owner || owner.role !== 'admin') return { error: 'admin only' };
+    const referral = this.referralOf(ownerId, code);
+    if (!referral) return { error: 'code not found' };
+    const now = new Date().toISOString();
+    const by = owner.username ?? owner.id;
+
+    if (action === 'extend') {
+      const added = settingsStore.clampMonths(months ?? settingsStore.referralValidityMonths);
+      // From its own end when it is still alive, from today when it already lapsed.
+      const from = Date.parse(referral.expiresAt ?? now) > Date.now() ? referral.expiresAt : now;
+      referral.expiresAt = addMonths(from, added);
+      referral.active = true;
+      referral.revokedAt = null;
+      noteReferral(referral, { at: now, action: 'extended', by, months: added, until: referral.expiresAt });
+      this.scheduleSave();
+      return { referral };
+    }
+
+    if (action === 'revoke') {
+      referral.active = false;
+      referral.revokedAt = now;
+      noteReferral(referral, { at: now, action: 'revoked', by });
+      this.scheduleSave();
+      return { referral };
+    }
+
+    if (action === 'regenerate') {
+      referral.active = false;
+      referral.revokedAt = now;
+      noteReferral(referral, { at: now, action: 'regenerated', by });
+      const fresh = this.createReferral(ownerId);
+      if (fresh.error) return fresh;
+      noteReferral(fresh.referral, { at: now, action: 'replaces', by, code: referral.code });
+      this.scheduleSave();
+      return { referral: fresh.referral, replaced: referral.code };
+    }
+
+    return { error: 'action must be extend, revoke or regenerate' };
   }
 
   referralStats(ownerId) {
@@ -442,10 +553,16 @@ class AccountStore {
     this.normalizeAccount(owner);
     return owner.referralCodes.map((entry) => ({
       code: entry.code,
-      active: entry.active !== false,
+      // Usable right now: not revoked, not past its date.
+      active: usableReferral(entry),
       createdAt: entry.createdAt,
+      // What it grants once used, and how long it may still be used.
       months: entry.months ?? config.referralSubscriptionMonths,
+      validityMonths: entry.validityMonths ?? null,
+      expiresAt: entry.expiresAt ?? null,
+      revokedAt: entry.revokedAt ?? null,
       redemptions: Array.isArray(entry.redemptions) ? entry.redemptions.length : 0,
+      history: Array.isArray(entry.history) ? entry.history : [],
     }));
   }
 
@@ -655,7 +772,7 @@ class AccountStore {
     return { account };
   }
 
-  register({ email, password, username, referralCode = null }) {
+  register({ email, password, username, referralCode = null, app = null, method = 'email' }) {
     const e = String(email || '').trim().toLowerCase();
     if (!e.includes('@') || e.length > 190) return { error: 'invalid email' };
     if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
@@ -676,7 +793,10 @@ class AccountStore {
       passwordHash: hashPassword(password),
       emailVerified: false,
       avatarUrl: null,
-      platform: null,
+      platform: app?.platform ?? null,
+      app: appInfo(app),
+      // How this account came to be: by email, or through a provider.
+      signupMethod: method,
       banned: false,
       createdAt: now,
       lastSeenAt: now,
@@ -688,6 +808,127 @@ class AccountStore {
     this.index(account);
     this.scheduleSave();
     return { account };
+  }
+
+  // ---- Providers (Google) ---------------------------------------------------
+
+  /** The account already tied to this provider identity, or null. */
+  byProviderIdentity(provider, subject) {
+    return this.byProvider.get(`${provider}:${subject}`) ?? null;
+  }
+
+  /**
+   * Signs someone in from a provider identity already checked by the server.
+   *
+   *   • tied to an account already: that account signs in;
+   *   • same verified email as an account: the provider is linked to it, no second account;
+   *   • nobody yet: a new account, with a free username taken from the name or the email.
+   *
+   * An address Apple or Google hides behind a relay works like any other: it is just an
+   * address we can write to.
+   */
+  signInWithProvider(identity, { deviceId = null, app = null } = {}) {
+    const { provider, subject, email, emailVerified, name } = identity;
+    const now = new Date().toISOString();
+
+    const known = this.byProviderIdentity(provider, subject);
+    if (known) {
+      known.lastSeenAt = now;
+      if (deviceId && !known.deviceId) {
+        known.deviceId = deviceId;
+        this.byDevice.set(deviceId, known);
+      }
+      const info = appInfo(app);
+      if (info) known.app = { ...known.app, ...info };
+      this.scheduleSave();
+      return { account: known, created: false, linked: false };
+    }
+
+    // Same address, already an account: linked rather than doubled.
+    const byEmail = email && emailVerified ? this.byEmail.get(email) : null;
+    if (byEmail) {
+      this.linkProvider(byEmail.id, identity);
+      byEmail.lastSeenAt = now;
+      this.scheduleSave();
+      return { account: byEmail, created: false, linked: true };
+    }
+
+    const username = this.freeUsername(name ?? (email ? email.split("@")[0] : provider));
+    const account = {
+      id: randomUUID(),
+      deviceId: deviceId ?? null,
+      role: 'guest',
+      username,
+      usernameLower: username.toLowerCase(),
+      displayName: name ?? username,
+      email: email ?? null,
+      emailLower: email ?? null,
+      passwordHash: null,
+      // The provider checked the address, so we do not ask for it again.
+      emailVerified: Boolean(email && emailVerified),
+      avatarUrl: null,
+      platform: app?.platform ?? null,
+      app: appInfo(app),
+      signupMethod: provider,
+      providers: [{ provider, subject, email: email ?? null, linkedAt: now }],
+      banned: false,
+      createdAt: now,
+      lastSeenAt: now,
+    };
+    this.index(account);
+    this.scheduleSave();
+    return { account, created: true, linked: false };
+  }
+
+  /** Ties a provider identity to an account that already exists. */
+  linkProvider(id, { provider, subject, email }) {
+    const account = this.get(id);
+    if (!account) return { error: 'not found' };
+    this.normalizeAccount(account);
+    const taken = this.byProviderIdentity(provider, subject);
+    if (taken && taken.id !== account.id) return { error: 'already linked to another account' };
+    if (!account.providers.some((link) => link.provider === provider && link.subject === subject)) {
+      account.providers.push({ provider, subject, email: email ?? null, linkedAt: new Date().toISOString() });
+      this.byProvider.set(`${provider}:${subject}`, account);
+      this.scheduleSave();
+    }
+    return { account };
+  }
+
+  /**
+   * Unties a provider. Refused when it is the only way in: nobody is locked out of their own
+   * account by a tap in the settings.
+   */
+  unlinkProvider(id, provider) {
+    const account = this.get(id);
+    if (!account) return { error: 'not found' };
+    this.normalizeAccount(account);
+    const left = account.providers.filter((link) => link.provider !== provider);
+    if (left.length === account.providers.length) return { error: 'not linked' };
+    const canStillSignIn = Boolean(account.passwordHash) || left.length > 0 || Boolean(account.deviceId);
+    if (!canStillSignIn) return { error: 'set a password first' };
+    for (const link of account.providers) {
+      if (link.provider === provider) this.byProvider.delete(`${link.provider}:${link.subject}`);
+    }
+    account.providers = left;
+    this.scheduleSave();
+    return { account };
+  }
+
+  /** A username nobody has yet, built from [wanted] ("Jean Dupont" → "jeandupont", "…2"). */
+  freeUsername(wanted) {
+    const base = String(wanted ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_.]/g, '')
+      .slice(0, 16) || 'driver';
+    let candidate = base.length >= 3 ? base : `${base}eona`;
+    let n = 1;
+    while (!this.usernameAvailable(candidate).ok) {
+      n += 1;
+      candidate = `${base.slice(0, 16)}${n}`;
+    }
+    return candidate;
   }
 
   // ---- Email verification + password reset ----------------------------------

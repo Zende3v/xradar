@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { createApp } from './server.js';
 import { accountStore } from './accounts/store.js';
+import { settingsStore } from './accounts/settings.js';
 import { ensureCrowdSchema } from './crowd/schema.js';
 import { fuelStore } from './fuel/store.js';
 import { radarStore } from './radars/store.js';
@@ -15,6 +16,7 @@ radarStore.start();
 // Official fuel prices (refreshed every 10 min) — they only enrich the fuel search.
 fuelStore.start();
 // Load persisted accounts.
+settingsStore.load().catch((e) => console.error('[settings] load failed:', e.message));
 accountStore.start().catch((e) => console.error('[accounts] start failed:', e.message));
 // Drivers' reports and speed-limit changes live in PostGIS (schema crowd): the schema first,
 // then the stores that prune and decide on it.
