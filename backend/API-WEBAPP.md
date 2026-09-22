@@ -198,6 +198,45 @@ dans `trips.shares`.
 
 ---
 
+## 5 ter. Trajet en groupe
+
+Jusqu'à cinq conducteurs vont à la même adresse, chacun depuis son point de départ et sur son
+propre itinéraire. Comme le partage simple : tout en mémoire, rien écrit.
+
+| Besoin | Appel | Droits |
+|---|---|---|
+| Créer un groupe | `POST /api/trips/group` `{destination, toLabel?, route?}` | compte |
+| Rejoindre | `POST /api/trips/group/join` `{code, route?}` | compte |
+| Son groupe | `GET /api/trips/group` | compte |
+| Envoyer sa position | `PATCH /api/trips/group/me` `{lat, lon, bearing?, speedKmh?, remainingM?, etaS?, progress?, distanceM?, route?, arrived?, sharing?, observable?}` | compte |
+| Suivre un participant | `GET /api/trips/group/member/:id` | compte du groupe |
+| Quitter | `POST /api/trips/group/leave` | compte |
+| Annuler le trajet | `DELETE /api/trips/group` | créateur |
+| Ouvrir / révoquer le lien | `POST` / `DELETE /api/trips/group/link` | créateur |
+| Retirer un observateur | `DELETE /api/trips/group/observers/:id` | créateur |
+| Observer le groupe | `GET /api/trips/group/watch/:token` | compte |
+
+Ce qui sort du serveur dépend de ce que chacun accepte :
+
+- `sharing` à `false` : plus de position, plus de vitesse, plus d'avancement pour ce
+  participant, ni pour le groupe ni pour le lien. Il reste listé avec son pseudo et son état ;
+- `observable` à `false` : il disparaît du lien public, le groupe continue de le voir ;
+- l'itinéraire ne part que dans `GET /api/trips/group/member/:id` et dans la vue observateur,
+  et il est effacé dès l'arrivée du participant.
+
+États d'un participant : `invited` (pas encore parti), `driving`, `arrived`, `left`. Un
+téléphone muet depuis 45 s passe `online: false` en gardant sa dernière position ; il ne quitte
+le groupe qu’après 15 minutes de silence.
+
+Le classement est pris dans l'ordre des arrivées et figé à la fin du trajet (tous arrivés ou
+partis, ou annulation du créateur) : `ranking` donne `name`, `rank`, `durationS`, `distanceM`.
+
+`GET /g/:token` est la page publique du lien de groupe ; elle ouvre l’app et répond 410 quand le
+trajet est fini. `/health` compte les groupes et leurs participants dans `trips.groups` et
+`trips.members`.
+
+---
+
 ## 6. Signalisation (mapper)
 
 Lecture, comme avant :
