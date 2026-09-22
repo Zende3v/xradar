@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authAccount } from '../accounts/auth.js';
 import { followerView, ownerView, shareStore } from './shares.js';
+import { groupStore, groupView, memberDetail, observerView } from './groups.js';
 
 export const tripRouter = Router();
 
@@ -86,8 +87,169 @@ tripRouter.get('/shared/:token', (req, res) => {
   res.json({ share: followerView(share) });
 });
 
+// ---- Trajet en groupe --------------------------------------------------------------------
+//
+// Up to five drivers, each leaving from their own place, all going to the same address. Everyone
+// sees where the others are and how far along they are — but only those who agreed to share it.
+// Like the plain share, a group lives in memory and leaves nothing behind.
+
+/**
+ * POST /api/trips/group  { toLabel?, destination: {lat, lon}, route? }
+ * Opens a group and hands back its joining code. Being in a group replaces the previous one.
+ */
+tripRouter.post('/group', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const destination = point(req.body?.destination);
+  if (!destination) return res.status(400).json({ error: 'destination required' });
+  const group = groupStore.open(account, {
+    toLabel: req.body?.toLabel,
+    destination,
+    route: routeOf(req.body?.route),
+  });
+  res.status(201).json({ group: groupView(group, account.id) });
+});
+
+/**
+ * POST /api/trips/group/join  { code, route? }
+ * Joins the group behind a code: same destination, own start, own route.
+ */
+tripRouter.post('/group/join', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const result = groupStore.join(account, req.body?.code, { route: routeOf(req.body?.route) });
+  if (result.error) return res.status(result.error === 'group full' ? 409 : 404).json({ error: result.error });
+  res.json({ group: groupView(result.group, account.id) });
+});
+
+/** GET /api/trips/group — my group as it stands, or null. This is what the map reads. */
+tripRouter.get('/group', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (group) groupStore.settle(group);
+  res.json({ group: group ? groupView(group, account.id) : null });
+});
+
+/**
+ * PATCH /api/trips/group/me  { lat, lon, bearing?, speedKmh?, remainingM?, etaS?, progress?,
+ *                              distanceM?, route?, arrived?, sharing?, observable? }
+ * Where I am and how far along I am — and whether I still want the others to see it. Answers with
+ * the whole group, so one call a tick is enough.
+ */
+tripRouter.patch('/group/me', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.update(account.id, {
+    lat: Number(req.body?.lat),
+    lon: Number(req.body?.lon),
+    bearing: Number(req.body?.bearing),
+    speedKmh: Number(req.body?.speedKmh),
+    remainingM: Number(req.body?.remainingM),
+    etaS: Number(req.body?.etaS),
+    progress: Number(req.body?.progress),
+    distanceM: Number(req.body?.distanceM),
+    route: routeOf(req.body?.route),
+    toLabel: req.body?.toLabel,
+    arrived: req.body?.arrived,
+    sharing: typeof req.body?.sharing === 'boolean' ? req.body.sharing : undefined,
+    observable: typeof req.body?.observable === 'boolean' ? req.body.observable : undefined,
+  });
+  if (!group) return res.status(404).json({ error: 'no group' });
+  res.json({ group: groupView(group, account.id) });
+});
+
+/**
+ * GET /api/trips/group/member/:id — one participant in full, for "suivre ce participant": their
+ * progress, their route, their speed. Refused when they do not share; nothing else is exposed.
+ */
+tripRouter.get('/group/member/:id', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (!group) return res.status(404).json({ error: 'no group' });
+  const detail = memberDetail(group, req.params.id);
+  if (!detail) return res.status(404).json({ error: 'not in this group' });
+  if (detail.sharing === false) return res.status(403).json({ error: 'not sharing' });
+  res.json({ member: detail });
+});
+
+/** POST /api/trips/group/leave — I step out. The host stepping out ends the group for everyone. */
+tripRouter.post('/group/leave', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  groupStore.leave(account.id);
+  res.json({ left: true });
+});
+
+/** DELETE /api/trips/group — the host cancels the trip: the link dies, everyone is told. */
+tripRouter.delete('/group', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (!group) return res.status(404).json({ error: 'no group' });
+  if (group.hostId !== account.id) return res.status(403).json({ error: 'host only' });
+  groupStore.close(group);
+  res.json({ group: groupView(group, account.id) });
+});
+
+/** POST /api/trips/group/link — the host opens a link to watch the group; it replaces the old one. */
+tripRouter.post('/group/link', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (!group) return res.status(404).json({ error: 'no group' });
+  if (group.hostId !== account.id) return res.status(403).json({ error: 'host only' });
+  groupStore.openLink(group);
+  res.status(201).json({ group: groupView(group, account.id) });
+});
+
+/** DELETE /api/trips/group/link — the link stops working at once, for everyone holding it. */
+tripRouter.delete('/group/link', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (!group) return res.status(404).json({ error: 'no group' });
+  if (group.hostId !== account.id) return res.status(403).json({ error: 'host only' });
+  groupStore.revokeLink(group);
+  res.json({ group: groupView(group, account.id) });
+});
+
+/** DELETE /api/trips/group/observers/:id — one watcher is removed; the link keeps working. */
+tripRouter.delete('/group/observers/:id', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (!group) return res.status(404).json({ error: 'no group' });
+  if (group.hostId !== account.id) return res.status(403).json({ error: 'host only' });
+  groupStore.removeObserver(group, String(req.params.id));
+  res.json({ group: groupView(group, account.id) });
+});
+
+/**
+ * GET /api/trips/group/watch/:token — the group as a watcher sees it: the map, the progress, the
+ * routes and the speeds of the members who agreed to be seen. An account is required, and a
+ * watcher the host removed is refused.
+ */
+tripRouter.get('/group/watch/:token', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.byWatchToken(req.params.token);
+  if (!group) return res.status(404).json({ error: 'link over' });
+  if (group.removedObserverIds.has(account.id)) return res.status(403).json({ error: 'removed' });
+  groupStore.settle(group);
+  // Counted so the host knows how many watch, and named only so one can be removed.
+  if (!group.members.has(account.id)) group.observerIds.add(account.id);
+  res.json({ group: observerView(group) });
+});
+
 function point(value) {
   const lat = Number(value?.lat);
   const lon = Number(value?.lon);
   return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+}
+
+/** A route as [[lon, lat], …], or null. */
+function routeOf(value) {
+  return Array.isArray(value) && value.length >= 2 ? value : null;
 }

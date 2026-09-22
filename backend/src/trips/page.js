@@ -1,14 +1,40 @@
 import { config } from './../config.js';
 import { shareStore } from './shares.js';
+import { groupStore } from './groups.js';
 
 /**
- * The page behind a shared link. It is not a map: it opens the app, where the trip is followed.
+ * The pages behind a shared link. Neither is a map: they open the app, where the trip is followed.
  * Someone without EONA lands on a short explanation instead of a stranger's position.
  */
+
+/** A trip shared by one driver: /t/<token>. */
 export function sharePage(req, res) {
   const token = String(req.params.token || '').slice(0, 32);
-  const live = Boolean(shareStore.get(token));
-  const deepLink = `eona://t/${encodeURIComponent(token)}`;
+  send(res, {
+    live: Boolean(shareStore.get(token)),
+    deepLink: `eona://t/${encodeURIComponent(token)}`,
+    liveTitle: 'Un trajet t’est partagé',
+    liveText: 'Ouvre EONA pour suivre le trajet en direct : la position, l’itinéraire et l’heure d’arrivée.',
+    overText: 'Le conducteur est arrivé, ou a arrêté le partage. Le lien ne montre plus rien.',
+    foot: 'Un compte EONA est nécessaire pour suivre un trajet. Le lien s’éteint à l’arrivée.',
+  });
+}
+
+/** A trip driven by a group: /g/<token>. */
+export function groupPage(req, res) {
+  const token = String(req.params.token || '').slice(0, 32);
+  send(res, {
+    live: Boolean(groupStore.byWatchToken(token)),
+    deepLink: `eona://g/${encodeURIComponent(token)}`,
+    liveTitle: 'Un trajet en groupe t’est partagé',
+    liveText:
+      'Ouvre EONA pour suivre le groupe en direct : la carte, l’avancement et la vitesse des participants qui ont accepté de les partager.',
+    overText: 'Le trajet est terminé, ou le lien a été révoqué. Il ne montre plus rien.',
+    foot: 'Un compte EONA est nécessaire. Un participant qui ne partage pas sa position n’apparaît pas.',
+  });
+}
+
+function send(res, { live, deepLink, liveTitle, liveText, overText, foot }) {
   res.set('Cache-Control', 'no-store');
   res.status(live ? 200 : 410).send(`<!doctype html>
 <html lang="fr">
@@ -31,17 +57,16 @@ export function sharePage(req, res) {
 </head>
 <body>
 <main>
-  <h1>${live ? 'Un trajet t’est partagé' : 'Ce partage est terminé'}</h1>
-  <p>${live
-    ? 'Ouvre EONA pour suivre le trajet en direct : la position, l’itinéraire et l’heure d’arrivée.'
-    : 'Le conducteur est arrivé, ou a arrêté le partage. Le lien ne montre plus rien.'}</p>
+  <h1>${live ? liveTitle : 'Ce partage est terminé'}</h1>
+  <p>${live ? liveText : overText}</p>
   ${live ? `<a class="open" href="${deepLink}">Ouvrir dans EONA</a>` : ''}
-  <small>Un compte EONA est nécessaire pour suivre un trajet. Le lien s’éteint à l’arrivée.</small>
+  <small>${foot}</small>
 </main>
 ${live ? '<script>setTimeout(function () { location.href = ' + JSON.stringify(deepLink) + '; }, 400);</script>' : ''}
 </body>
 </html>`);
 }
 
-/** The scheme the app answers to, for the documentation. */
+/** The schemes the app answers to, for the documentation. */
 export const APP_SCHEME = `${config.shareBaseUrl}/t/<token>`;
+export const GROUP_SCHEME = `${config.shareBaseUrl}/g/<token>`;

@@ -403,6 +403,20 @@ export const config = {
   // Where the link points: the page that opens the app.
   shareBaseUrl: (process.env.SHARE_BASE_URL || process.env.PUBLIC_BASE_URL || 'https://api.lrda-mercuriale.uk').replace(/\/$/, ''),
 
+  // Group trips ("Trajet en groupe"): up to five drivers, each from their own start, towards one
+  // destination. Everything is held in memory like a plain share — nothing is written to disk.
+  groupMaxMembers: 5,
+  // A group lasts a working day at most, and a quarter of an hour past the last arrival so the
+  // ranking can be read.
+  groupMaxMs: 6 * H,
+  groupAfterFinishMs: 15 * MIN,
+  // A driver heard from within this is live; past it the map says "signal perdu" and keeps their
+  // last position. They only leave the group after groupDropMs of silence.
+  groupOnlineMs: 45 * 1000,
+  groupDropMs: 15 * MIN,
+  // A joining code: short enough to read out loud, long enough not to be guessed.
+  groupCodeLength: 6,
+
   // Presence: an account counts as online (and on a trip or not) for 90 s after the app said so.
   liveTtlMs: 90 * 1000,
   // Positions shared by the drivers who turned them on: kept this long, then purged. A trace

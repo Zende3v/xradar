@@ -21,7 +21,8 @@ import { bugRouter } from './bugs/routes.js';
 import { tripRouter } from './trips/routes.js';
 import { searchRouter } from './search/routes.js';
 import { shareStore } from './trips/shares.js';
-import { sharePage } from './trips/page.js';
+import { groupStore } from './trips/groups.js';
+import { groupPage, sharePage } from './trips/page.js';
 import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
 
@@ -51,6 +52,8 @@ export function createApp() {
   app.use('/api/radars/route', express.json({ limit: '3mb' }));
   app.use('/api/traffic/route', express.json({ limit: '3mb' }));
   app.use('/api/route/faster', express.json({ limit: '3mb' }));
+  // A shared trip carries its route: a long one does not fit in the 16 kb of the rest.
+  app.use('/api/trips', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {
@@ -64,7 +67,7 @@ export function createApp() {
       live: liveStore.meta,
       routing: config.orsApiKey ? { provider: 'ors', ...orsKeysMeta() } : { provider: 'osrm' },
       traffic: { provider: config.tomtomApiKey ? 'tomtom' : null, probes: probeStore.meta.count },
-      trips: shareStore.meta,
+      trips: { ...shareStore.meta, ...groupStore.meta },
       signs: { published },
       speedLimits: speedLimitStore.meta,
       fuel: fuelStore.meta,
@@ -78,6 +81,7 @@ export function createApp() {
   app.use('/api/search', searchRouter);
   // The page behind a shared link: it opens the app, it never shows a position itself.
   app.get('/t/:token', sharePage);
+  app.get('/g/:token', groupPage);
   app.use('/api/admin/accounts', adminAccountRouter);
   app.use('/api/live', liveRouter);
   app.use('/api/places', placeRouter);
