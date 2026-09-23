@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { authAccount } from '../accounts/auth.js';
+import { accountStore } from '../accounts/store.js';
 import { followerView, ownerView, shareStore } from './shares.js';
-import { groupStore, groupView, memberDetail, observerView, positionView, routesFor } from './groups.js';
+import { groupStore, groupView, memberDetail, memberLive, observerView, positionView, routesFor } from './groups.js';
 
 export const tripRouter = Router();
 
@@ -183,6 +184,23 @@ tripRouter.get('/group/member/:id', (req, res) => {
   if (!detail) return res.status(404).json({ error: 'not in this group' });
   if (detail.sharing === false) return res.status(403).json({ error: 'not sharing' });
   res.json({ member: detail });
+});
+
+/**
+ * GET /api/trips/group/member/:id/card — a member's card, for the other members of the same
+ * group only: photo, name, role, month joined, trust score, statistics (unless they hid them)
+ * and where they stand in this trip. Nothing about who is not in the caller's group.
+ */
+tripRouter.get('/group/member/:id/card', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (!group) return res.status(404).json({ error: 'no group' });
+  const live = memberLive(group, req.params.id);
+  if (!live) return res.status(404).json({ error: 'not in this group' });
+  const card = accountStore.cardFor(req.params.id);
+  if (!card) return res.status(404).json({ error: 'not found' });
+  res.json({ card: { ...card, username: card.username ?? live.name, live } });
 });
 
 /**

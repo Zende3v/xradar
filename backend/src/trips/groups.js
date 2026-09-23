@@ -572,6 +572,14 @@ export function simplify(route) {
 }
 
 /** One member in full — their route included — for the "suivre ce participant" view. */
+/** A member as their card shows them in the group: where they stand, never their route. */
+export function memberLive(group, memberId) {
+  const m = group.members.get(memberId);
+  if (!m) return null;
+  const { position, routeRev, route, ...live } = memberView(m);
+  return { ...live, host: group.hostId === m.accountId };
+}
+
 export function memberDetail(group, memberId) {
   const m = group.members.get(memberId);
   if (!m) return null;

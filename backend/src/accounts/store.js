@@ -7,6 +7,16 @@ import { settingsStore } from './settings.js';
 
 export const ROLES = ['guest', 'client', 'admin'];
 
+/**
+ * "Note de confiance", 0..5: the share of your reports others confirmed, smoothed
+ * so a single lucky report is not five stars — (confirmed + 1) / (declared + 2).
+ */
+export function trustOf(stats) {
+  const declared = Number(stats?.reportsDeclared) || 0;
+  const confirmed = Number(stats?.reportsConfirmed) || 0;
+  return Math.round(((confirmed + 1) / (declared + 2)) * 50) / 10;
+}
+
 const USERNAME_RE = /^[a-zA-Z0-9_.]{3,20}$/;
 
 /** scrypt password hash, stored as "salt:hash" (both hex). */
@@ -1025,6 +1035,45 @@ class AccountStore {
     if (avatarUrl !== undefined) account.avatarUrl = avatarUrl;
     this.scheduleSave();
     return { account };
+  }
+
+  /** What the driver shows of themself to the other members of a group trip. */
+  setPrivacy(id, { groupStatsVisible }) {
+    const account = this.byId.get(id);
+    if (!account) return { error: 'not found' };
+    if (groupStatsVisible) delete account.groupStatsHidden;
+    else account.groupStatsHidden = true;
+    this.scheduleSave();
+    return { account };
+  }
+
+  /**
+   * A driver's card, as the other members of their group trip see it: the photo, the name, the
+   * role, the month they joined and the trust score always; the statistics unless the driver
+   * hid them. Never the email, the trips or anything that says where they go.
+   */
+  cardFor(id) {
+    const account = this.get(id);
+    if (!account) return null;
+    this.normalizeAccount(account);
+    const s = account.stats;
+    const hidden = Boolean(account.groupStatsHidden);
+    return {
+      id: account.id,
+      username: account.username ?? account.displayName ?? null,
+      avatarUrl: account.avatarUrl ?? null,
+      role: account.role,
+      memberSince: typeof account.createdAt === 'string' ? account.createdAt.slice(0, 7) : null,
+      trust: trustOf(s),
+      statsHidden: hidden,
+      stats: hidden ? null : {
+        distanceMeters: s.distanceMeters,
+        driveDurationSeconds: s.driveDurationSeconds,
+        tripCount: s.tripCount,
+        reportsDeclared: s.reportsDeclared,
+        reportsConfirmed: s.reportsConfirmed,
+      },
+    };
   }
 
   // ---- Sessions (in-memory tokens) ------------------------------------------

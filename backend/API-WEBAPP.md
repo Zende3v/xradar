@@ -225,6 +225,7 @@ vide comme une anomalie.
 | Temps d'utilisation | **désactivé** | `stats.appDurationSeconds` n'augmente pas ; `lastActiveAt` reste tenu à jour dès que l'app appelle le serveur |
 | Aide au trafic partagé | activé | Aucun ralentissement remonté : moins de bouchons détectés automatiquement |
 | Suggestions de trajets | activé | Ne change rien côté serveur : les destinations récentes restent sur le téléphone |
+| Statistiques visibles du groupe | activé | Dans un trajet en groupe, la fiche du conducteur montre photo, pseudo et note seulement (`stats: null`) |
 
 ---
 
@@ -267,6 +268,12 @@ propre itinéraire. Comme le partage simple : tout en mémoire, rien écrit.
 | Suivre un participant | `GET /api/trips/group/member/:id` | compte du groupe |
 | Écouter le groupe en direct | `GET /api/trips/group/stream` (SSE) | compte du groupe |
 | Tracés des autres | `GET /api/trips/group/routes?known=<id>:<rev>,…` | compte du groupe |
+| Fiche d'un participant | `GET /api/trips/group/member/:id/card` | compte du groupe |
+| Quitter | `POST /api/trips/group/leave` | compte |
+| Annuler le trajet | `DELETE /api/trips/group` | créateur |
+| Ouvrir / révoquer le lien | `POST` / `DELETE /api/trips/group/link` | créateur |
+| Retirer un observateur | `DELETE /api/trips/group/observers/:id` | créateur |
+| Observer le groupe | `GET /api/trips/group/watch/:token` | compte |
 
 `/stream` pousse deux sortes d'événements : `group` (le groupe entier, quand sa forme change :
 arrivée ou départ d'un membre, partage coupé, chef qui change, tracé changé, fin) et `pos` (une
@@ -276,11 +283,15 @@ les 15 s pour garder la connexion. Pendant que le flux est ouvert, l'app envoie 
 les 3 s avec `lite: true` : la réponse se réduit à `{ ok, now }`.
 
 `/routes` ne renvoie que les tracés dont la version diffère de celle que le téléphone a déjà.
-| Quitter | `POST /api/trips/group/leave` | compte |
-| Annuler le trajet | `DELETE /api/trips/group` | créateur |
-| Ouvrir / révoquer le lien | `POST` / `DELETE /api/trips/group/link` | créateur |
-| Retirer un observateur | `DELETE /api/trips/group/observers/:id` | créateur |
-| Observer le groupe | `GET /api/trips/group/watch/:token` | compte |
+
+`/member/:id/card` : la fiche qu'un participant ouvre en touchant la photo d'un autre. Elle ne
+répond qu'aux membres du même groupe : `username`, `avatarUrl`, `role`, `memberSince`
+(`AAAA-MM`), `trust` (note de confiance, 0 à 5), `stats` (`distanceMeters`,
+`driveDurationSeconds`, `tripCount`, `reportsDeclared`, `reportsConfirmed`) et `live` (son état
+dans ce trajet : `state`, `rank`, `host`, `speedKmh`, `remainingM`, `etaAt` s'il partage). Le
+conducteur qui a caché ses statistiques (`PATCH /api/accounts/me/privacy {groupStatsVisible:false}`)
+renvoie `stats: null` et `statsHidden: true` ; photo, pseudo et note restent. Jamais l'e-mail, ni
+les trajets, ni l'itinéraire.
 
 Ce qui sort du serveur dépend de ce que chacun accepte :
 

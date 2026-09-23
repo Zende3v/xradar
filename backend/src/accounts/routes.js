@@ -6,7 +6,7 @@ import { transaction } from '../crowd/schema.js';
 import { liveStore } from '../live/store.js';
 import { adminActor, authAccount, publicView } from './auth.js';
 import { adminAudit } from '../admin/audit.js';
-import { accountStore } from './store.js';
+import { accountStore, trustOf } from './store.js';
 import { verifyGoogleToken } from './google.js';
 import { settingsStore } from './settings.js';
 import { mailer } from '../mailer.js';
@@ -38,17 +38,9 @@ function selfView(a) {
     signupMethod: a.signupMethod ?? null,
     providers: (a.providers ?? []).map((link) => ({ provider: link.provider, email: link.email, linkedAt: link.linkedAt })),
     hasPassword: Boolean(a.passwordHash),
+    // In a group trip, the other members see these statistics on the driver's card.
+    groupStatsVisible: !a.groupStatsHidden,
   };
-}
-
-/**
- * "Note de confiance", 0..5: the share of your reports others confirmed, smoothed
- * so a single lucky report is not five stars — (confirmed + 1) / (declared + 2).
- */
-function trustOf(stats) {
-  const declared = Number(stats.reportsDeclared) || 0;
-  const confirmed = Number(stats.reportsConfirmed) || 0;
-  return Math.round(((confirmed + 1) / (declared + 2)) * 50) / 10;
 }
 
 /**
@@ -225,6 +217,22 @@ accountRouter.patch('/me', (req, res) => {
   }
   const result = accountStore.setProfile(account.id, { avatarUrl: req.body?.avatarUrl });
   if (result.error) return res.status(400).json({ error: result.error });
+  res.json({ account: selfView(result.account) });
+});
+
+/**
+ * PATCH /api/accounts/me/privacy  { groupStatsVisible } — any account, guests too: whether the
+ * other members of a group trip see the driver's statistics on their card. The photo, the name
+ * and the trust score stay visible to them either way.
+ */
+accountRouter.patch('/me/privacy', (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'unauthorized' });
+  if (typeof req.body?.groupStatsVisible !== 'boolean') {
+    return res.status(400).json({ error: 'groupStatsVisible must be true or false' });
+  }
+  const result = accountStore.setPrivacy(account.id, { groupStatsVisible: req.body.groupStatsVisible });
+  if (result.error) return res.status(404).json({ error: result.error });
   res.json({ account: selfView(result.account) });
 });
 
