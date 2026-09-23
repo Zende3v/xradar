@@ -69,7 +69,9 @@ class GroupStore {
       this.byAccount.set(account.id, group.id);
       return { group };
     }
-    if (!known && group.members.size >= config.groupMaxMembers) return { error: 'group full' };
+    // Those who left give their place back.
+    const seated = [...group.members.values()].filter((m) => m.state !== 'left').length;
+    if (!known && seated >= config.groupMaxMembers) return { error: 'group full' };
     if (this.byAccount.get(account.id) !== group.id) this.leave(account.id);
     // Someone who left and comes back starts over: nothing of the first attempt is kept.
     group.members.set(account.id, member(account, { route }));
@@ -134,7 +136,7 @@ class GroupStore {
     }
     if (fields.toLabel) me.toLabel = String(fields.toLabel).slice(0, 160);
     if (Array.isArray(fields.route) && fields.route.length >= 2) {
-      me.route = fields.route;
+      me.route = simplify(fields.route);
       me.routeRev += 1;
     }
     if (Number.isFinite(fields.lat) && Number.isFinite(fields.lon)) {
@@ -195,6 +197,7 @@ class GroupStore {
     const me = group.members.get(accountId);
     if (me && me.state !== 'arrived') {
       me.state = 'left';
+      me.leftAt = Date.now();
       me.position = null;
       me.route = null;
       me.speedKmh = null;
@@ -337,6 +340,9 @@ function member(account, { route } = {}) {
   return {
     accountId: account.id,
     name: account.username ?? account.displayName ?? 'Un conducteur',
+    // The profile picture, as the account shows it everywhere else.
+    avatarUrl: account.avatarUrl ?? null,
+    leftAt: null,
     // Sharing is a choice, made in the app before joining and changed at any moment.
     sharing: true,
     observable: true,
@@ -354,7 +360,7 @@ function member(account, { route } = {}) {
     durationS: null,
     rank: null,
     toLabel: null,
-    route: route ?? null,
+    route: route ? simplify(route) : null,
     routeRev: 0,
   };
 }
@@ -376,7 +382,9 @@ function memberView(m, { withRoute = false } = {}) {
     sharing: m.sharing,
     online: online(m),
     rank: m.rank,
+    avatarUrl: m.avatarUrl ?? null,
     joinedAt: new Date(m.joinedAt).toISOString(),
+    leftAt: m.leftAt ? new Date(m.leftAt).toISOString() : null,
   };
   if (m.state === 'arrived') {
     base.arrivedAt = m.arrivedAt ? new Date(m.arrivedAt).toISOString() : null;
@@ -427,6 +435,67 @@ export function groupView(group, viewerId) {
   };
 }
 
+/**
+ * The routes of the other members who share, except those the phone already has: [known]
+ * maps a member id to the route version it holds. A route crosses the network once per
+ * change, never at every tick.
+ */
+export function routesFor(group, viewerId, known = new Map()) {
+  const routes = [];
+  for (const m of group.members.values()) {
+    if (m.accountId === viewerId || !m.sharing || m.state === 'left' || !m.route) continue;
+    if (known.get(m.accountId) === m.routeRev) continue;
+    routes.push({ id: m.accountId, rev: m.routeRev, route: m.route });
+  }
+  return routes;
+}
+
+/**
+ * A route light enough to travel: points closer than ~8 m to the line they sit on go
+ * (Douglas–Peucker), and 1500 points at most remain. The shape on the map does not change.
+ */
+export function simplify(route) {
+  const points = route
+    .map((p) => [Number(p?.[0]), Number(p?.[1])])
+    .filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
+  if (points.length <= 2) return points;
+  const toleranceDeg = 8 / 111_320;
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+  const stack = [[0, points.length - 1]];
+  while (stack.length) {
+    const [first, last] = stack.pop();
+    let worst = 0;
+    let index = -1;
+    const [ax, ay] = points[first];
+    const [bx, by] = points[last];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const length2 = dx * dx + dy * dy;
+    for (let i = first + 1; i < last; i += 1) {
+      const [px, py] = points[i];
+      const t = length2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length2));
+      const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+      if (d > worst) {
+        worst = d;
+        index = i;
+      }
+    }
+    if (index > 0 && worst > toleranceDeg) {
+      keep[index] = 1;
+      stack.push([first, index], [index, last]);
+    }
+  }
+  let kept = points.filter((_, i) => keep[i]);
+  if (kept.length > 1500) {
+    const step = kept.length / 1500;
+    kept = Array.from({ length: 1500 }, (_, i) => kept[Math.min(kept.length - 1, Math.round(i * step))]);
+    kept[kept.length - 1] = points[points.length - 1];
+  }
+  return kept;
+}
+
 /** One member in full — their route included — for the "suivre ce participant" view. */
 export function memberDetail(group, memberId) {
   const m = group.members.get(memberId);
@@ -440,7 +509,7 @@ export function memberDetail(group, memberId) {
  * of the members who agreed to it, and nothing else. A member who is not observable is absent.
  */
 export function observerView(group) {
-  const shown = [...group.members.values()].filter((m) => m.sharing && m.observable);
+  const shown = [...group.members.values()].filter((m) => m.sharing && m.observable && m.state !== 'left');
   return {
     toLabel: group.toLabel,
     destination: group.destination,

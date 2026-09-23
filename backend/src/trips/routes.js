@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authAccount } from '../accounts/auth.js';
 import { followerView, ownerView, shareStore } from './shares.js';
-import { groupStore, groupView, memberDetail, observerView } from './groups.js';
+import { groupStore, groupView, memberDetail, observerView, routesFor } from './groups.js';
 
 export const tripRouter = Router();
 
@@ -178,6 +178,26 @@ tripRouter.get('/group/member/:id', (req, res) => {
   if (!detail) return res.status(404).json({ error: 'not in this group' });
   if (detail.sharing === false) return res.status(403).json({ error: 'not sharing' });
   res.json({ member: detail });
+});
+
+/**
+ * GET /api/trips/group/routes?known=<id>:<rev>,<id>:<rev>
+ * The routes of the other members who share, drawn on the main map. Only those whose version
+ * differs from what the phone holds come back: a route travels once per change.
+ */
+tripRouter.get('/group/routes', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (!group) return res.status(404).json({ error: 'no group' });
+  const known = new Map(
+    String(req.query.known ?? '')
+      .split(',')
+      .map((pair) => pair.split(':'))
+      .filter(([id, rev]) => id && Number.isFinite(Number(rev)))
+      .map(([id, rev]) => [id, Number(rev)]),
+  );
+  res.json({ routes: routesFor(group, account.id, known) });
 });
 
 /**
