@@ -80,10 +80,24 @@ async function api(method, path, body) {
   return json;
 }
 
+/** Every account, page after page: the admin API hands them out by 200 at most. */
+async function allAccounts(role) {
+  const accounts = [];
+  let meta = null;
+  let offset = 0;
+  while (offset !== null) {
+    const q = `?limit=200&offset=${offset}${role ? `&role=${role}` : ''}`;
+    const page = await api('GET', `/api/admin/accounts${q}`);
+    accounts.push(...page.accounts);
+    meta = page.meta;
+    offset = page.next ?? null;
+  }
+  return { accounts, meta };
+}
+
 async function list(role) {
   if (role && !ROLES.includes(role)) fail(`invalid role "${role}"`);
-  const q = role ? `?role=${role}` : '';
-  const { accounts, meta } = await api('GET', `/api/admin/accounts${q}`);
+  const { accounts, meta } = await allAccounts(role);
   if (!accounts.length) {
     console.log('Aucun compte.');
   } else {
@@ -100,7 +114,7 @@ async function show(arg) {
 
 /** Accept either an account id or a deviceId (both are UUIDs) and return the account id. */
 async function resolveId(arg) {
-  const { accounts } = await api('GET', '/api/admin/accounts');
+  const { accounts } = await allAccounts();
   const hit = accounts.find((a) => a.id === arg || a.deviceId === arg);
   if (!hit) fail(`aucun compte avec l'id (ou device) "${arg}" — vérifie avec: list`);
   return hit.id;
