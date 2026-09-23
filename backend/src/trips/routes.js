@@ -128,12 +128,15 @@ tripRouter.get('/group', (req, res) => {
   if (!account) return;
   const group = groupStore.forAccount(account.id);
   if (group) groupStore.settle(group);
-  res.json({ group: group ? groupView(group, account.id) : null });
+  const view = group ? groupView(group, account.id) : null;
+  // A cancelled group is shown once, then forgotten: choosing the same place again starts afresh.
+  if (group) groupStore.release(group, account.id);
+  res.json({ group: view });
 });
 
 /**
  * PATCH /api/trips/group/me  { lat, lon, bearing?, speedKmh?, remainingM?, etaS?, progress?,
- *                              distanceM?, route?, arrived?, sharing?, observable? }
+ *                              distanceM?, route?, started?, arrived?, sharing?, observable? }
  * Where I am and how far along I am — and whether I still want the others to see it. Answers with
  * the whole group, so one call a tick is enough.
  */
@@ -151,12 +154,15 @@ tripRouter.patch('/group/me', (req, res) => {
     distanceM: Number(req.body?.distanceM),
     route: routeOf(req.body?.route),
     toLabel: req.body?.toLabel,
+    started: req.body?.started,
     arrived: req.body?.arrived,
     sharing: typeof req.body?.sharing === 'boolean' ? req.body.sharing : undefined,
     observable: typeof req.body?.observable === 'boolean' ? req.body.observable : undefined,
   });
   if (!group) return res.status(404).json({ error: 'no group' });
-  res.json({ group: groupView(group, account.id) });
+  const view = groupView(group, account.id);
+  groupStore.release(group, account.id);
+  res.json({ group: view });
 });
 
 /**
@@ -174,7 +180,10 @@ tripRouter.get('/group/member/:id', (req, res) => {
   res.json({ member: detail });
 });
 
-/** POST /api/trips/group/leave — I step out. The host stepping out ends the group for everyone. */
+/**
+ * POST /api/trips/group/leave — I step out. A host leaving hands the role to the next driver;
+ * once the trip is over, it only stops showing it to me.
+ */
 tripRouter.post('/group/leave', (req, res) => {
   const account = caller(req, res);
   if (!account) return;
@@ -189,7 +198,7 @@ tripRouter.delete('/group', (req, res) => {
   const group = groupStore.forAccount(account.id);
   if (!group) return res.status(404).json({ error: 'no group' });
   if (group.hostId !== account.id) return res.status(403).json({ error: 'host only' });
-  groupStore.close(group);
+  groupStore.cancel(group, account.id);
   res.json({ group: groupView(group, account.id) });
 });
 

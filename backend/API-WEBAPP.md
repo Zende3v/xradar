@@ -208,7 +208,7 @@ propre itinéraire. Comme le partage simple : tout en mémoire, rien écrit.
 | Créer un groupe | `POST /api/trips/group` `{destination, toLabel?, route?}` | compte |
 | Rejoindre | `POST /api/trips/group/join` `{code, route?}` | compte |
 | Son groupe | `GET /api/trips/group` | compte |
-| Envoyer sa position | `PATCH /api/trips/group/me` `{lat, lon, bearing?, speedKmh?, remainingM?, etaS?, progress?, distanceM?, route?, arrived?, sharing?, observable?}` | compte |
+| Envoyer sa position | `PATCH /api/trips/group/me` `{lat, lon, bearing?, speedKmh?, remainingM?, etaS?, progress?, distanceM?, route?, started?, arrived?, sharing?, observable?}` | compte |
 | Suivre un participant | `GET /api/trips/group/member/:id` | compte du groupe |
 | Quitter | `POST /api/trips/group/leave` | compte |
 | Annuler le trajet | `DELETE /api/trips/group` | créateur |
@@ -223,6 +223,15 @@ Ce qui sort du serveur dépend de ce que chacun accepte :
 - `observable` à `false` : il disparaît du lien public, le groupe continue de le voir ;
 - l'itinéraire ne part que dans `GET /api/trips/group/member/:id` et dans la vue observateur,
   et il est effacé dès l'arrivée du participant.
+
+L'app n'envoie une position qu'une fois le trajet vraiment commencé (conducteur sur
+l'itinéraire) ; `started: true` fait passer « en route » même sans partager sa position. Après
+l'arrivée, plus rien n'est écrit.
+
+Quitter (`leave`) : le groupe continue ; si c'est l'hôte, le rôle passe au participant suivant
+encore en route (`hostName` dit qui mène). Un hôte seul qui quitte annule. Annuler (`DELETE`)
+met `cancelled: true` : chaque participant le lit une fois, puis `GET /api/trips/group` répond
+`null` — reprendre la même destination repart d'un groupe neuf.
 
 États d'un participant : `invited` (pas encore parti), `driving`, `arrived`, `left`. Un
 téléphone muet depuis 45 s passe `online: false` en gardant sa dernière position ; il ne quitte

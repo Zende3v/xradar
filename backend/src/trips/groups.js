@@ -47,6 +47,8 @@ class GroupStore {
       removedObserverIds: new Set(),
       // Set when the group is over; the ranking is frozen with it and never moves again.
       finishedAt: null,
+      // Set when the host cancelled rather than everyone arriving: no ranking to show then.
+      cancelledAt: null,
       finalRanking: null,
       publicRanking: null,
     };
@@ -62,12 +64,14 @@ class GroupStore {
     const group = this.byJoiningCode(code);
     if (!group) return { error: 'group not found' };
     if (group.finishedAt) return { error: 'group over' };
-    if (group.members.has(account.id)) {
+    const known = group.members.get(account.id);
+    if (known && known.state !== 'left') {
       this.byAccount.set(account.id, group.id);
       return { group };
     }
-    if (group.members.size >= config.groupMaxMembers) return { error: 'group full' };
-    this.leave(account.id);
+    if (!known && group.members.size >= config.groupMaxMembers) return { error: 'group full' };
+    if (this.byAccount.get(account.id) !== group.id) this.leave(account.id);
+    // Someone who left and comes back starts over: nothing of the first attempt is kept.
     group.members.set(account.id, member(account, { route }));
     this.byAccount.set(account.id, group.id);
     return { group };
@@ -122,6 +126,12 @@ class GroupStore {
 
     if (typeof fields.sharing === 'boolean') me.sharing = fields.sharing;
     if (typeof fields.observable === 'boolean') me.observable = fields.observable;
+    // Over, arrived or gone: the phone may still ask how the others do, but nothing of where it
+    // is gets written any more.
+    if (group.finishedAt || me.state === 'arrived' || me.state === 'left') {
+      this.settle(group);
+      return group;
+    }
     if (fields.toLabel) me.toLabel = String(fields.toLabel).slice(0, 160);
     if (Array.isArray(fields.route) && fields.route.length >= 2) {
       me.route = fields.route;
@@ -139,6 +149,11 @@ class GroupStore {
         me.state = 'driving';
         me.startedAt = now;
       }
+    }
+    // "En route" is a state the others may know even when the driver does not share a position.
+    if (fields.started === true && me.state === 'invited') {
+      me.state = 'driving';
+      me.startedAt = now;
     }
     if (Number.isFinite(fields.speedKmh)) me.speedKmh = Math.max(0, Math.round(fields.speedKmh));
     if (Number.isFinite(fields.remainingM)) me.remainingM = Math.max(0, Math.round(fields.remainingM));
@@ -166,30 +181,59 @@ class GroupStore {
     me.routeRev += 1;
   }
 
-  /** A member steps out of the group; the host stepping out closes it for everyone. */
+  /**
+   * A member steps out. The group goes on without them: when the host leaves, the role passes to
+   * whoever joined next and is still on their way. Only a host left alone ends it.
+   *
+   * Once the group is over, leaving only means "stop showing it to me": nothing else moves.
+   */
   leave(accountId) {
     const group = this.forAccount(accountId);
     if (!group) return null;
     this.byAccount.delete(accountId);
-    if (group.hostId === accountId) {
-      this.close(group);
-      return group;
-    }
+    if (group.finishedAt) return group;
     const me = group.members.get(accountId);
-    if (me) {
+    if (me && me.state !== 'arrived') {
       me.state = 'left';
       me.position = null;
       me.route = null;
       me.speedKmh = null;
       me.routeRev += 1;
     }
+    if (group.hostId === accountId) {
+      const next = [...group.members.values()].find(
+        (m) => m.accountId !== accountId && (m.state === 'invited' || m.state === 'driving'),
+      );
+      if (next) {
+        group.hostId = next.accountId;
+      } else if (![...group.members.values()].some((m) => m.state === 'arrived')) {
+        // Nobody else, nobody arrived: there is no trip left to share.
+        this.close(group, { cancelled: true });
+        return group;
+      }
+    }
     this.settle(group);
     return group;
   }
 
-  /** The host ends the group: the link dies, and everybody's app is told at its next call. */
-  close(group) {
+  /** The host cancels the trip for everyone. Each member is told once, then it is gone. */
+  cancel(group, accountId) {
+    this.close(group, { cancelled: true });
+    if (this.byAccount.get(accountId) === group.id) this.byAccount.delete(accountId);
+  }
+
+  /**
+   * After a cancelled group has been shown to a member, it is theirs no more: the next call finds
+   * nothing, and the same destination chosen again starts from scratch.
+   */
+  release(group, accountId) {
+    if (group.cancelledAt && this.byAccount.get(accountId) === group.id) this.byAccount.delete(accountId);
+  }
+
+  /** The trip is over — everyone arrived, or it was cancelled. The link dies with it. */
+  close(group, { cancelled = false } = {}) {
     if (group.finishedAt) return;
+    if (cancelled) group.cancelledAt = Date.now();
     group.finishedAt = Date.now();
     group.endsAt = Math.min(group.endsAt, Date.now() + config.groupAfterFinishMs);
     // The ranking is taken here, once, and never moves again — not even if a phone goes silent
@@ -204,17 +248,25 @@ class GroupStore {
    * the members whose phone has been silent for too long.
    */
   settle(group) {
+    if (group.finishedAt) return;
     const now = Date.now();
+    const arrived = [...group.members.values()].some((m) => m.state === 'arrived');
     for (const [id, m] of group.members) {
-      const silent = now - m.lastSeenAt;
-      if (m.state !== 'arrived' && silent > config.groupDropMs && id !== group.hostId) {
+      const silent = now - m.lastSeenAt > config.groupDropMs;
+      // A driver on the way who went silent for good is dropped. One who never left home stays
+      // listed as "pas encore parti" — until somebody arrives and the trip has to end.
+      const gone = silent && (m.state === 'driving' || (m.state === 'invited' && arrived));
+      if (gone) {
         group.members.delete(id);
         if (this.byAccount.get(id) === group.id) this.byAccount.delete(id);
       }
     }
-    if (group.finishedAt) return;
+    // A host dropped that way hands the role to the next driver still on the way.
+    if (!group.members.has(group.hostId)) {
+      const next = [...group.members.values()].find((m) => m.state === 'invited' || m.state === 'driving');
+      if (next) group.hostId = next.accountId;
+    }
     const live = [...group.members.values()].filter((m) => m.state === 'invited' || m.state === 'driving');
-    const arrived = [...group.members.values()].some((m) => m.state === 'arrived');
     if (live.length === 0 && arrived) this.close(group);
   }
 
@@ -352,11 +404,13 @@ export function groupView(group, viewerId) {
     id: group.id,
     code: group.code,
     host: group.hostId === viewerId,
+    hostName: group.members.get(group.hostId)?.name ?? null,
     toLabel: group.toLabel,
     destination: group.destination,
     maxMembers: config.groupMaxMembers,
     endsAt: new Date(group.endsAt).toISOString(),
     finishedAt: group.finishedAt ? new Date(group.finishedAt).toISOString() : null,
+    cancelled: Boolean(group.cancelledAt),
     // Set when the trip is over: names, times, distances, in the order of arrival.
     ranking: group.finalRanking,
     link: group.watch
@@ -392,6 +446,7 @@ export function observerView(group) {
     destination: group.destination,
     endsAt: new Date(group.endsAt).toISOString(),
     finishedAt: group.finishedAt ? new Date(group.finishedAt).toISOString() : null,
+    cancelled: Boolean(group.cancelledAt),
     ranking: group.publicRanking,
     members: shown.map((m) => memberView(m, { withRoute: true })),
   };
