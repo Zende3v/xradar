@@ -69,8 +69,58 @@ object AccountRepository {
             }
             setToken(null) // token no longer valid
         }
-        api.authDevice(id)?.let { store(it.account, it.token) }
+        api.authDevice(id, appInfo)?.let { store(it.account, it.token) }
     }
+
+    /**
+     * What the app knows of itself, joined to a sign-up so the admin card is not empty: the phone's
+     * model, its system, our version, the language of the device. Nothing more, and nothing the
+     * system does not hand over freely — no advertising identifier.
+     */
+    val appInfo: Map<String, String>
+        get() {
+            val locale = java.util.Locale.getDefault()
+            return mapOf(
+                "platform" to "android",
+                "model" to listOf(android.os.Build.MANUFACTURER, android.os.Build.MODEL).filter { it.isNotBlank() }.joinToString(" "),
+                "osVersion" to android.os.Build.VERSION.RELEASE.orEmpty(),
+                "appVersion" to com.eona.app.BuildConfig.VERSION_NAME,
+                "locale" to locale.toLanguageTag(),
+                "region" to locale.country.orEmpty(),
+            ).filterValues { it.isNotBlank() }
+        }
+
+    /** Google's identity token, checked by the server; the account it opens sticks to this phone. */
+    suspend fun signInWithGoogle(idToken: String): AuthOutcome =
+        api.signInWithGoogle(idToken, deviceId, appInfo).also(::applyOutcome)
+
+    /** Ties Google to the account; null when done (the account is re-read for its providers). */
+    suspend fun linkGoogle(idToken: String): String? {
+        val t = token ?: return "Non connecté"
+        api.linkGoogle(idToken, t)?.let { return it }
+        reload()
+        return null
+    }
+
+    suspend fun unlinkGoogle(): String? {
+        val t = token ?: return "Non connecté"
+        api.unlinkGoogle(t)?.let { return it }
+        reload()
+        return null
+    }
+
+    /** Whether the other members of a group trip see this driver's statistics on their card. */
+    suspend fun setGroupStatsVisible(visible: Boolean): AuthOutcome {
+        val t = token ?: return AuthOutcome.Failure("Non connecté")
+        return api.setGroupStatsVisible(visible, t).also(::applyOutcome)
+    }
+
+    suspend fun referralSettings(): ReferralSettings? = token?.let { api.referralSettings(it) }
+
+    suspend fun setReferralValidity(months: Int): Boolean = token?.let { api.setReferralValidity(months, it) } ?: false
+
+    suspend fun actOnReferral(code: String, action: String, months: Int? = null): ReferralCode? =
+        token?.let { api.actOnReferral(code, action, months, it) }
 
     /** The account behind the token, or null when it could not be read (offline, server error, invalid). */
     private suspend fun meOrNull(t: String): Account? = try {
@@ -86,10 +136,10 @@ object AccountRepository {
         api.usernameAvailability(username, token)
 
     suspend fun claimGuest(username: String, password: String): AuthOutcome =
-        api.claimGuest(ensureDeviceIdOrEmpty(), username, password).also(::applyOutcome)
+        api.claimGuest(ensureDeviceIdOrEmpty(), username, password, appInfo).also(::applyOutcome)
 
     suspend fun register(email: String, password: String, username: String, referralCode: String? = null): AuthOutcome =
-        api.register(email, password, username, referralCode).also(::applyOutcome)
+        api.register(email, password, username, referralCode, appInfo).also(::applyOutcome)
 
     suspend fun stats(): AccountStats? = token?.let { api.stats(it) }
 
@@ -194,6 +244,10 @@ object AccountRepository {
         put("trust", a.trust)
         put("canChangeUsername", a.canChangeUsername)
         put("usernameChangeableAt", a.usernameChangeableAt)
+        put("signupMethod", a.signupMethod)
+        put("providers", org.json.JSONArray(a.providers.map { JSONObject().put("provider", it) }))
+        put("hasPassword", a.hasPassword)
+        put("groupStatsVisible", a.groupStatsVisible)
         a.limits?.let { l ->
             put(
                 "limits",
@@ -224,6 +278,13 @@ object AccountRepository {
         // A cache from before username changes: no rename until the next refresh.
         canChangeUsername = o.optBoolean("canChangeUsername"),
         usernameChangeableAt = o.optString("usernameChangeableAt").ifBlank { null }.takeUnless { o.isNull("usernameChangeableAt") },
+        signupMethod = o.optString("signupMethod").ifBlank { null }.takeUnless { o.isNull("signupMethod") },
+        providers = o.optJSONArray("providers")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.optString("provider")?.ifBlank { null } }
+        } ?: emptyList(),
+        hasPassword = o.optBoolean("hasPassword", true),
+        // Absent from a cache written before member cards: visible.
+        groupStatsVisible = o.optBoolean("groupStatsVisible", true),
     )
 
     private const val KEY_DEVICE = "device_id"

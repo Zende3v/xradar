@@ -38,9 +38,52 @@ data class AccountStats(
 data class ReferralCode(
     val code: String,
     val createdAt: String,
+    /** What the code grants once used, in months of client access. */
     val months: Int,
     val redemptions: Int,
-)
+    /** Usable right now: not revoked, not past its date. */
+    val active: Boolean = true,
+    /** How long it was given when minted, and when it stops working (ISO-8601). */
+    val validityMonths: Int? = null,
+    val expiresAt: String? = null,
+    val revokedAt: String? = null,
+    /** What happened to it: created, extended, revoked, regenerated. */
+    val history: List<ReferralEvent> = emptyList(),
+) {
+    /** "dans 3 mois", "dans 12 jours", "expiré" — what an admin reads at a glance. */
+    fun remainingLabel(nowMillis: Long = System.currentTimeMillis()): String {
+        val end = isoMillis(expiresAt) ?: return "sans date de fin"
+        val seconds = (end - nowMillis) / 1000
+        if (seconds <= 0) return "expiré"
+        val days = (seconds / 86_400).toInt()
+        return when {
+            days >= 60 -> "dans ${days / 30} mois"
+            days >= 1 -> "dans $days jour" + if (days > 1) "s" else ""
+            else -> "aujourd'hui"
+        }
+    }
+}
+
+/** One line in a code's history: what was done, by whom, when. */
+data class ReferralEvent(val action: String, val by: String, val at: String?) {
+    /** "prolongé", "révoqué"… as an admin says it. */
+    val label: String
+        get() = when (action) {
+            "created" -> "créé"
+            "extended" -> "prolongé"
+            "revoked" -> "révoqué"
+            "regenerated" -> "régénéré"
+            "replaces" -> "remplace un code"
+            else -> action
+        }
+}
+
+/** The duration new codes get, and the range an admin may choose from. */
+data class ReferralSettings(val validityMonths: Int, val minMonths: Int, val maxMonths: Int)
+
+/** An ISO-8601 moment (with or without fractions), in epoch millis; null when unreadable. */
+fun isoMillis(text: String?): Long? =
+    text?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull() }
 
 /** Result of a network auth call: success, or a human error message. */
 sealed interface AuthOutcome {
@@ -76,25 +119,73 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }.getOrNull()
     }
 
-    /** Legacy device sign-in (used to restore a session by deviceId). */
-    suspend fun authDevice(deviceId: String): AuthResult? = withContext(Dispatchers.IO) {
-        post("/api/accounts/auth", JSONObject().put("deviceId", deviceId).put("platform", "android"))
-            .let { (ok, body) -> if (ok) parseAuth(body) else null }
+    /** Legacy device sign-in (used to restore a session by deviceId); [app]: what the phone says of itself. */
+    suspend fun authDevice(deviceId: String, app: Map<String, String> = emptyMap()): AuthResult? = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("deviceId", deviceId).put("platform", "android")
+        if (app.isNotEmpty()) payload.put("app", JSONObject(app))
+        post("/api/accounts/auth", payload).let { (ok, body) -> if (ok) parseAuth(body) else null }
     }
 
-    suspend fun claimGuest(deviceId: String, username: String, password: String): AuthOutcome = withContext(Dispatchers.IO) {
-        outcome(
-            "/api/accounts/guest",
-            JSONObject().put("deviceId", deviceId).put("username", username).put("password", password).put("platform", "android"),
-        )
-    }
-
-    suspend fun register(email: String, password: String, username: String, referralCode: String?): AuthOutcome =
+    suspend fun claimGuest(deviceId: String, username: String, password: String, app: Map<String, String> = emptyMap()): AuthOutcome =
         withContext(Dispatchers.IO) {
-            val payload = JSONObject().put("email", email).put("password", password).put("username", username)
-            if (!referralCode.isNullOrBlank()) payload.put("referralCode", referralCode.trim())
-            outcome("/api/accounts/register", payload)
+            val payload = JSONObject().put("deviceId", deviceId).put("username", username).put("password", password).put("platform", "android")
+            if (app.isNotEmpty()) payload.put("app", JSONObject(app))
+            outcome("/api/accounts/guest", payload)
         }
+
+    suspend fun register(
+        email: String,
+        password: String,
+        username: String,
+        referralCode: String?,
+        app: Map<String, String> = emptyMap(),
+    ): AuthOutcome = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("email", email).put("password", password).put("username", username)
+        if (!referralCode.isNullOrBlank()) payload.put("referralCode", referralCode.trim())
+        // What the app knows of itself, for the admin card: nothing read behind the driver's back.
+        if (app.isNotEmpty()) payload.put("app", JSONObject(app))
+        outcome("/api/accounts/register", payload)
+    }
+
+    // ---- Sign in with Google --------------------------------------------------
+
+    /** The identity token from Google, checked on the server. Never trusted here. */
+    suspend fun signInWithGoogle(idToken: String, deviceId: String?, app: Map<String, String>): AuthOutcome =
+        withContext(Dispatchers.IO) {
+            val payload = JSONObject().put("idToken", idToken).put("app", JSONObject(app))
+            if (!deviceId.isNullOrBlank()) payload.put("deviceId", deviceId)
+            outcome("/api/accounts/google", payload)
+        }
+
+    /** Ties a Google account to the one signed in; null when it went through. */
+    suspend fun linkGoogle(idToken: String, token: String): String? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/me/link/google"))
+            .header("Authorization", "Bearer $token")
+            .post(JSONObject().put("idToken", idToken).toString().toRequestBody(JSON))
+            .build()
+        simpleCall(req, "Liaison impossible pour l'instant.")
+    }
+
+    /** Unties it; null when it went through. */
+    suspend fun unlinkGoogle(token: String): String? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/me/link/google")).header("Authorization", "Bearer $token").delete().build()
+        simpleCall(req, "Dissociation impossible pour l'instant.")
+    }
+
+    /** Whether the other members of a group trip see this driver's statistics on their card. */
+    suspend fun setGroupStatsVisible(visible: Boolean, token: String): AuthOutcome = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/me/privacy"))
+            .header("Authorization", "Bearer $token")
+            .patch(JSONObject().put("groupStatsVisible", visible).toString().toRequestBody(JSON))
+            .build()
+        runOutcome(req)
+    }
+
+    private fun simpleCall(req: Request, offline: String): String? = try {
+        client.newCall(req).execute().use { r -> if (r.isSuccessful) null else friendly(errorRaw(r.body?.string())) }
+    } catch (e: Exception) {
+        offline
+    }
 
     // ---- Statistics ---------------------------------------------------------
 
@@ -199,12 +290,63 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         )
     }
 
-    private fun parseReferral(o: JSONObject) = ReferralCode(
-        code = o.optString("code"),
-        createdAt = o.optString("createdAt"),
-        months = o.optInt("months", 6),
-        redemptions = o.optInt("redemptions"),
-    )
+    /** How long new codes stay usable, and the range an admin may pick from. */
+    suspend fun referralSettings(token: String): ReferralSettings? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/referrals/settings")).header("Authorization", "Bearer $token").build()
+        runCatching {
+            client.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                val s = JSONObject(r.body?.string() ?: "").optJSONObject("settings") ?: return@use null
+                ReferralSettings(
+                    validityMonths = s.optInt("referralValidityMonths", 3),
+                    minMonths = s.optInt("referralValidityMinMonths", 1),
+                    maxMonths = s.optInt("referralValidityMaxMonths", 12),
+                )
+            }
+        }.getOrNull()
+    }
+
+    /** Sets the duration for the codes minted from now on; the ones already out keep their date. */
+    suspend fun setReferralValidity(months: Int, token: String): Boolean = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url("/api/accounts/referrals/settings"))
+            .header("Authorization", "Bearer $token")
+            .put(JSONObject().put("validityMonths", months).toString().toRequestBody(JSON))
+            .build()
+        runCatching { client.newCall(req).execute().use { it.isSuccessful } }.getOrDefault(false)
+    }
+
+    /** "extend" (with months), "revoke" or "regenerate" on one code. */
+    suspend fun actOnReferral(code: String, action: String, months: Int?, token: String): ReferralCode? = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("action", action).apply { months?.let { put("months", it) } }
+        val req = Request.Builder().url(url("/api/accounts/referrals/" + java.net.URLEncoder.encode(code, "UTF-8")))
+            .header("Authorization", "Bearer $token")
+            .patch(body.toString().toRequestBody(JSON))
+            .build()
+        runCatching {
+            client.newCall(req).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                JSONObject(r.body?.string() ?: "").optJSONObject("referral")?.let(::parseReferral)
+            }
+        }.getOrNull()
+    }
+
+    private fun parseReferral(o: JSONObject): ReferralCode {
+        val history = o.optJSONArray("history")
+        return ReferralCode(
+            code = o.optString("code"),
+            createdAt = o.optString("createdAt"),
+            months = o.optInt("months", 6),
+            redemptions = o.optInt("redemptions"),
+            active = o.optBoolean("active", true),
+            validityMonths = if (o.has("validityMonths") && !o.isNull("validityMonths")) o.optInt("validityMonths") else null,
+            expiresAt = o.optString("expiresAt").ifBlank { null }.takeUnless { o.isNull("expiresAt") },
+            revokedAt = o.optString("revokedAt").ifBlank { null }.takeUnless { o.isNull("revokedAt") },
+            history = (0 until (history?.length() ?: 0)).mapNotNull { i ->
+                val e = history?.optJSONObject(i) ?: return@mapNotNull null
+                ReferralEvent(e.optString("action"), e.optString("by"), e.optString("at").ifBlank { null }.takeUnless { e.isNull("at") })
+            },
+        )
+    }
 
     /** [identifier]: an email (member) or a username (guest); [deviceId] attaches the account to this phone. */
     suspend fun login(identifier: String, password: String, deviceId: String?): AuthOutcome = withContext(Dispatchers.IO) {
@@ -295,6 +437,12 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         limits = o.optJSONObject("limits")?.let(::parseLimits),
         canChangeUsername = o.optBoolean("canChangeUsername"),
         usernameChangeableAt = o.optString("usernameChangeableAt").ifBlank { null }.takeUnless { o.isNull("usernameChangeableAt") },
+        signupMethod = o.optString("signupMethod").ifBlank { null }.takeUnless { o.isNull("signupMethod") },
+        providers = o.optJSONArray("providers")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.optString("provider")?.ifBlank { null } }
+        } ?: emptyList(),
+        hasPassword = o.optBoolean("hasPassword", true),
+        groupStatsVisible = o.optBoolean("groupStatsVisible", true),
     )
 
     /** POST returning {ok}/{error}: null on success, else a friendly message. */
@@ -356,6 +504,10 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         err.contains("banned") -> "Ce compte est banni."
         err.contains("invalid referral") -> "Code de parrainage invalide."
         err.contains("subscription required") -> "Abonnement requis."
+        err.contains("google sign-in not configured") -> "Connexion Google indisponible pour l'instant."
+        err.contains("already linked") -> "Ce compte Google est déjà lié à un autre compte EONA."
+        err.contains("set a password first") -> "Impossible : ce serait ton seul moyen de te connecter."
+        err.contains("not linked") -> "Aucun compte Google n'est lié."
         else -> err.replaceFirstChar { it.uppercase() }
     }
 

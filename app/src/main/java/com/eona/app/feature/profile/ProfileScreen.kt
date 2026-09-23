@@ -71,6 +71,9 @@ fun ProfileScreen(
     var deleteError by remember { mutableStateOf<String?>(null) }
     var offers by remember { mutableStateOf<PaywallReason?>(null) }
     var renaming by remember { mutableStateOf(false) }
+    // What the Google row is doing, and what it has to say.
+    var linking by remember { mutableStateOf(false) }
+    var linkMessage by remember { mutableStateOf<String?>(null) }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
     ) { uri ->
@@ -112,6 +115,46 @@ fun ProfileScreen(
 
             if (account?.role == Role.Guest) {
                 GuestNote(account)
+            }
+
+            if (com.eona.app.data.account.GoogleAuth.isAvailable && account != null) {
+                val linked = "google" in account.providers
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                    EonaListGroup(title = "Connexion") {
+                        EonaListRow(
+                            title = if (linked) "Dissocier Google" else "Lier mon compte Google",
+                            subtitle = if (linked) "Ce compte peut se connecter avec Google" else "Pour entrer aussi avec Google",
+                            onClick = if (linking) {
+                                null
+                            } else {
+                                {
+                                    linking = true
+                                    linkMessage = null
+                                    scope.launch {
+                                        if (linked) {
+                                            linkMessage = AccountRepository.unlinkGoogle() ?: "Compte Google dissocié."
+                                            com.eona.app.data.account.GoogleAuth.signOut(context)
+                                        } else {
+                                            when (val result = com.eona.app.data.account.GoogleAuth.identityToken(context)) {
+                                                is com.eona.app.data.account.GoogleResult.Failure ->
+                                                    if (result.message.isNotEmpty()) linkMessage = result.message
+                                                is com.eona.app.data.account.GoogleResult.Token ->
+                                                    linkMessage = AccountRepository.linkGoogle(result.idToken) ?: "Compte Google lié."
+                                            }
+                                        }
+                                        linking = false
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    EonaText(
+                        linkMessage ?: "Lier Google te laisse entrer d'un geste. La dissociation est refusée s'il ne te reste aucun autre moyen de te connecter.",
+                        style = EonaTheme.typography.footnote,
+                        color = if (linkMessage != null) colors.textSecondary else colors.textTertiary,
+                        modifier = Modifier.padding(horizontal = spacing.md),
+                    )
+                }
             }
 
             EonaListGroup {

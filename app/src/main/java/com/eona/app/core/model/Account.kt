@@ -61,6 +61,14 @@ data class Account(
     val canChangeUsername: Boolean = false,
     /** When the username may change again (ISO-8601, once a week); null = now. */
     val usernameChangeableAt: String? = null,
+    /** How the account was opened: "email", "device" or a provider ("google"). */
+    val signupMethod: String? = null,
+    /** The providers this account can sign in with, as they are named on the wire. */
+    val providers: List<String> = emptyList(),
+    /** True when a password can still open it: unlinking a provider is then harmless. */
+    val hasPassword: Boolean = true,
+    /** In a group trip, the other members see this driver's statistics on their card. */
+    val groupStatsVisible: Boolean = true,
 ) {
     /** A finished onboarding = has a chosen username. */
     val isOnboarded: Boolean get() = !username.isNullOrBlank()

@@ -9,6 +9,15 @@ val stadiaApiKey: String = Properties().run {
     getProperty("stadia.apiKey") ?: System.getenv("STADIA_API_KEY") ?: ""
 }
 
+// "Continuer avec Google": the OAuth client of type "Web application" whose identity tokens the
+// backend accepts (GOOGLE_CLIENT_IDS). Not a secret; "google.webClientId" in local.properties
+// overrides it. Empty = no Google button.
+val googleWebClientId: String = Properties().run {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+    getProperty("google.webClientId")
+} ?: "860999659689-do66gkvaddkq543dl4dg86rildt6fpna.apps.googleusercontent.com"
+
 plugins {
     // Kotlin support is built into AGP 9+ (do NOT apply org.jetbrains.kotlin.android).
     alias(libs.plugins.android.application)
@@ -27,6 +36,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         buildConfigField("String", "STADIA_API_KEY", "\"$stadiaApiKey\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
     }
 
     buildTypes {
@@ -78,6 +88,9 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.maplibre.android)
     implementation(libs.okhttp)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

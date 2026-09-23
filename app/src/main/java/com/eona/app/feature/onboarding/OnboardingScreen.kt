@@ -29,6 +29,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.eona.app.data.account.AccountRepository
 import com.eona.app.data.account.AuthOutcome
+import com.eona.app.data.account.GoogleAuth
+import com.eona.app.data.account.GoogleResult
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.size
+import com.eona.app.R
 import com.eona.app.designsystem.component.EonaText
 import com.eona.app.designsystem.theme.EonaTheme
 import kotlinx.coroutines.launch
@@ -45,6 +53,7 @@ fun OnboardingScreen() {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var mode by remember { mutableStateOf(Mode.Choose) }
     var pseudo by remember { mutableStateOf("") }
@@ -69,6 +78,23 @@ fun OnboardingScreen() {
             loading = false
             if (outcome is AuthOutcome.Failure) error = outcome.message
             // Success → AccountRepository.account updates → the app gate switches screens.
+        }
+    }
+
+    // Google's sheet, then the server checks the token: the app decides nothing.
+    fun google() {
+        error = null
+        loading = true
+        scope.launch {
+            when (val result = GoogleAuth.identityToken(context)) {
+                // An empty message means the driver simply closed Google's sheet.
+                is GoogleResult.Failure -> if (result.message.isNotEmpty()) error = result.message
+                is GoogleResult.Token -> {
+                    val outcome = AccountRepository.signInWithGoogle(result.idToken)
+                    if (outcome is AuthOutcome.Failure) error = outcome.message
+                }
+            }
+            loading = false
         }
     }
 
@@ -108,6 +134,7 @@ fun OnboardingScreen() {
                         Primary("Créer un compte", loading = false) { mode = Mode.Register }
                         Ghost("Se connecter") { mode = Mode.Login; error = null }
                         Ghost("Continuer en invité") { mode = Mode.Guest; error = null }
+                        if (GoogleAuth.isAvailable) GoogleButton("Continuer avec Google", ::google)
                     }
                     Mode.Guest -> {
                         Field(pseudo, { pseudo = it.trim() }, "Pseudo", KeyboardCapitalization.None)
@@ -126,6 +153,7 @@ fun OnboardingScreen() {
                         Field(email, { email = it.trim() }, "Email ou pseudo", KeyboardCapitalization.None, KeyboardType.Email)
                         Field(password, { password = it }, "Mot de passe", KeyboardCapitalization.None, KeyboardType.Password, password = true)
                         Primary("Se connecter", loading) { submit { AccountRepository.login(email, password) } }
+                        if (GoogleAuth.isAvailable) GoogleButton("Se connecter avec Google", ::google)
                         Back(label = "Mot de passe oublié ?") { mode = Mode.Forgot; error = null; info = null }
                         Back { mode = Mode.Choose; error = null }
                     }
@@ -138,6 +166,7 @@ fun OnboardingScreen() {
                         Primary("Créer le compte", loading) {
                             submit { AccountRepository.register(email, password, pseudo, referral.ifBlank { null }) }
                         }
+                        if (GoogleAuth.isAvailable) GoogleButton("Créer un compte avec Google", ::google)
                         Back { mode = Mode.Choose; error = null }
                     }
                     Mode.Forgot -> {
@@ -233,6 +262,25 @@ private fun Ghost(label: String, onClick: () -> Unit) {
             .padding(vertical = EonaTheme.spacing.md),
         contentAlignment = Alignment.Center,
     ) {
+        EonaText(label, style = EonaTheme.typography.bodyStrong, color = colors.textPrimary)
+    }
+}
+
+/** Google's mark and the words, on a plain surface as Google asks. */
+@Composable
+internal fun GoogleButton(label: String, onClick: () -> Unit) {
+    val colors = EonaTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.surface, EonaTheme.shapes.md)
+            .border(1.dp, colors.border, EonaTheme.shapes.md)
+            .clickable(onClick = onClick)
+            .padding(vertical = EonaTheme.spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(EonaTheme.spacing.sm, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(painter = painterResource(R.drawable.ic_google), contentDescription = null, modifier = Modifier.size(18.dp))
         EonaText(label, style = EonaTheme.typography.bodyStrong, color = colors.textPrimary)
     }
 }

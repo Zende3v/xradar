@@ -10,6 +10,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -98,6 +101,8 @@ fun PrivacyScreen(onBack: () -> Unit) {
                 Switch("Temps d'utilisation", settings.usageTime, { s, on -> s.copy(usageTime = on) })
             }
 
+            GroupCardSetting()
+
             EonaListGroup {
                 EonaListRow(
                     title = "Politique de confidentialité",
@@ -109,6 +114,44 @@ fun PrivacyScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(spacing.xxl))
         }
+    }
+}
+
+/**
+ * "Statistiques visibles du groupe": saved on the account, since the other members read it from
+ * the server. Photo, name, status, month joined and trust score show either way.
+ */
+@Composable
+private fun GroupCardSetting() {
+    val account by AccountRepository.account.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var pending by remember { mutableStateOf<Boolean?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val checked = pending ?: account?.groupStatsVisible ?: true
+    val change = { on: Boolean ->
+        if (pending == null && AccountRepository.token != null) {
+            pending = on
+            error = null
+            scope.launch {
+                val outcome = AccountRepository.setGroupStatsVisible(on)
+                if (outcome is com.eona.app.data.account.AuthOutcome.Failure) error = outcome.message
+                pending = null
+            }
+        }
+    }
+    Group(
+        "Trajet en groupe",
+        (error?.let { "$it\n" } ?: "") +
+            "En touchant ta photo, les autres membres d'un trajet en groupe ouvrent ta fiche : photo, pseudo, statut, " +
+            "mois d'inscription et note de confiance, toujours. Tes kilomètres, ton temps de conduite, tes trajets et " +
+            "tes signalements, seulement si c'est activé. Personne en dehors du groupe ne la voit.",
+    ) {
+        EonaListRow(
+            title = "Statistiques visibles du groupe",
+            onClick = { change(!checked) },
+            trailing = { EonaSwitch(checked = checked, onCheckedChange = change) },
+            modifier = Modifier.height(56.dp),
+        )
     }
 }
 
