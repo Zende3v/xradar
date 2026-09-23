@@ -90,11 +90,6 @@ private fun LimitPicker(currentKmh: Int?, onPick: (Int) -> Unit) {
             }
         }
     }
-    EonaText(
-        "La limitation ne change pas tout de suite : elle est mise à jour quand d'autres conducteurs signalent la même.",
-        style = EonaTheme.typography.footnote,
-        color = colors.textTertiary,
-    )
 }
 
 /** "50 → 70": what changes, sent by itself when the countdown runs out. */

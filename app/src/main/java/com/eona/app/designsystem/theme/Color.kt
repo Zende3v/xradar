@@ -102,7 +102,41 @@ data class EonaColors(
     // Report picker and Menu: a white icon with a soft glow on a dark tile, same in both themes.
     val glowTile: Color = Palette.ReportDisc,
     val glowIcon: Color = Color.White,
+    /** The ring of a speed-limit sign: a deep blood red, vivid on the white disc, the same in
+     *  light and dark — the system red reads pale there. */
+    val limitRing: Color = Color(0xFFD4001C),
 )
+
+/**
+ * The same colours with the driver's accent ([rgb], 0xRRGGBB): as it is at night; by day a notch
+ * deeper, so a bright colour stays readable on white. What sits on it turns black or white.
+ */
+fun EonaColors.withAccent(rgb: Int): EonaColors {
+    val main = if (isDark) rgb else AccentShade.shade(rgb, 0.72)
+    val pressed = AccentShade.shade(rgb, if (isDark) 0.82 else 0.58)
+    return copy(
+        accent = Color(0xFF000000.toInt() or main),
+        accentPressed = Color(0xFF000000.toInt() or pressed),
+        onAccent = if (AccentShade.isLight(main)) Color.Black else Color.White,
+    )
+}
+
+/** Shades of the accent, worked out on its 0xRRGGBB value. */
+object AccentShade {
+    /** The same colour, [factor] as bright (0.72 = a little deeper). */
+    fun shade(rgb: Int, factor: Double): Int {
+        fun channel(shift: Int) = (((rgb shr shift) and 0xFF) * factor).toInt().coerceIn(0, 255)
+        return (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+    }
+
+    /** True when black reads better than white on this colour. */
+    fun isLight(rgb: Int): Boolean {
+        val r = (rgb shr 16) and 0xFF
+        val g = (rgb shr 8) and 0xFF
+        val b = rgb and 0xFF
+        return 0.299 * r + 0.587 * g + 0.114 * b > 150
+    }
+}
 
 val EonaDarkColors = EonaColors(
     isDark = true,

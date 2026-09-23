@@ -9,6 +9,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.eona.app.designsystem.foundation.LocalEonaShapes
 import com.eona.app.designsystem.foundation.LocalEonaSpacing
@@ -30,9 +31,13 @@ val LocalEonaColors = staticCompositionLocalOf<EonaColors> {
 @Composable
 fun EonaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    /** "Couleur de l'app", 0xRRGGBB: cyan unless the driver picked another. */
+    accent: Int = DEFAULT_ACCENT,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) EonaDarkColors else EonaLightColors
+    val colors = remember(darkTheme, accent) {
+        (if (darkTheme) EonaDarkColors else EonaLightColors).withAccent(accent)
+    }
 
     CompositionLocalProvider(
         LocalEonaColors provides colors,
@@ -65,6 +70,9 @@ object EonaTheme {
     val elevation: EonaElevation
         @Composable @ReadOnlyComposable get() = LocalEonaElevation.current
 }
+
+/** EONA's own cyan. */
+const val DEFAULT_ACCENT = 0x2CD5E0
 
 /** Maps our semantic tokens onto a Material 3 [ColorScheme] used only as substrate. */
 private fun EonaColors.toMaterialColorScheme(): ColorScheme {

@@ -3,11 +3,13 @@ package com.eona.app.feature.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -30,6 +32,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eona.app.R
+import com.eona.app.data.preferences.AccentColor
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.data.preferences.AppTheme
 import com.eona.app.data.preferences.OverspeedWarning
@@ -76,6 +79,7 @@ fun SettingsScreen(
 
             EonaListGroup(title = "Apparence") {
                 ThemeSetting()
+                AccentSetting()
             }
 
             EonaListGroup(title = "Alertes") {
@@ -86,13 +90,6 @@ fun SettingsScreen(
                 val alerts by AppPreferences.alerts.collectAsStateWithLifecycle()
                 VolumeSetting("Volume Guidage", alerts.guidanceVolume) { v -> AppPreferences.updateAlerts { it.copy(guidanceVolume = v) } }
                 VolumeSetting("Volume alertes", alerts.alertVolume) { v -> AppPreferences.updateAlerts { it.copy(alertVolume = v) } }
-                EonaText(
-                    "Guidage : les consignes de navigation. Alertes : les sons et les annonces des radars, des dangers et du " +
-                        "dépassement. Chacun indépendant de l'autre, dans la limite du volume du téléphone.",
-                    style = EonaTheme.typography.footnote,
-                    color = EonaTheme.colors.textTertiary,
-                    modifier = Modifier.padding(start = spacing.lg, end = spacing.lg, bottom = spacing.md),
-                )
             }
 
             if (account?.role == com.eona.app.core.model.Role.Admin) {
@@ -122,6 +119,46 @@ private fun ThemeSetting() {
         hint = "L'app, la carte et le HUD ensemble. Auto suit le jour et la nuit à ta position : clair de jour, sombre de nuit.",
     )
 }
+
+/** "Couleur de l'app": the tint of everything interactive, and of the route drawn on the map. */
+@Composable
+private fun AccentSetting() {
+    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+    val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
+    Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
+        EonaText("Couleur de l'app", style = EonaTheme.typography.body, color = colors.textPrimary)
+        Spacer(Modifier.height(spacing.sm))
+        AccentColor.entries.chunked(ACCENTS_PER_ROW).forEach { row ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                modifier = Modifier.padding(bottom = spacing.sm),
+            ) {
+                row.forEach { colour ->
+                    val chosen = settings.accent == colour
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(CircleShape)
+                            .background(Color(0xFF000000.toInt() or colour.rgb))
+                            .border(if (chosen) 2.5.dp else 0.dp, colors.textPrimary, CircleShape)
+                            .clickable { AppPreferences.updateSettings { it.copy(accent = colour) } },
+                    )
+                }
+                // The last row keeps the size of the others.
+                repeat(ACCENTS_PER_ROW - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        EonaText(
+            "La teinte des boutons, du tracé du trajet et des détails de l'interface.",
+            style = EonaTheme.typography.footnote,
+            color = colors.textTertiary,
+        )
+    }
+}
+
+private const val ACCENTS_PER_ROW = 6
 
 /** "Dépassement limitation": spoken, a beep of its own, or nothing. */
 @Composable

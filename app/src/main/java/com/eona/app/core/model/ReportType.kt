@@ -1,6 +1,16 @@
 package com.eona.app.core.model
 
 /**
+ * How bad an "Embouteillage" is, as the driver sees it. It decides what the jam costs when the
+ * routing looks for a way round: a standstill is worth going round, a light one is not.
+ */
+enum class JamSeverity(val wire: String, val label: String) {
+    Light("light", "Léger"),
+    Heavy("heavy", "Important"),
+    Standstill("standstill", "À l'arrêt"),
+}
+
+/**
  * A crowdsourced report category. [wire] is exchanged with the backend; [alertType]
  * reuses the visual vocabulary; [minRole] is who may create it; [needsStreet] /
  * [needsPlate] flag the extra fields the report sheet must collect. Pure model.
@@ -22,7 +32,7 @@ enum class ReportType(
     StoppedVehicle("stopped_vehicle", "Véhicule arrêté", AlertType.Hazard, Role.Guest),
     Accident("accident", "Accident", AlertType.Accident, Role.Guest),
     ObjectOnRoad("object_on_road", "Objet sur la voie", AlertType.Hazard, Role.Guest),
-    TrafficJam("traffic_jam", "Bouchon", AlertType.Hazard, Role.Guest),
+    TrafficJam("traffic_jam", "Embouteillage", AlertType.Hazard, Role.Guest),
     DamagedRoad("damaged_road", "Chaussée dégradée", AlertType.Hazard, Role.Guest),
     Roadworks("roadworks", "Travaux", AlertType.Roadwork, Role.Guest),
     SlipperyRoad("slippery_road", "Route glissante", AlertType.Hazard, Role.Guest),

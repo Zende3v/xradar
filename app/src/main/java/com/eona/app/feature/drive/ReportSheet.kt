@@ -3,6 +3,7 @@ package com.eona.app.feature.drive
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eona.app.R
+import com.eona.app.core.model.JamSeverity
 import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.Role
 import com.eona.app.data.account.AccountRepository
@@ -71,6 +73,8 @@ data class ReportDraft(
     val plate: String? = null,
     /** "Oui" to "Ralentissement du trafic ?". */
     val prompted: Boolean = false,
+    /** "Embouteillage" only: how bad it is. */
+    val severity: JamSeverity? = null,
 )
 
 /**
@@ -175,11 +179,20 @@ private fun DirectionStep(type: ReportType, onBack: () -> Unit, onReport: OnRepo
     val countdown = remember { Animatable(1f) }
     var auto by remember { mutableStateOf(true) }
     var sent by remember { mutableStateOf(false) }
+    // "Embouteillage": how bad it is. Untouched, the report goes without it.
+    var severity by remember { mutableStateOf<JamSeverity?>(null) }
 
     fun send(direction: String) {
         if (sent) return
         sent = true
-        onReport(ReportDraft(type, direction, plate.trim().ifBlank { null }))
+        onReport(
+            ReportDraft(
+                type,
+                direction,
+                plate.trim().ifBlank { null },
+                severity = if (type == ReportType.TrafficJam) severity else null,
+            ),
+        )
     }
 
     LaunchedEffect(auto) {
@@ -205,6 +218,24 @@ private fun DirectionStep(type: ReportType, onBack: () -> Unit, onReport: OnRepo
             style = EonaTheme.typography.footnote,
             color = colors.textTertiary,
         )
+    }
+
+    if (type == ReportType.TrafficJam) {
+        EonaText("C'est quoi le bouchon ?", style = EonaTheme.typography.subhead, color = colors.textSecondary)
+        Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+            JamSeverity.entries.forEach { level ->
+                SheetPill(
+                    level.label,
+                    highlighted = severity == level,
+                    onClick = {
+                        // Choosing takes time: the automatic send stops.
+                        auto = false
+                        severity = if (severity == level) null else level
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
     }
 
     EonaText("Dans quel sens ?", style = EonaTheme.typography.subhead, color = colors.textSecondary)
@@ -356,11 +387,21 @@ private fun ReportType.pickerPainter(): Painter? = when (this) {
     ReportType.LowVisibility -> null
 }
 
+/** The colour artwork of the kinds that have one, shown bare in the picker, as supplied. */
+private fun ReportType.artwork(): Int? = when (this) {
+    ReportType.RadarMobile -> R.drawable.ic_hud_radar_mobile
+    ReportType.Camera -> R.drawable.ic_hud_camera
+    ReportType.ControlZone -> R.drawable.ic_hud_zone_controle
+    ReportType.TrafficJam -> R.drawable.ic_hud_bouchon
+    else -> null
+}
+
 @Composable
 private fun ReportTile(type: ReportType, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
     val colors = EonaTheme.colors
-    val painter = type.pickerPainter()
+    val artwork = type.artwork()
+    val painter = if (artwork == null) type.pickerPainter() else null
     Column(
         modifier = modifier
             .height(TILE_SLOT_HEIGHT)
@@ -370,15 +411,22 @@ private fun ReportTile(type: ReportType, onClick: () -> Unit, modifier: Modifier
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.sm, Alignment.CenterVertically),
     ) {
-        // Every category on the same disc; the icon in white with a soft glow.
-        Box(
-            modifier = Modifier
-                .size(60.dp)
-                .background(colors.glowTile, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (painter != null) {
-                EonaGlowIcon(painter = painter, contentDescription = null, tint = colors.glowIcon, size = 30.dp)
+        if (artwork != null) {
+            // The kinds with colour artwork show it bare, untinted.
+            Box(modifier = Modifier.size(60.dp), contentAlignment = Alignment.Center) {
+                Image(painter = painterResource(artwork), contentDescription = null, modifier = Modifier.size(46.dp))
+            }
+        } else {
+            // Every other category on the same disc; the icon in white with a soft glow.
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .background(colors.glowTile, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (painter != null) {
+                    EonaGlowIcon(painter = painter, contentDescription = null, tint = colors.glowIcon, size = 30.dp)
+                }
             }
         }
         EonaText(

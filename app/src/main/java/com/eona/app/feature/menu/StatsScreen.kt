@@ -93,13 +93,6 @@ private fun StatsContent(s: AccountStats, onOpenTrip: (TripRecord) -> Unit) {
             EonaDivider(Modifier.padding(start = spacing.lg))
             Figure("Confirmés par d'autres", s.reportsConfirmed)
         }
-        EonaText(
-            "La note compare tes signalements confirmés à ceux que tu as déclarés. " +
-                "Elle démarre à 2,5 et monte à mesure que la communauté valide ce que tu signales.",
-            style = EonaTheme.typography.footnote,
-            color = colors.textTertiary,
-        )
-
         EonaListGroup(title = "Historique des trajets") {
             if (s.trips.isEmpty()) {
                 EonaListRow(title = "Aucun trajet pour l'instant")

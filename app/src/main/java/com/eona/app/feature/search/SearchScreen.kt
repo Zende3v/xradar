@@ -46,6 +46,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,7 +77,8 @@ import com.eona.app.core.model.Place
 import com.eona.app.core.model.PlaceCategory
 import com.eona.app.core.model.PlaceKind
 import com.eona.app.core.model.showsFuelPrice
-import com.eona.app.data.geocoding.GeocodingRepository
+import com.eona.app.data.account.AccountRepository
+import com.eona.app.data.search.SearchApi
 import com.eona.app.data.places.FavoriteTrip
 import com.eona.app.data.places.PlacesApi
 import com.eona.app.data.places.SavedPlacesRepository
@@ -98,7 +106,7 @@ private enum class PickTarget { Destination, Start, Home, Work }
 @Composable
 fun SearchRoute(onBack: () -> Unit) {
     val context = LocalContext.current
-    val geocoding = remember { GeocodingRepository() }
+    val searchApi = remember { SearchApi() }
     val placesApi = remember { PlacesApi() }
     val recentsRepo = remember { RecentsRepository(context) }
     val savedRepo = remember { SavedPlacesRepository(context) }
@@ -121,7 +129,8 @@ fun SearchRoute(onBack: () -> Unit) {
     var categoryFailed by remember { mutableStateOf(false) }
     var categoryAttempt by remember { mutableStateOf(0) }
 
-    // Debounced live geocoding (French Base Adresse Nationale).
+    // Live search, debounced: the backend merges places and addresses, near the driver.
+    val latestFix by rememberUpdatedState(fix)
     LaunchedEffect(query) {
         val q = query.trim()
         if (q.length < MIN_QUERY) {
@@ -131,7 +140,7 @@ fun SearchRoute(onBack: () -> Unit) {
         }
         loading = true
         delay(DEBOUNCE_MS)
-        results = geocoding.search(q)
+        results = searchApi.search(q, latestFix?.latitude, latestFix?.longitude, AccountRepository.token)
         loading = false
     }
 
@@ -185,10 +194,16 @@ fun SearchRoute(onBack: () -> Unit) {
     SearchScreen(
         query = query,
         prompt = when (target) {
-            PickTarget.Destination -> "Où allez-vous ?"
-            PickTarget.Start -> "Point de départ"
+            PickTarget.Destination, PickTarget.Start -> "Où allez-vous ?"
             PickTarget.Home -> "Adresse de la maison"
             PickTarget.Work -> "Adresse du travail"
+        },
+        editingStart = target == PickTarget.Start,
+        onEditArrival = { target = PickTarget.Destination; query = "" },
+        onUseMyPosition = {
+            ActiveTripRepository.setStart(null)
+            target = PickTarget.Destination
+            query = ""
         },
         start = start,
         home = home,
@@ -213,7 +228,7 @@ fun SearchRoute(onBack: () -> Unit) {
             if (category == cat && categoryFailed) categoryAttempt++ else category = if (category == cat) null else cat
             categoryPlaces = emptyList()
         },
-        onEditStart = { target = PickTarget.Start; query = "" },
+        onEditStart = { target = PickTarget.Start; query = ""; category = null },
         onClearStart = { ActiveTripRepository.setStart(null) },
         onSetHome = { target = PickTarget.Home; query = "" },
         onSetWork = { target = PickTarget.Work; query = "" },
@@ -235,8 +250,13 @@ fun SearchRoute(onBack: () -> Unit) {
 @Composable
 fun SearchScreen(
     query: String,
+    /** What the arrival asks for ("Où allez-vous ?", or a saved address being set). */
     prompt: String,
     start: Place?,
+    /** The departure is being chosen: its line is the field. */
+    editingStart: Boolean = false,
+    onEditArrival: () -> Unit = {},
+    onUseMyPosition: () -> Unit = {},
     home: Place?,
     work: Place?,
     favorites: List<FavoriteTrip>,
@@ -281,32 +301,38 @@ fun SearchScreen(
             .background(colors.canvas.copy(alpha = SEARCH_GLASS_ALPHA))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { },
     ) {
+        // Departure and arrival, one above the other: the departure is always in sight, and a
+        // tap on it is all it takes to change it.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(horizontal = spacing.lg, vertical = spacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(spacing.sm),
         ) {
-            EonaSearchField(
-                value = query,
-                onValueChange = onQueryChange,
-                placeholder = prompt,
+            RouteStopsCard(
+                start = start,
+                query = query,
+                onQueryChange = onQueryChange,
+                editingStart = editingStart,
+                arrivalPrompt = prompt,
+                onEditStart = onEditStart,
+                onEditArrival = onEditArrival,
+                onResetStart = onClearStart,
                 modifier = Modifier.weight(1f),
-                autoFocus = true,
             )
-            EonaText(
-                text = "Annuler",
-                style = EonaTheme.typography.label,
-                color = colors.accent,
-                modifier = Modifier
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() }
-                    .padding(vertical = spacing.sm),
-            )
+            Box(modifier = Modifier.height(STOP_LINE_HEIGHT), contentAlignment = Alignment.Center) {
+                EonaText(
+                    text = "Annuler",
+                    style = EonaTheme.typography.label,
+                    color = colors.accent,
+                    modifier = Modifier
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onBack() }
+                        .padding(vertical = spacing.sm),
+                )
+            }
         }
-
-        StartRow(start = start, onEdit = onEditStart, onClear = onClearStart)
 
         CategoryRow(selected = category, onSelect = onCategory)
 
@@ -354,6 +380,8 @@ fun SearchScreen(
                     NearbyList(results = shown, category = category, fuel = fuel, onPick = onPick)
                 }
                 else -> BlankState(
+                    editingStart = editingStart,
+                    onUseMyPosition = onUseMyPosition,
                     home = home,
                     work = work,
                     favorites = favorites,
@@ -372,64 +400,168 @@ fun SearchScreen(
 }
 
 /**
- * The trip's departure: the driver's position unless they picked somewhere else.
- * It presses in under the finger and the address slides in — a flat line here read as
- * decoration, and nobody thought to tap it.
+ * Departure over arrival, linked like a trip: a ring, three dots, a dot. The line being chosen is
+ * the field; the other is one tap away. The departure always shows, "Ma position" by default.
  */
 @Composable
-private fun StartRow(start: Place?, onEdit: () -> Unit, onClear: () -> Unit) {
+private fun RouteStopsCard(
+    start: Place?,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    editingStart: Boolean,
+    arrivalPrompt: String,
+    onEditStart: () -> Unit,
+    onEditArrival: () -> Unit,
+    onResetStart: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "startScale")
-    val simulated = start != null
-    val border by animateColorAsState(if (simulated) colors.accent else colors.border, label = "startBorder")
-    val fill by animateColorAsState(
-        if (simulated) colors.accent.copy(alpha = 0.12f) else colors.surface.copy(alpha = 0.45f),
-        label = "startFill",
-    )
+    Row(
+        modifier = modifier
+            .clip(EonaTheme.shapes.lg)
+            .background(colors.surface.copy(alpha = 0.45f))
+            .border(0.5.dp, colors.separator, EonaTheme.shapes.lg)
+            .padding(start = spacing.md, end = spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.md),
+    ) {
+        // The route's spine: departure ring, three dots, arrival dot.
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .border(2.5.dp, if (start != null || editingStart) colors.accent else colors.textSecondary, CircleShape),
+            )
+            repeat(3) { Box(Modifier.size(3.dp).clip(CircleShape).background(colors.textTertiary)) }
+            Box(Modifier.size(12.dp).clip(CircleShape).background(colors.accent))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.height(STOP_LINE_HEIGHT), contentAlignment = Alignment.CenterStart) {
+                if (editingStart) {
+                    StopField(query, onQueryChange, "Adresse de départ")
+                } else {
+                    StartLine(start = start, onEdit = onEditStart, onReset = onResetStart)
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.separator))
+            Box(modifier = Modifier.height(STOP_LINE_HEIGHT), contentAlignment = Alignment.CenterStart) {
+                if (editingStart) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onEditArrival),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                    ) {
+                        EonaText("Arrivée", style = EonaTheme.typography.caption, color = colors.textTertiary)
+                        EonaText(arrivalPrompt, style = EonaTheme.typography.callout, color = colors.textSecondary, maxLines = 1)
+                    }
+                } else {
+                    StopField(query, onQueryChange, arrivalPrompt)
+                }
+            }
+        }
+    }
+}
 
+/** "Départ · Ma position", with "Modifier" — and a cross to come back to the driver's position. */
+@Composable
+private fun StartLine(start: Place?, onEdit: () -> Unit, onReset: () -> Unit) {
+    val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onEdit),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            EonaText("Départ", style = EonaTheme.typography.caption, color = colors.textTertiary)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing.xs)) {
+                if (start == null) EonaIcon(EonaIcons.Gps, contentDescription = null, tint = colors.accent, size = 13.dp)
+                AnimatedContent(
+                    targetState = start?.name ?: "Ma position",
+                    transitionSpec = {
+                        (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
+                    },
+                    label = "startName",
+                ) { name ->
+                    EonaText(
+                        name,
+                        style = EonaTheme.typography.callout,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        if (start != null) {
+            // Back to the driver's own position, without typing anything.
+            RowAction(EonaIcons.Close, "Repartir de ma position", onClick = onReset)
+        }
+        EonaText(
+            "Modifier",
+            style = EonaTheme.typography.caption,
+            color = colors.accent,
+            modifier = Modifier
+                .clip(EonaTheme.shapes.pill)
+                .background(colors.accent.copy(alpha = 0.14f))
+                .clickable(onClick = onEdit)
+                .padding(horizontal = spacing.sm, vertical = spacing.xs),
+        )
+    }
+}
+
+/** The stop being typed; it takes the keyboard as it appears. */
+@Composable
+private fun StopField(value: String, onValueChange: (String) -> Unit, placeholder: String) {
+    val colors = EonaTheme.colors
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(placeholder) { runCatching { focus.requestFocus() } }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EonaTheme.spacing.sm)) {
+        EonaIcon(EonaIcons.Search, contentDescription = null, tint = colors.textTertiary, size = 18.dp)
+        Box(modifier = Modifier.weight(1f)) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = EonaTheme.typography.body.copy(color = colors.textPrimary),
+                cursorBrush = SolidColor(colors.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            )
+            if (value.isEmpty()) {
+                EonaText(placeholder, style = EonaTheme.typography.body, color = colors.textTertiary, maxLines = 1)
+            }
+        }
+        if (value.isNotEmpty()) RowAction(EonaIcons.Close, "Effacer") { onValueChange("") }
+    }
+}
+
+/** The first line of the list while the departure is being chosen: the driver's own position. */
+@Composable
+private fun UseMyPositionRow(onClick: () -> Unit) {
+    val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = spacing.lg)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(EonaTheme.shapes.md)
-            .background(fill)
-            .border(1.dp, border, EonaTheme.shapes.md)
-            .clickable(interactionSource = interaction, indication = null, onClick = onEdit)
-            .padding(horizontal = spacing.md, vertical = spacing.sm),
+            .clickable(onClick = onClick)
+            .padding(horizontal = spacing.sm, vertical = spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(spacing.md),
     ) {
-        EonaIcon(
-            EonaIcons.Gps,
-            contentDescription = null,
-            tint = if (simulated) colors.accent else colors.textTertiary,
-            size = 18.dp,
-        )
-        EonaText("Départ", style = EonaTheme.typography.caption, color = colors.textTertiary)
-        AnimatedContent(
-            targetState = start?.name ?: "Ma position",
-            transitionSpec = {
-                (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
-            },
-            modifier = Modifier.weight(1f),
-            label = "startName",
-        ) { name ->
-            EonaText(
-                name,
-                style = EonaTheme.typography.callout,
-                color = if (simulated) colors.textPrimary else colors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Box(
+            modifier = Modifier.size(32.dp).clip(CircleShape).background(colors.accent.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            EonaIcon(EonaIcons.Gps, contentDescription = null, tint = colors.accent, size = 16.dp)
         }
-        if (simulated) {
-            RowAction(EonaIcons.Close, "Repartir de ma position", onClick = onClear)
-        } else {
-            EonaText("Changer", style = EonaTheme.typography.caption, color = colors.accent)
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            EonaText("Ma position", style = EonaTheme.typography.bodyStrong, color = colors.textPrimary)
+            EonaText("Partir d'où je suis", style = EonaTheme.typography.footnote, color = colors.textSecondary)
         }
     }
 }
@@ -517,6 +649,8 @@ private fun categoryColor(category: PlaceCategory): Color = when (category) {
 
 @Composable
 private fun BlankState(
+    editingStart: Boolean,
+    onUseMyPosition: () -> Unit,
     home: Place?,
     work: Place?,
     favorites: List<FavoriteTrip>,
@@ -537,6 +671,7 @@ private fun BlankState(
             .padding(horizontal = spacing.lg, vertical = spacing.md),
         verticalArrangement = Arrangement.spacedBy(spacing.xl),
     ) {
+        if (editingStart) UseMyPositionRow(onUseMyPosition)
         EonaListGroup(title = "Adresses") {
             SavedRow("Maison", EonaIcons.Home, home, onPick, onSetHome)
             EonaDivider(Modifier.padding(start = 58.dp))
@@ -731,7 +866,7 @@ private fun NearbyList(results: NearbyResults, category: PlaceCategory, fuel: Fu
         item(key = "nearby-sources") {
             EonaText(
                 if (fuel != null) {
-                    "Prix officiels : prix-carburants.gouv.fr. Seuls les prix mis à jour depuis moins de 48 h sont affichés. " +
+                    "Prix officiels : prix-carburants.gouv.fr. Seuls les prix mis à jour depuis moins de 96 h sont affichés. " +
                         "Lieux et horaires : © contributeurs OpenStreetMap."
                 } else {
                     "Lieux et horaires : © contributeurs OpenStreetMap."
@@ -900,7 +1035,7 @@ private fun FuelTypeRow(
 
 /**
  * The official price of [fuel] at this station: "2,283 €" over its age, "Rupture" when the
- * station is out of that fuel, "—" when it has no price younger than 48 h (or no match).
+ * station is out of that fuel, "—" when it has no price younger than 96 h (or no match).
  */
 @Composable
 private fun FuelPriceTag(place: Place, fuel: FuelType, nowMillis: Long) {
@@ -956,7 +1091,10 @@ private fun PlaceKind.icon(): ImageVector = when (this) {
 private const val MIN_QUERY = 3
 /** The frosted pane over the HUD: enough to read on, the map still showing through. */
 private const val SEARCH_GLASS_ALPHA = 0.8f
-private const val DEBOUNCE_MS = 300L
+/** Short: the suggestions follow the typing without flooding the server. */
+private const val DEBOUNCE_MS = 200L
+/** Each line of the departure/arrival card. */
+private val STOP_LINE_HEIGHT = 46.dp
 
 @Preview(name = "Recherche", showBackground = true, backgroundColor = 0xFF06070A, widthDp = 380, heightDp = 800)
 @Composable

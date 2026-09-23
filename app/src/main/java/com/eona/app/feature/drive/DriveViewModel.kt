@@ -1085,6 +1085,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         direction = draft.direction,
                         bearingDeg = fix.bearingDeg?.toDouble(),
                         prompted = draft.prompted,
+                        severity = draft.severity,
                     ),
                     AccountRepository.token,
                     AccountRepository.deviceId,

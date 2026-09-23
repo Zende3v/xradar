@@ -35,6 +35,8 @@ data class NewReport(
     val bearingDeg: Double? = null,
     /** "Oui" to "Ralentissement du trafic ?": a guest's reports of the day are not used up. */
     val prompted: Boolean = false,
+    /** "Embouteillage" only: léger, important or à l'arrêt. */
+    val severity: com.eona.app.core.model.JamSeverity? = null,
 )
 
 /** HTTP client for crowdsourced reports (`/api/reports`). */
@@ -80,6 +82,7 @@ class ReportsApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 put("direction", report.direction)
                 if (report.bearingDeg != null) put("bearing", report.bearingDeg)
                 if (report.prompted) put("prompted", true)
+                report.severity?.let { put("severity", it.wire) }
             }
             .toString()
             .toRequestBody(JSON)

@@ -36,7 +36,11 @@ import com.eona.app.core.model.GeoPoint
 import com.eona.app.core.model.LocationSample
 import com.eona.app.core.model.Radar
 import com.eona.app.core.model.UserReport
+import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.designsystem.theme.EonaTheme
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import org.maplibre.android.MapLibre
@@ -162,6 +166,10 @@ fun DriveMap(
     val routePath = remember(routePoints) { if (routePoints.size >= 2) RoutePath(routePoints) else null }
     val routePathState = rememberUpdatedState(routePath)
     val trafficState = rememberUpdatedState(traffic)
+    // "Couleur de l'app": the route, the arrow and its halo take it; the style is redrawn with it.
+    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+    val accent = 0xFF000000.toInt() or settings.accent.rgb
+    val accentState = rememberUpdatedState(accent)
     // Where the drawn line starts along the route (the part driven is cut off), for its colours.
     val routeFrom = remember { DoubleArray(1) }
     val nav = remember { NavHolder() }
@@ -254,16 +262,17 @@ fun DriveMap(
     // Day or night as the app's theme says ("Thème général"): the map and the HUD over it
     // switch together. The style reloads when it changes.
     val darkMap = EonaTheme.colors.isDark
-    LaunchedEffect(map, darkMap) {
+    LaunchedEffect(map, darkMap, accent) {
         val current = map ?: return@LaunchedEffect
         styleReady = false
+        val accentHex = String.format("#%06X", 0xFFFFFF and accent)
         current.setStyle(baseStyle(context, darkMap)) { style ->
             // Route (drawn at the bottom, under radars and the user marker).
             // Line metrics: the traffic colours are laid along the line (line-progress).
             style.addSource(GeoJsonSource(ROUTE_SOURCE, GeoJsonOptions().withLineMetrics(true)))
             style.addLayer(
                 LineLayer(ROUTE_GLOW, ROUTE_SOURCE).withProperties(
-                    PropertyFactory.lineColor(ACCENT),
+                    PropertyFactory.lineColor(accentHex),
                     PropertyFactory.lineWidth(12f),
                     PropertyFactory.lineOpacity(0.35f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
@@ -272,7 +281,7 @@ fun DriveMap(
             )
             style.addLayer(
                 LineLayer(ROUTE_CORE, ROUTE_SOURCE).withProperties(
-                    PropertyFactory.lineColor("#3EE1EC"),
+                    PropertyFactory.lineColor(accentHex),
                     PropertyFactory.lineWidth(5f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -315,6 +324,12 @@ fun DriveMap(
                     BitmapFactory.decodeResource(context.resources, resId)?.let {
                         style.addImage("m-$key", Bitmap.createScaledBitmap(it, markerPx, markerPx, true))
                     }
+                }
+            }
+            // Radars, camera and control: the colour artwork, as supplied; a jam has its own.
+            runCatching {
+                artworkMarkers.forEach { (key, resId) ->
+                    ContextCompat.getDrawable(context, resId)?.let { style.addImage(key, it.toBitmap(markerPx, markerPx)) }
                 }
             }
             // Cluster badges (Arthur's icons), scaled to a fixed height. The width that
@@ -376,12 +391,12 @@ fun DriveMap(
             )
             addBadgeClusterLayer(style, REPORT_SOURCE, REPORT_CLUSTER, CLUSTER_ALERT_IMAGE, alertOffsetEm, darkMap)
             // User position on top: a soft pulsing halo + a heading arrow.
-            style.addImage(ARROW_IMAGE, arrowBitmap())
+            style.addImage(ARROW_IMAGE, arrowBitmap(accent))
             style.addSource(GeoJsonSource(POSITION_SOURCE))
             style.addLayer(
                 CircleLayer(POSITION_HALO, POSITION_SOURCE).withProperties(
                     PropertyFactory.circleRadius(18f),
-                    PropertyFactory.circleColor(ACCENT),
+                    PropertyFactory.circleColor(accentHex),
                     PropertyFactory.circleOpacity(0.18f),
                 ),
             )
@@ -402,7 +417,7 @@ fun DriveMap(
             setZones(style, zones)
             setRoute(style, routePoints)
             routeFrom[0] = 0.0
-            applyTraffic(style, routePath, 0.0, traffic)
+            applyTraffic(style, routePath, 0.0, traffic, accent)
             styleReady = true
         }
     }
@@ -442,7 +457,7 @@ fun DriveMap(
     // New traffic (or a new style) colours the line at once, even when the car stands still.
     LaunchedEffect(traffic, styleReady) {
         val style = map?.style ?: return@LaunchedEffect
-        if (styleReady) applyTraffic(style, routePath, routeFrom[0], traffic)
+        if (styleReady) applyTraffic(style, routePath, routeFrom[0], traffic, accentState.value)
     }
 
     LaunchedEffect(location, routePath) {
@@ -524,7 +539,7 @@ fun DriveMap(
                         val trimmed = rp.trimFrom(displayedAlong)
                         setRoute(style, trimmed)
                         routeFrom[0] = displayedAlong
-                        applyTraffic(style, rp, displayedAlong, trafficState.value, trimmed)
+                        applyTraffic(style, rp, displayedAlong, trafficState.value, accentState.value, trimmed)
                         appliedTraffic = trafficState.value
                     }
                 } else {
@@ -550,7 +565,7 @@ fun DriveMap(
                         val wasCut = routeFrom[0] != 0.0
                         routeFrom[0] = 0.0
                         if (wasCut || appliedTraffic !== trafficState.value) {
-                            applyTraffic(style, rp, 0.0, trafficState.value)
+                            applyTraffic(style, rp, 0.0, trafficState.value, accentState.value)
                             appliedTraffic = trafficState.value
                         }
                     }
@@ -708,8 +723,17 @@ private fun lerpAngle(from: Double, to: Float, t: Float): Double {
     return (from + diff * t + 360.0) % 360.0
 }
 
-/** A crisp navigation chevron pointing up (north), recolored to the accent. */
-private fun arrowBitmap(): Bitmap {
+/** The colour artwork used as map markers, drawn as supplied (image name → drawable). */
+private val artworkMarkers = mapOf(
+    "m-RadarFixed" to R.drawable.ic_hud_radar_fixe,
+    "m-RadarMobile" to R.drawable.ic_hud_radar_mobile,
+    "m-Camera" to R.drawable.ic_hud_camera,
+    "m-ControlZone" to R.drawable.ic_hud_zone_controle,
+    JAM_MARKER to R.drawable.ic_hud_bouchon,
+)
+
+/** A crisp navigation chevron pointing up (north), in the accent ([color], ARGB). */
+private fun arrowBitmap(fillColor: Int): Bitmap {
     val size = 84
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
@@ -729,7 +753,7 @@ private fun arrowBitmap(): Bitmap {
     })
     canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = android.graphics.Color.parseColor(ACCENT)
+        color = fillColor
     })
     return bitmap
 }
@@ -769,7 +793,8 @@ private fun setControlZones(style: Style, reports: List<UserReport>) {
 private fun setReports(style: Style, reports: List<UserReport>) {
     val features = reports.map {
         Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)).apply {
-            addStringProperty("icon", "m-${it.type.alertType.name}")
+            // A jam has its own artwork; the other reports share their alert's marker.
+            addStringProperty("icon", if (it.type == com.eona.app.core.model.ReportType.TrafficJam) JAM_MARKER else "m-${it.type.alertType.name}")
             addStringProperty("rid", it.id)
         }
     }
@@ -978,15 +1003,22 @@ private fun markerBitmap(painter: Painter, sizePx: Int, iconColor: ComposeColor,
 }
 
 /**
- * The route line's colours along it: its own cyan, and the traffic's where the road is slowed
- * (amber, orange, red, dark red when closed), blended over [TRAFFIC_BLEND_M]. [fromM]: where
- * the drawn line ([drawn], [rp] cut there) starts along [rp]. The backend measured the same
- * points; its metres are scaled to [rp]'s. Clear road: plain cyan.
+ * The route line's colours along it: its own ([routeColor], the app's colour), and the traffic's
+ * where the road is slowed (amber, orange, red, dark red when closed), blended over
+ * [TRAFFIC_BLEND_M]. [fromM]: where the drawn line ([drawn], [rp] cut there) starts along [rp].
+ * The backend measured the same points; its metres are scaled to [rp]'s. Clear road: plain colour.
  */
-private fun applyTraffic(style: Style, rp: RoutePath?, fromM: Double, traffic: RouteTraffic?, drawn: List<GeoPoint>? = null) {
+private fun applyTraffic(
+    style: Style,
+    rp: RoutePath?,
+    fromM: Double,
+    traffic: RouteTraffic?,
+    routeColor: Int,
+    drawn: List<GeoPoint>? = null,
+) {
     val layer = style.getLayerAs<LineLayer>(ROUTE_CORE) ?: return
     val stops = ArrayList<Pair<Double, Int>>()
-    stops += 0.0 to ROUTE_CORE_COLOR
+    stops += 0.0 to routeColor
     if (rp != null && traffic != null && traffic.totalMeters > 0 && rp.totalMeters - fromM > 1) {
         val line = LineMeasure(drawn ?: rp.trimFrom(fromM))
         val scale = rp.totalMeters / traffic.totalMeters
@@ -998,14 +1030,14 @@ private fun applyTraffic(style: Style, rp: RoutePath?, fromM: Double, traffic: R
             val color = trafficColor(stretch.level)
             val blendIn = line.progress(stretch.fromMeters * scale - fromM - TRAFFIC_BLEND_M)
             val blendOut = line.progress(stretch.toMeters * scale - fromM + TRAFFIC_BLEND_M)
-            stops += maxOf(blendIn, cursor) to ROUTE_CORE_COLOR
+            stops += maxOf(blendIn, cursor) to routeColor
             stops += from to color
             stops += to to color
-            stops += blendOut to ROUTE_CORE_COLOR
+            stops += blendOut to routeColor
             cursor = blendOut
         }
     }
-    stops += 1.0 to ROUTE_CORE_COLOR
+    stops += 1.0 to routeColor
     // line-progress stops must go strictly up.
     val kept = ArrayList<Pair<Double, Int>>()
     for (stop in stops) if (kept.isEmpty() || stop.first > kept.last().first + 1e-6) kept += stop
@@ -1108,10 +1140,10 @@ private const val ZONE_LINE = "xr-zones-line"
 private const val ROUTE_SOURCE = "xr-route"
 private const val ROUTE_GLOW = "xr-route-glow"
 private const val ROUTE_CORE = "xr-route-core"
-/** The route line's own colour, and how far the traffic colours blend into it. */
-private val ROUTE_CORE_COLOR = 0xFF3EE1EC.toInt()
+/** How far the traffic colours blend into the route's own colour. */
 private const val TRAFFIC_BLEND_M = 25.0
-private const val ACCENT = "#2CD5E0"
+/** The marker of an "Embouteillage" report. */
+private const val JAM_MARKER = "m-jam"
 private const val NAV_ZOOM = 17.6
 private const val NAV_TILT = 45.0
 private const val MIN_SPEED_MS = 2f

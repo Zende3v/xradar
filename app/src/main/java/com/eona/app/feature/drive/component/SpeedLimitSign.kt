@@ -25,7 +25,7 @@ fun SpeedLimitSign(limitKmh: Int, modifier: Modifier = Modifier, size: Dp = 64.d
             .size(size)
             .clip(CircleShape)
             .background(Color.White)
-            .border(size * 0.12f, EonaTheme.colors.danger, CircleShape),
+            .border(size * 0.12f, EonaTheme.colors.limitRing, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         EonaText(

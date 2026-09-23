@@ -37,7 +37,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val dark by remember { derivedStateOf { settings.theme.isDark(location, now) } }
-            EonaTheme(darkTheme = dark) {
+            // "Couleur de l'app": every screen, the route and the arrow take it at once.
+            EonaTheme(darkTheme = dark, accent = settings.accent.rgb) {
                 EonaApp()
             }
         }

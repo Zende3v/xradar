@@ -37,8 +37,8 @@ data class FuelPrice(
     }
 
     companion object {
-        /** 48 hours. */
-        const val FRESH_MS = 48L * 60 * 60 * 1000
+        /** 96 hours. */
+        const val FRESH_MS = 96L * 60 * 60 * 1000
     }
 }
 

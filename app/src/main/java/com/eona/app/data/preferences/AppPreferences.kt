@@ -60,9 +60,36 @@ enum class AppTheme {
     }
 }
 
+/**
+ * The colour the driver picked for everything interactive: buttons, the route, the arrow.
+ * Stored as its hex, so a colour added later needs no migration.
+ */
+enum class AccentColor(val hex: String, val label: String) {
+    Cyan("2CD5E0", "Cyan"),
+    Coral("FF5E36", "Corail"),
+    Lemon("FFF342", "Citron"),
+    Lime("CFFF2B", "Citron vert"),
+    Mint("A8FFD8", "Menthe"),
+    Turquoise("52FFEC", "Turquoise"),
+    Azure("009EFF", "Azur"),
+    Lavender("856EFF", "Lavande"),
+    Indigo("4E21FF", "Indigo"),
+    Violet("8500FF", "Violet"),
+    Magenta("E100FF", "Magenta");
+
+    /** The colour itself, 0xRRGGBB. */
+    val rgb: Int get() = hex.toInt(16)
+
+    companion object {
+        fun fromHex(hex: String?): AccentColor = entries.firstOrNull { it.hex == hex } ?: Cyan
+    }
+}
+
 /** Look-and-feel and routing choices (persisted), edited from Réglages and the Options dock. */
 data class AppSettings(
     val theme: AppTheme = AppTheme.Auto,
+    /** "Couleur de l'app". */
+    val accent: AccentColor = AccentColor.Cyan,
     /** Ask the router to keep the trip off toll roads. */
     val avoidTolls: Boolean = false,
     /** Ask the router to keep the trip off motorways. */
@@ -87,7 +114,12 @@ data class AppSettings(
      *  EONA team sees where this driver is. Off unless the driver turns it on. */
     val presence: Boolean = false,
     /** "Temps d'utilisation": the time spent with the app open adds up on the account. */
-    val usageTime: Boolean = false,
+    val usageTime: Boolean = true,
+    /** The version of the terms the driver accepted, and when. Empty: never accepted. */
+    val termsVersion: String = "",
+    val termsAcceptedAt: Long? = null,
+    /** True when the driver refused the terms: the app stays closed until they change their mind. */
+    val termsDeclined: Boolean = false,
 )
 
 /** App-scoped preferences, backed by SharedPreferences. Init once from a Context. */
@@ -117,6 +149,7 @@ object AppPreferences {
         )
         _settings.value = AppSettings(
             theme = enumOrDefault(p.getString("theme", null), legacyTheme(p)),
+            accent = AccentColor.fromHex(p.getString("accent", null)),
             avoidTolls = p.getBoolean("avoidTolls", false),
             avoidHighways = p.getBoolean("avoidHighways", false),
             avoidTraffic = p.getBoolean("avoidTraffic", false),
@@ -127,8 +160,31 @@ object AppPreferences {
             tripSuggestions = p.getBoolean("tripSuggestions", true),
             drivingStats = p.getBoolean("drivingStats", true),
             presence = p.getBoolean("presence", false),
-            usageTime = p.getBoolean("usageTime", false),
+            usageTime = p.getBoolean("usageTime", true),
+            termsVersion = p.getString("termsVersion", null).orEmpty(),
+            termsAcceptedAt = p.getLong("termsAcceptedAt", 0L).takeIf { it > 0L },
+            termsDeclined = p.getBoolean("termsDeclined", false),
         )
+    }
+
+    /** The driver accepted [version] of the terms, now. Any earlier refusal is forgotten. */
+    fun acceptTerms(version: String) {
+        updateSettings { it.copy(termsVersion = version, termsAcceptedAt = System.currentTimeMillis(), termsDeclined = false) }
+    }
+
+    /** The driver refused: nothing that needs the terms starts, and the screen says why. */
+    fun declineTerms() {
+        updateSettings { it.copy(termsVersion = "", termsAcceptedAt = null, termsDeclined = true) }
+    }
+
+    /**
+     * Whether the terms must be shown: never accepted, refused, or a version that has to be
+     * agreed to again (a typo fixed in 1.0.1 does not ask anyone a second time).
+     */
+    fun needsTerms(settings: AppSettings, required: String): Boolean {
+        if (settings.termsDeclined) return true
+        if (settings.termsVersion.isEmpty()) return true
+        return settings.termsVersion.substringBefore('.') != required.substringBefore('.')
     }
 
     /** Before "Thème général": the basemap setting was what the drive showed, so it decides. */
@@ -164,6 +220,7 @@ object AppPreferences {
         _settings.value = updated
         prefs?.edit()?.apply {
             putString("theme", updated.theme.name)
+            putString("accent", updated.accent.hex)
             // The app theme and the basemap of earlier builds, merged into [theme].
             remove("themeMode")
             remove("mapStyle")
@@ -177,6 +234,9 @@ object AppPreferences {
             putBoolean("drivingStats", updated.drivingStats)
             putBoolean("presence", updated.presence)
             putBoolean("usageTime", updated.usageTime)
+            putString("termsVersion", updated.termsVersion)
+            putLong("termsAcceptedAt", updated.termsAcceptedAt ?: 0L)
+            putBoolean("termsDeclined", updated.termsDeclined)
             apply()
         }
     }
