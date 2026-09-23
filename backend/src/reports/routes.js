@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { accountStore } from '../accounts/store.js';
-import { authAccount, isAdminRequest } from '../accounts/auth.js';
+import { adminActor, authAccount } from '../accounts/auth.js';
+import { adminAudit } from '../admin/audit.js';
 import { probeStore } from '../traffic/probes.js';
 import { reportStore } from './store.js';
 
@@ -22,11 +23,13 @@ const guarded = (handler) => async (req, res) => {
 
 /** DELETE /api/reports/:id — moderation, admins only (account or ADMIN_TOKEN). */
 reportRouter.delete('/:id', guarded(async (req, res) => {
-  if (!isAdminRequest(req)) {
+  const actor = adminActor(req);
+  if (!actor) {
     return res.status(403).json({ error: 'admin only' });
   }
   const removed = UUID.test(req.params.id) && await reportStore.removeById(req.params.id);
   if (!removed) return res.status(404).json({ error: 'not found' });
+  adminAudit.log(actor, 'report.remove', 'report', req.params.id);
   res.json({ removed: true, id: req.params.id });
 }));
 

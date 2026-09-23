@@ -128,6 +128,62 @@ class ReportStore {
     return rowCount > 0;
   }
 
+  /**
+   * The admin console's list: every report, live or closed, newest first, with the id of its
+   * author. Filters: status (live, expired, denied, removed, or closed for all but live), type,
+   * author, creation period, and a box. The plate never leaves, here either.
+   */
+  async adminList({ status = null, type = null, author = null, from = null, to = null, box = null, before = null, limit = 50 } = {}) {
+    const where = [];
+    const params = [];
+    const bind = (value) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+    if (status === 'closed') where.push(`r.status <> 'live'`);
+    else if (status) where.push(`r.status = ${bind(status)}`);
+    if (type) where.push(`r.type = ${bind(type)}`);
+    if (author) where.push(`r.reporter_id = ${bind(author)}`);
+    if (from) where.push(`r.created_at >= ${bind(from)}`);
+    if (to) where.push(`r.created_at <= ${bind(to)}`);
+    if (before) where.push(`r.created_at < ${bind(before)}`);
+    if (box) {
+      where.push(`r.geom && ST_MakeEnvelope(${bind(box.west)}, ${bind(box.south)}, ${bind(box.east)}, ${bind(box.north)}, 4326)`);
+    }
+    const { rows } = await db.query(
+      `SELECT ${PUBLIC_COLUMNS},
+              (extract(epoch FROM r.closed_at) * 1000)::bigint AS closed_at,
+              (extract(epoch FROM r.last_reported_at) * 1000)::bigint AS last_reported_at
+       FROM crowd.report r
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY r.created_at DESC
+       LIMIT ${bind(limit)}`,
+      params,
+    );
+    const now = Date.now();
+    return rows.map((row) => toAdmin(row, now));
+  }
+
+  /** One report for the console: the list's fields, and its voices counted by kind. */
+  async adminGet(id) {
+    const { rows } = await db.query(
+      `SELECT ${PUBLIC_COLUMNS},
+              (extract(epoch FROM r.closed_at) * 1000)::bigint AS closed_at,
+              (extract(epoch FROM r.last_reported_at) * 1000)::bigint AS last_reported_at
+       FROM crowd.report r WHERE r.id = $1`,
+      [id],
+    );
+    if (!rows[0]) return null;
+    const voices = await db.query(
+      'SELECT voice, count(*)::int AS n FROM crowd.report_voice WHERE report_id = $1 GROUP BY voice',
+      [id],
+    );
+    return {
+      ...toAdmin(rows[0], Date.now()),
+      voices: Object.fromEntries(voices.rows.map((v) => [v.voice, v.n])),
+    };
+  }
+
   /** Live reports around a point, nearest first (radar cars with a plate come as zones). */
   async near(lat, lon, radiusM, limit) {
     const { rows } = await db.query(
@@ -358,6 +414,20 @@ function toPublic(row, now) {
     score: Math.round(crowdScore(model, now - createdAt, row.confirmations, row.contradictions)),
     impactM: model.impactM,
     persistent: model.persistent === true,
+  };
+}
+
+/**
+ * What the admin console sees: the app's fields, the status and when it closed, and the id of
+ * the author — whose name the route adds. Still never the plate.
+ */
+function toAdmin(row, now) {
+  return {
+    ...toPublic(row, now),
+    status: row.status,
+    closedAt: row.closed_at == null ? null : Number(row.closed_at),
+    lastReportedAt: row.last_reported_at == null ? null : Number(row.last_reported_at),
+    reporterId: row.reporter_id ?? null,
   };
 }
 

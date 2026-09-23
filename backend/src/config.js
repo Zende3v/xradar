@@ -365,6 +365,11 @@ export const config = {
   adminToken: process.env.ADMIN_TOKEN || null,
   // Session token lifetime (client/admin stay logged in).
   sessionTtlMs: 90 * 24 * 60 * 60 * 1000, // 90 days
+  // A session opened from the admin webapp (login with web: true): a working day, not three
+  // months — a browser is easier to leave open than a phone.
+  webSessionTtlMs: 12 * 60 * 60 * 1000,
+  // The admins' journal (who did what): kept a year, then purged.
+  adminAuditDays: Number(process.env.ADMIN_AUDIT_DAYS) || 365,
 
   // SMTP for email verification + password reset (via env; disabled if unset).
   smtp: {

@@ -4,7 +4,8 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { transaction } from '../crowd/schema.js';
 import { liveStore } from '../live/store.js';
-import { authAccount, publicView } from './auth.js';
+import { adminActor, authAccount, publicView } from './auth.js';
+import { adminAudit } from '../admin/audit.js';
 import { accountStore } from './store.js';
 import { verifyGoogleToken } from './google.js';
 import { settingsStore } from './settings.js';
@@ -148,8 +149,10 @@ accountRouter.post('/reset', (req, res) => {
 accountRouter.post('/login', (req, res) => {
   const result = accountStore.login(req.body?.identifier ?? req.body?.email, req.body?.password, req.body?.deviceId);
   if (result.error) return res.status(401).json({ error: result.error });
-  const token = accountStore.issueToken(result.account.id);
-  res.json({ account: selfView(result.account), token });
+  // From the admin webapp (web: true), the session lasts a working day, not three months.
+  const ttlMs = req.body?.web === true ? config.webSessionTtlMs : config.sessionTtlMs;
+  const token = accountStore.issueToken(result.account.id, ttlMs);
+  res.json({ account: selfView(result.account), token, expiresInS: Math.round(ttlMs / 1000) });
 });
 
 /**
@@ -368,12 +371,12 @@ accountRouter.post('/logout', (req, res) => {
 
 export const adminAccountRouter = Router();
 
+// An admin account signed in with its session (the webapp), or the ADMIN_TOKEN (scripts).
+// Taking the admin role away from an account closes this door to it at once.
 adminAccountRouter.use((req, res, next) => {
-  if (!config.adminToken) {
-    return res.status(503).json({ error: 'admin API disabled (set ADMIN_TOKEN)' });
-  }
-  const token = bearer(req.get('authorization')) || req.get('x-admin-token');
-  if (token !== config.adminToken) return res.status(401).json({ error: 'unauthorized' });
+  const actor = adminActor(req);
+  if (!actor) return res.status(401).json({ error: 'admin session required' });
+  req.actor = actor;
   next();
 });
 
@@ -384,11 +387,41 @@ function adminView(a) {
   return rest;
 }
 
+/**
+ * GET /api/admin/accounts?q=&role=&banned=&signup=&sort=lastSeen|created|username&order=desc|asc
+ *                         &limit=50&offset=0
+ * A page of accounts. `q` looks in the pseudo, the display name, the email and the id, accents
+ * and case aside. `total` is how many match; `next` the offset of the following page, or null.
+ */
 adminAccountRouter.get('/', (req, res) => {
   const role = req.query.role ? String(req.query.role) : undefined;
-  const accounts = accountStore.list(role).map(adminView);
-  res.json({ count: accounts.length, meta: accountStore.meta, accounts });
+  const q = fold(req.query.q);
+  const banned = req.query.banned === 'true' ? true : req.query.banned === 'false' ? false : null;
+  const signup = req.query.signup ? String(req.query.signup) : null;
+  let found = accountStore.list(role).filter((a) =>
+    (banned === null || Boolean(a.banned) === banned)
+    && (!signup || (a.signupMethod ?? 'email') === signup)
+    && (!q || [a.username, a.displayName, a.email, a.id].some((field) => fold(field).includes(q))));
+  const sort = { created: 'createdAt', username: 'usernameLower', lastSeen: 'lastSeenAt' }[req.query.sort] ?? 'lastSeenAt';
+  const asc = req.query.order === 'asc';
+  found = found.sort((a, b) => String(a[sort] ?? '').localeCompare(String(b[sort] ?? '')) * (asc ? 1 : -1));
+  const limit = Math.min(Math.max(Math.floor(Number(req.query.limit)) || 50, 1), 200);
+  const offset = Math.max(Math.floor(Number(req.query.offset)) || 0, 0);
+  const page = found.slice(offset, offset + limit).map(adminView);
+  res.json({
+    total: found.length,
+    count: page.length,
+    offset,
+    next: offset + limit < found.length ? offset + limit : null,
+    meta: accountStore.meta,
+    accounts: page,
+  });
 });
+
+/** Case and accents aside, for the search. */
+function fold(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
 
 adminAccountRouter.get('/:id', (req, res) => {
   const account = accountStore.get(req.params.id);
@@ -406,20 +439,37 @@ adminAccountRouter.post('/', (req, res) => {
     password: req.body?.password ?? null,
   });
   if (result.error) return res.status(400).json({ error: result.error });
+  adminAudit.log(req.actor, 'account.create', 'account', result.account.id, { role: result.account.role, username: result.account.username ?? null });
   res.status(201).json({ account: adminView(result.account) });
 });
 
 adminAccountRouter.patch('/:id', (req, res) => {
+  // Nobody locks themselves out: an admin cannot ban themselves nor take their own role away.
+  if (req.actor.id === req.params.id && (req.body?.banned === true || (req.body?.role && req.body.role !== 'admin'))) {
+    return res.status(400).json({ error: 'cannot demote or ban yourself' });
+  }
+  const before = accountStore.get(req.params.id);
+  const was = before ? { role: before.role, banned: Boolean(before.banned), displayName: before.displayName ?? null } : null;
   const result = accountStore.update(req.params.id, {
     role: req.body?.role,
     displayName: req.body?.displayName,
     banned: req.body?.banned,
   });
   if (result.error) return res.status(result.error === 'not found' ? 404 : 400).json({ error: result.error });
+  const now = { role: result.account.role, banned: Boolean(result.account.banned), displayName: result.account.displayName ?? null };
+  const changed = Object.keys(now).filter((key) => was && was[key] !== now[key]);
+  if (changed.length) {
+    const action = changed.includes('banned')
+      ? (now.banned ? 'account.ban' : 'account.unban')
+      : changed.includes('role') ? 'account.role' : 'account.update';
+    adminAudit.log(req.actor, action, 'account', result.account.id,
+      Object.fromEntries(changed.map((key) => [key, { from: was[key], to: now[key] }])));
+  }
   res.json({ account: adminView(result.account) });
 });
 
 adminAccountRouter.delete('/:id', async (req, res) => {
+  if (req.actor.id === req.params.id) return res.status(400).json({ error: 'cannot delete yourself here' });
   const account = accountStore.get(req.params.id);
   if (!account) return res.status(404).json({ error: 'not found' });
   // Deleted by an admin or by its owner, an account leaves the same thing behind: nothing.
@@ -433,11 +483,7 @@ adminAccountRouter.delete('/:id', async (req, res) => {
   await Promise.all(['png', 'jpg', 'webp'].map((ext) => unlink(`${config.avatarsDir}/${account.id}.${ext}`).catch(() => {})));
   const result = accountStore.remove(account.id);
   if (result.error) return res.status(404).json({ error: result.error });
+  adminAudit.log(req.actor, 'account.delete', 'account', account.id, { role: account.role, username: account.username ?? null });
   res.json(result);
 });
 
-function bearer(header) {
-  if (!header) return null;
-  const m = /^Bearer\s+(.+)$/i.exec(header);
-  return m ? m[1] : null;
-}

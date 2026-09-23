@@ -2,6 +2,7 @@ import express from 'express';
 import { config } from './config.js';
 import { avatarRouter } from './accounts/avatar.js';
 import { accountRouter, adminAccountRouter } from './accounts/routes.js';
+import { adminRouter } from './admin/routes.js';
 import { accountStore } from './accounts/store.js';
 import { fuelStore } from './fuel/store.js';
 import { liveRouter } from './live/routes.js';
@@ -26,6 +27,19 @@ import { groupPage, sharePage } from './trips/page.js';
 import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
 
+/**
+ * An address WEBAPP_ORIGINS lets in: written out in full, or with one star standing for a
+ * single name — `https://*.lovable.app` lets in `https://preview--x.lovable.app`, never
+ * `https://evil.com/.lovable.app` nor a deeper name.
+ */
+function allowedOrigin(origin) {
+  return config.webappOrigins.some((allowed) => {
+    if (!allowed.includes('*')) return allowed === origin;
+    const pattern = allowed.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[a-z0-9-]+');
+    return new RegExp(`^${pattern}$`, 'i').test(origin);
+  });
+}
+
 /** Builds the Express app (kept separate from bootstrap for testability). */
 export function createApp() {
   const app = express();
@@ -33,11 +47,11 @@ export function createApp() {
   // addresses WEBAPP_ORIGINS lists. Everything else (the apps) is not a browser and never asks.
   app.use((req, res, next) => {
     const origin = req.get('origin');
-    if (origin && config.webappOrigins.includes(origin)) {
+    if (origin && allowedOrigin(origin)) {
       res.set('Access-Control-Allow-Origin', origin);
       res.set('Vary', 'Origin');
       res.set('Access-Control-Allow-Headers', 'authorization, content-type, x-admin-token');
-      res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
       res.set('Access-Control-Max-Age', '86400');
       if (req.method === 'OPTIONS') return res.sendStatus(204);
     }
@@ -83,6 +97,7 @@ export function createApp() {
   app.get('/t/:token', sharePage);
   app.get('/g/:token', groupPage);
   app.use('/api/admin/accounts', adminAccountRouter);
+  app.use('/api/admin', adminRouter);
   app.use('/api/live', liveRouter);
   app.use('/api/places', placeRouter);
   app.use('/api/radars', radarRouter);

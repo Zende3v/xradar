@@ -1029,9 +1029,9 @@ class AccountStore {
 
   // ---- Sessions (in-memory tokens) ------------------------------------------
 
-  issueToken(accountId) {
+  issueToken(accountId, ttlMs = config.sessionTtlMs) {
     const token = randomBytes(32).toString('hex');
-    this.sessions.set(token, { accountId, expiresAt: Date.now() + config.sessionTtlMs });
+    this.sessions.set(token, { accountId, expiresAt: Date.now() + ttlMs });
     return token;
   }
 

@@ -14,11 +14,27 @@ export function authAccount(req) {
   return null;
 }
 
-/** Moderation rights: an admin account, or the ADMIN_TOKEN (Bearer or x-admin-token). */
-export function isAdminRequest(req) {
+/**
+ * Who acts as an admin, or null: an admin account signed in with its session — never a device
+ * id alone, never a banned account — or the ADMIN_TOKEN, kept for scripts. The answer names the
+ * actor, so that what they do can be written in the journal.
+ */
+export function adminActor(req) {
   const m = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '');
-  const withAdminToken = config.adminToken && (m?.[1] === config.adminToken || req.get('x-admin-token') === config.adminToken);
-  return authAccount(req)?.role === 'admin' || Boolean(withAdminToken);
+  const token = m?.[1] ?? null;
+  if (config.adminToken && (token === config.adminToken || req.get('x-admin-token') === config.adminToken)) {
+    return { kind: 'token', id: null, name: 'ADMIN_TOKEN' };
+  }
+  const account = token ? accountStore.resolveToken(token) : null;
+  if (account?.role === 'admin' && !account.banned) {
+    return { kind: 'account', id: account.id, name: account.username ?? account.displayName ?? account.id };
+  }
+  return null;
+}
+
+/** Moderation rights: see adminActor. */
+export function isAdminRequest(req) {
+  return adminActor(req) !== null;
 }
 
 /** What any viewer may see about an account (no email, no password). */

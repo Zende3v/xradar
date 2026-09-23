@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { config } from '../config.js';
 import { accountStore } from '../accounts/store.js';
-import { authAccount, isAdminRequest } from '../accounts/auth.js';
+import { adminActor, authAccount, isAdminRequest } from '../accounts/auth.js';
+import { adminAudit } from '../admin/audit.js';
 import { db } from '../db.js';
 
 export const bugRouter = Router();
@@ -106,7 +107,8 @@ bugRouter.get('/', guarded(async (req, res) => {
 
 /** PATCH /api/bugs/:id  { status }  (admins): Nouveau → En cours → Résolu. */
 bugRouter.patch('/:id', guarded(async (req, res) => {
-  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
+  const actor = adminActor(req);
+  if (!actor) return res.status(403).json({ error: 'admin only' });
   const status = req.body?.status;
   if (!UUID.test(req.params.id) || !STATUSES.has(status)) return res.status(400).json({ error: 'id and status required' });
   const { rowCount } = await db.query(
@@ -114,5 +116,6 @@ bugRouter.patch('/:id', guarded(async (req, res) => {
     [req.params.id, status],
   );
   if (!rowCount) return res.status(404).json({ error: 'not found' });
+  adminAudit.log(actor, 'bug.status', 'bug', req.params.id, { status });
   res.json({ ok: true, status });
 }));

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { accountStore } from '../accounts/store.js';
-import { authAccount, isAdminRequest } from '../accounts/auth.js';
+import { adminActor, authAccount, isAdminRequest } from '../accounts/auth.js';
+import { adminAudit } from '../admin/audit.js';
 import { speedLimitStore } from './store.js';
 
 export const speedLimitRouter = Router();
@@ -77,10 +78,12 @@ speedLimitRouter.get('/:id', guarded(async (req, res) => {
 
 /** DELETE /api/speed-limits/:id — moderation: stop applying / reject a change (admins only). */
 speedLimitRouter.delete('/:id', guarded(async (req, res) => {
-  if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
+  const actor = adminActor(req);
+  if (!actor) return res.status(403).json({ error: 'admin only' });
   if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'not found' });
   const change = await speedLimitStore.remove(req.params.id);
   if (!change) return res.status(404).json({ error: 'not found' });
+  adminAudit.log(actor, 'speedLimit.remove', 'speedLimit', req.params.id);
   res.json({ change });
 }));
 

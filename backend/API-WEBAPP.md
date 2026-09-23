@@ -11,28 +11,34 @@ d'utilisateurs en ligne.
 
 ## 1. Authentification
 
-Deux identités différentes, à ne pas confondre.
+La webapp est publiée sur **https://ground-truthh.lovable.app**. Chaque admin s'y connecte avec
+**son propre compte EONA** (rôle `admin`). Pas de secret partagé dans le navigateur.
 
 | Identité | Comment | Ce qu'elle ouvre |
 |---|---|---|
-| Compte admin | `POST /api/accounts/login` → `token`, puis `Authorization: Bearer <token>` | Signalements, bugs, limites de vitesse, plus tout ce qu'un compte normal peut faire |
-| `ADMIN_TOKEN` | `x-admin-token: <token>` (ou `Authorization: Bearer <token>`) | Tout ce qui précède **plus** `/api/admin/accounts` |
+| Compte admin (la webapp) | `POST /api/accounts/login` avec `"web": true` → `token`, puis `Authorization: Bearer <token>` | Tout : signalements, bugs, limites, signalisation, comptes, journal |
+| `ADMIN_TOKEN` (scripts seulement) | `x-admin-token: <token>` | Pareil. Reste sur le VPS, jamais dans un navigateur |
 
 ```bash
 curl -s -X POST https://api.lrda-mercuriale.uk/api/accounts/login \
   -H 'content-type: application/json' \
-  -d '{"identifier":"admin@exemple.fr","password":"..."}'
-# → { "account": {...}, "token": "..." }
+  -d '{"identifier":"admin@exemple.fr","password":"...","web":true}'
+# → { "account": {...}, "token": "...", "expiresInS": 43200 }
 ```
 
-**Le `ADMIN_TOKEN` ne doit jamais partir dans le navigateur.** Il donne la création et la
-suppression de comptes. La webapp a donc besoin d'un petit serveur à elle (Node, PHP, peu importe)
-qui garde le token et relaie les appels. Le navigateur parle à ce serveur, jamais directement au
-backend EONA.
+- Avec `"web": true`, la session dure **12 heures** (au lieu de 90 jours pour les apps). À
+  l'expiration, les appels répondent `401` : la webapp renvoie vers l'écran de connexion.
+- `POST /api/accounts/logout` (avec le Bearer) ferme la session tout de suite.
+- `GET /api/admin/me` dit qui est connecté : `{ actor: { kind: "account", id, name } }`, ou
+  `401` si la session n'est pas celle d'un admin. À appeler au démarrage de la webapp.
+- Une session admin ne vaut que tant que le compte est admin et non banni : retirer le rôle ou
+  bannir coupe l'accès au prochain appel. Un `deviceId` seul n'ouvre **jamais** les droits admin.
+- Un admin ne peut ni se bannir, ni se retirer le rôle admin, ni supprimer son propre compte par
+  l'API admin (`400`) : personne ne s'enferme dehors par erreur.
 
-**CORS** : le backend répond aux navigateurs venant des adresses listées dans `WEBAPP_ORIGINS`
-(côté serveur, séparées par des virgules). Donne ton adresse exacte à Arthur, scheme compris —
-`https://console.exemple.fr`. Toute autre adresse est refusée par le navigateur.
+**CORS** : le backend répond aux navigateurs venant de `https://ground-truthh.lovable.app` et des
+aperçus `https://*.lovable.app` (un seul niveau de nom, en HTTPS). Réglé côté serveur dans
+`WEBAPP_ORIGINS`. Toute autre adresse est refusée par le navigateur.
 
 Erreurs : `401` pas authentifié, `403` pas les droits (ou compte banni), `404` inconnu, `429`
 trop de demandes, `503` base ou service momentanément indisponible. Le corps est toujours
@@ -56,7 +62,7 @@ route, route glissante, travaux, véhicule arrêté, visibilité, contresens, vo
 ramène tout ce qui est vivant, jusqu'à 5000 signalements.
 
 ```bash
-curl -s -H "x-admin-token: $ADMIN_TOKEN" \
+curl -s -H "Authorization: Bearer $TOKEN" \
   'https://api.lrda-mercuriale.uk/api/reports/near?lat=46.6&lon=2.5&radius=900000'
 ```
 
@@ -64,14 +70,39 @@ Un signalement contient : `id`, `type`, `lat`, `lon`, `createdAt` et `expiresAt`
 pas ISO), `confirmations`, `contradictions`, `reporters`, `reporterRole`, `direction`, `bearing`,
 `course`, `street`, `side`, `score`, `impactM`, `persistent`.
 
-**Manques pour une vraie console de modération**, tous à ajouter côté backend :
+### La console : tous les signalements, avec leur auteur
 
-- aucune liste globale, donc pas de pagination ni de filtre par type ou par statut ;
-- pas d'historique des signalements fermés (expirés, infirmés, supprimés) — ils restent en base,
-  aucune route ne les sert ;
-- **l'auteur n'est jamais renvoyé** (ni son compte, ni la plaque d'une voiture radar) : la réponse
-  est volontairement anonyme pour les apps. Modérer un compte qui abuse demande donc une nouvelle
-  route réservée aux admins.
+| Besoin | Appel | Droits |
+|---|---|---|
+| Lister, filtrer, paginer | `GET /api/admin/reports` | admin |
+| Un signalement en détail | `GET /api/admin/reports/:id` | admin |
+
+Filtres de `GET /api/admin/reports`, tous facultatifs :
+
+| Paramètre | Valeurs |
+|---|---|
+| `status` | `live`, `expired` (temps écoulé), `denied` (la foule a dit « plus là »), `removed` (un admin), ou `closed` pour tous sauf `live` |
+| `type` | un type de signalement (`radar_mobile`, `traffic_jam`…) |
+| `author` | l'`id` d'un compte : tout ce qu'il a signalé |
+| `from`, `to` | période de création, ISO ou millisecondes |
+| `bbox` | `ouest,sud,est,nord` en degrés |
+| `limit` | 50 par défaut, 200 au plus |
+| `before` | pagination : le `createdAt` du dernier reçu |
+
+Du plus récent au plus ancien. La réponse donne `next` : la valeur à passer en `before` pour la
+page suivante, ou `null` quand il n'y en a plus.
+
+Chaque signalement a les champs de l'app, plus `status`, `closedAt`, `lastReportedAt` et
+`author` : `{ id, username, role, banned }`, ou `null` si le compte a été supprimé depuis.
+`GET /api/admin/reports/:id` ajoute `voices` : les voix comptées par sorte (`reported`, `merged`,
+`confirm`, `deny`).
+
+**La plaque d'une voiture radar ne sort jamais**, même pour un admin : l'app promet au
+conducteur qu'elle reste privée.
+
+L'historique des fermés est gardé **90 jours** après leur fermeture, puis effacé. Supprimer un
+signalement (`DELETE /api/reports/:id`) le passe en `removed` : il reste dans l'historique, et
+l'action est écrite au journal (section 6 bis).
 
 ---
 
@@ -109,17 +140,42 @@ Validée, elle s'applique par-dessus la donnée OSM pour toutes les apps.
 
 ## 5. Utilisateurs
 
-`GET /api/admin/accounts` (ADMIN_TOKEN seulement) renvoie **tous** les comptes d'un coup, sans
-pagination ni recherche. `?role=guest|client|admin` filtre. `GET /api/admin/accounts/:id` donne un
-compte. `PATCH /api/admin/accounts/:id` change `role`, `banned`, `displayName`.
-`DELETE /api/admin/accounts/:id` supprime.
+| Besoin | Appel | Droits |
+|---|---|---|
+| Chercher, filtrer, paginer | `GET /api/admin/accounts` | admin |
+| Un compte | `GET /api/admin/accounts/:id` | admin |
+| Changer `role`, `banned`, `displayName` | `PATCH /api/admin/accounts/:id` | admin |
+| Créer | `POST /api/admin/accounts` | admin |
+| Supprimer | `DELETE /api/admin/accounts/:id` | admin |
+
+Paramètres de `GET /api/admin/accounts`, tous facultatifs :
+
+| Paramètre | Valeurs |
+|---|---|
+| `q` | cherche dans le pseudo, le nom affiché, l'email et l'id (sans accents ni majuscules) |
+| `role` | `guest`, `client`, `admin` |
+| `banned` | `true` ou `false` |
+| `signup` | méthode d'inscription : `email`, `google` |
+| `sort` | `lastSeen` (défaut), `created`, `username` |
+| `order` | `desc` (défaut) ou `asc` |
+| `limit`, `offset` | 50 par défaut, 200 au plus ; `offset` pour la page |
+
+Réponse : `total` (combien correspondent en tout), `count` (dans cette page), `offset`, `next`
+(l'`offset` de la page suivante, ou `null`), `meta` (les compteurs) et `accounts`.
+
+Chaque création, changement de rôle, bannissement, débannissement et suppression est écrit au
+journal (section 6 bis).
 
 ### Ce qui existe vraiment sur un compte
 
 - **Identité** : `id`, `username`, `displayName`, `email`, `emailVerified`, `avatarUrl`, `role`
   (guest / client / admin), `banned`.
 - **Appareil** : `deviceId` (UUID tiré par l'app, gardé dans le Keychain / le stockage privé),
-  `platform` (`ios` ou `android`).
+  `platform` (`ios` ou `android`), et `app` : `model`, `osVersion`, `appVersion`, `locale`,
+  `region`, tels que le système les donne à l'inscription et à la connexion. Jamais
+  d'identifiant publicitaire.
+- **Inscription** : `signupMethod` (`email` ou `google`), `providers[]` (comptes liés), et le
+  parrainage utilisé s'il y en a un.
 - **Dates** : `createdAt`, `lastSeenAt` (dernière ouverture de session depuis l'appareil),
   `trialEndsAt`, `subscriptionEndsAt`.
 - **Statistiques cumulées** : `stats.tripCount`, `distanceMeters`, `driveDurationSeconds`,
@@ -150,8 +206,7 @@ compte efface les siennes immédiatement.
 
 ### Ce qui n'existe toujours pas
 
-- **L'adresse IP**, le **modèle d'appareil** et la **version de l'app** par compte. Le modèle et la
-  version n'apparaissent que dans un rapport de bug, où l'app les joint volontairement.
+- **L'adresse IP** d'un compte : elle n'est pas enregistrée.
 - **La durée d'une session vue comme un événement** (début, fin, appareil). Ce qui existe :
   `stats.appDurationSeconds`, le temps cumulé passé dans l'app, et `lastActiveAt`.
 - **Les coordonnées de départ et d'arrivée des trajets enregistrés** : un trajet garde des
@@ -278,7 +333,7 @@ Trois opérations (`op`) :
 
 ```bash
 curl -s -X POST https://api.lrda-mercuriale.uk/api/signs/edits \
-  -H "x-admin-token: $ADMIN_TOKEN" -H 'content-type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"op":"add","kind":"stop","lat":48.1173,"lon":-1.6778,"course":90,"note":"vu sur place"}'
 ```
 
@@ -306,15 +361,42 @@ bon panneau, ou l'annuler.
 
 ---
 
+## 6 bis. Journal des actions admin
+
+`GET /api/admin/audit` — ce que les admins ont fait, du plus récent au plus ancien.
+
+| Paramètre | Valeurs |
+|---|---|
+| `actor` | l'`id` du compte admin |
+| `action` | voir ci-dessous |
+| `targetType`, `targetId` | `account`, `report`, `speedLimit`, `bug`, et l'id visé |
+| `limit` | 50 par défaut, 200 au plus |
+| `before` | pagination : le `at` de la dernière ligne reçue |
+
+Actions écrites : `account.create`, `account.role`, `account.ban`, `account.unban`,
+`account.update`, `account.delete`, `report.remove`, `speedLimit.remove`, `bug.status`.
+
+Une ligne : `id`, `at` (ISO), `actor` (`{ id, name }` — `id` à `null` pour l'`ADMIN_TOKEN`),
+`action`, `target` (`{ type, id }`) et `detail` (ce qui a changé, par ex.
+`{ "banned": { "from": false, "to": true } }`). Jamais d'email ni de mot de passe dedans.
+
+Gardé **un an**, puis effacé. Les corrections de signalisation ont déjà leur propre historique
+(section 6), et les codes de parrainage aussi (dans le compte).
+
+---
+
 ## 7. Ce qui manque encore
 
-À faire valider par Arthur :
+Fait depuis la première version de cette doc : liste globale des signalements avec filtres,
+historique des fermés et auteur (section 2), recherche et pagination des comptes (section 5),
+connexion de la webapp par compte admin au lieu du `ADMIN_TOKEN` partagé, et journal des
+actions (section 6 bis).
 
-1. **Liste globale des signalements** avec filtres, pagination, historique des fermés et auteur
-   visible pour les admins.
-2. **Pagination et recherche** sur `/api/admin/accounts` : aujourd'hui tout arrive d'un coup.
-3. **Compte de service** pour la webapp plutôt que le `ADMIN_TOKEN` partagé, avec ses propres
-   droits et sa propre révocation.
+Reste ouvert, à demander si besoin :
+
+1. **Remettre en ligne** un signalement supprimé par erreur (aujourd'hui, il reste dans
+   l'historique mais ne revient pas).
+2. **Droits plus fins** qu'« admin » (un modérateur qui voit mais ne supprime pas de compte).
 
 ---
 ## 8. Limites et bonnes manières
@@ -322,7 +404,8 @@ bon panneau, ou l'annuler.
 - Les itinéraires (`/api/route`) sont plafonnés : 10 par minute et 120 par heure et par compte, et
   un budget quotidien global. Une webapp n'a normalement pas à les appeler.
 - Les rapports de bug sont limités à 3 par heure et 10 par jour et par compte.
-- Les réponses volumineuses (signalements sur toute la France, liste des comptes) ne sont pas
-  paginées : à demander toutes les quelques minutes, pas en continu.
+- `/api/reports/near` sur toute la France n'est pas paginé : à demander toutes les quelques
+  minutes, pas en continu. Pour la console, préférer `/api/admin/reports` et
+  `/api/admin/accounts`, paginés.
 - Ne jamais afficher `deviceId`, `email` ou `passwordHash` à quelqu'un qui n'est pas admin. Le
   backend ne renvoie jamais le mot de passe, même haché, mais il renvoie l'email dans la vue admin.

@@ -174,3 +174,20 @@ CREATE TABLE IF NOT EXISTS crowd.sign_edit (
 CREATE INDEX IF NOT EXISTS sign_edit_status ON crowd.sign_edit (status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS sign_edit_target ON crowd.sign_edit (target_id);
 CREATE INDEX IF NOT EXISTS sign_edit_geom ON crowd.sign_edit USING gist (geom);
+
+-- What the admins did, and who did it: an account deleted, a role changed, a report removed.
+-- One line per action, kept config.adminAuditDays, then purged. The detail says what changed,
+-- never an email or a password.
+CREATE TABLE IF NOT EXISTS crowd.admin_action (
+    id bigserial PRIMARY KEY,
+    at timestamptz NOT NULL DEFAULT now(),
+    -- The admin account, or null for the ADMIN_TOKEN (scripts).
+    actor_id text,
+    actor_name text NOT NULL,
+    action text NOT NULL,
+    target_type text NOT NULL,
+    target_id text,
+    detail jsonb NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS admin_action_at ON crowd.admin_action (at DESC);
+CREATE INDEX IF NOT EXISTS admin_action_target ON crowd.admin_action (target_type, target_id);
