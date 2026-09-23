@@ -17,14 +17,16 @@ import kotlinx.coroutines.launch
 import com.eona.app.data.account.AccountRepository
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.feature.onboarding.OnboardingRoute
+import com.eona.app.feature.onboarding.Terms
+import com.eona.app.feature.onboarding.TermsScreen
 import com.eona.app.feature.permission.LocationPermissionRoute
 import com.eona.app.feature.subscription.OffersPrompt
 import com.eona.app.location.LocationServiceController
 import com.eona.app.navigation.EonaNavHost
 
 /**
- * App root. Gates the navigation graph behind the location-permission screen, then
- * the onboarding/login screen; once past both it shows the main [EonaNavHost].
+ * App root. Nothing starts before the terms are accepted; then the onboarding/login screen; then
+ * the location permission, asked when the map and the guidance need it; then [EonaNavHost].
  */
 @Composable
 fun EonaApp() {
@@ -33,6 +35,7 @@ fun EonaApp() {
     AccountRepository.restore(context)
     LaunchedEffect(Unit) { AccountRepository.refresh(context) }
     val account by AccountRepository.account.collectAsStateWithLifecycle()
+    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     // A blocked account sees the offers each time the app comes to the front, and as soon as it
     // gets blocked (the driving screen shows them).
@@ -56,8 +59,10 @@ fun EonaApp() {
     }
 
     when {
-        !proceed -> LocationPermissionRoute(onProceed = { proceed = true })
+        // The condition of use of the app: nothing else before it.
+        AppPreferences.needsTerms(settings, Terms.VERSION) -> TermsScreen()
         account?.isOnboarded != true -> OnboardingRoute()
+        !proceed -> LocationPermissionRoute(onProceed = { proceed = true })
         else -> {
             LaunchedEffect(Unit) {
                 val granted = ContextCompat.checkSelfPermission(

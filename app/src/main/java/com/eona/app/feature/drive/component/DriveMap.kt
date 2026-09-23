@@ -115,6 +115,8 @@ fun DriveMap(
     onUserGesture: () -> Unit,
     onReportTap: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** The limit under the driver: it decides how close the camera sits (null = town speeds). */
+    speedLimitKmh: Int? = null,
 ) {
     // Compose previews have no GL context — show a plain backdrop instead.
     if (LocalInspectionMode.current) {
@@ -160,6 +162,7 @@ fun DriveMap(
     val latestOnReportTap by rememberUpdatedState(onReportTap)
     val locationState = rememberUpdatedState(location)
     val followingState = rememberUpdatedState(following)
+    val speedLimitState = rememberUpdatedState(speedLimitKmh)
 
     // Map-matching state: the driver is snapped onto the route so the arrow stays
     // on the line and the passed part gets trimmed away ("eats the line").
@@ -577,16 +580,18 @@ fun DriveMap(
                     PropertyFactory.circleOpacity(0.10f + 0.16f * pulse),
                 )
                 if (followingState.value) {
+                    val targetZoom = navZoom(speedLimitState.value)
                     if (firstFollow) {
                         // Snap on the very first frame so the map opens already upright.
                         firstFollow = false
                         camLat = arrowLat; camLon = arrowLon
-                        camZoom = NAV_ZOOM; camTilt = NAV_TILT
+                        camZoom = targetZoom; camTilt = NAV_TILT
                         camBearing = arrowBearing.toDouble()
                     }
                     camLat += (arrowLat - camLat) * POS_LERP
                     camLon += (arrowLon - camLon) * POS_LERP
-                    camZoom += (NAV_ZOOM - camZoom) * EASE_LERP
+                    // The change of distance is eased like the rest: about two seconds, no jump.
+                    camZoom += (targetZoom - camZoom) * EASE_LERP
                     camTilt += (NAV_TILT - camTilt) * EASE_LERP
                     camBearing = lerpAngle(camBearing, arrowBearing, BEARING_LERP)
                     current.moveCamera(
@@ -609,6 +614,24 @@ fun DriveMap(
             delay(FRAME_MS)
         }
     }
+}
+
+/**
+ * How close the camera sits while following. In town the streets follow one another fast and the
+ * turns are short: the camera comes closer, so the next junction is readable. On a road limited to
+ * 90 and above an exit is decided long before it arrives: the camera keeps the distance it always
+ * had. 60, 70, 80 sit in between, so a sign does not make the view jump. No limit known (a lane, a
+ * car park, a road the map does not carry): town rules.
+ */
+private fun navZoom(limitKmh: Int?): Double {
+    val distance = when {
+        limitKmh == null || limitKmh <= TOWN_KMH -> TOWN_DISTANCE_M
+        limitKmh >= FAST_ROAD_KMH -> FAR_DISTANCE_M
+        else -> TOWN_DISTANCE_M + (FAR_DISTANCE_M - TOWN_DISTANCE_M) *
+            (limitKmh - TOWN_KMH) / (FAST_ROAD_KMH - TOWN_KMH).toDouble()
+    }
+    // Twice as far is one zoom level out.
+    return NAV_ZOOM + ln(FAR_DISTANCE_M / distance) / ln(2.0)
 }
 
 /** Resizing the tile cache is best effort: the map works the same if it fails. */
@@ -1144,7 +1167,13 @@ private const val ROUTE_CORE = "xr-route-core"
 private const val TRAFFIC_BLEND_M = 25.0
 /** The marker of an "Embouteillage" report. */
 private const val JAM_MARKER = "m-jam"
+/** The zoom on a road limited to [FAST_ROAD_KMH] or more (the camera's far distance). */
 private const val NAV_ZOOM = 17.6
+/** Camera distances as on iOS: far on fast roads, closer in town. */
+private const val FAR_DISTANCE_M = 650.0
+private const val TOWN_DISTANCE_M = 380.0
+private const val TOWN_KMH = 50
+private const val FAST_ROAD_KMH = 90
 private const val NAV_TILT = 45.0
 private const val MIN_SPEED_MS = 2f
 // Smoothing factors for the follow-camera loop (0..1 per frame) + frame pacing.

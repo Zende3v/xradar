@@ -1,0 +1,229 @@
+## Conditions Générales d'Utilisation — EONA
+Version 1.1 — Date d'entrée en vigueur : [23/09/2026] (date de mise en ligne)
+Politique de confidentialité (document distinct) : confidentialite.zylo-app.fr
+## Article 1 — Éditeur et hébergeur
+L'application EONA (ci-après « l'Application ») et les sites cgu.zylo-app.fr et confidentialite.zylo-app.fr sont édités par :
+Adrien Florent, personne physique, développeur et gestionnaire de l'Application, domicilié 2 Rue de la Pompe, 75116 Paris. Adresse électronique : adrien.florent@tutamail.com. Directeur de la publication : Adrien Florent. Responsable de la communication et de la relation avec les utilisateurs : Thibault Janvier, joignable à l'adresse teamgreentt@gmail.com.
+L'Application et les services associés sont hébergés par : Pulseheberg, 9, Boulevard de Strasbourg - 83000 Toulon, sites : pulseheberg.com. 
+Ces mentions sont fournies en application de l'article 6 de la loi n° 2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique.
+## Article 2 — Définitions
+- 
+Application : le logiciel EONA disponible sur terminaux mobiles, ses mises à jour et les services associés. 
+- 
+Éditeur : la personne identifiée à l'article 1. 
+- 
+Utilisateur : toute personne physique qui installe, accède à ou utilise l'Application, avec ou sans Compte. 
+- 
+Compte : l'espace personnel créé par l'Utilisateur dans l'Application. 
+- 
+Services : les fonctionnalités décrites à l'article 3. 
+- 
+Abonnement : l'offre payante décrite à l'article 18. 
+- 
+Contributions : tout signalement ou information transmis par un Utilisateur via l'Application. 
+- 
+Contenus tiers : cartes, données routières, données de trafic, services et informations fournis par des partenaires ou prestataires de l'Éditeur, listés à l'article 11. 
+- 
+Politique de confidentialité : le document accessible à l'adresse confidentialite.zylo-app.fr 
+## Article 3 — Objet de l'Application et Services proposés
+EONA est une application d'aide à la navigation destinée aux véhicules routiers : voitures, motos, camions, taxis et, plus généralement, tout véhicule circulant sur route. Elle propose notamment :
+- 
+l'affichage de cartes, la recherche d'adresses et de lieux ; 
+- 
+le calcul d'itinéraires et le guidage pas à pas ; 
+- 
+des informations de trafic, d'incidents, de travaux, de fermetures, de limitations de vitesse, de zones de danger et d'autres événements routiers, issues de Contenus tiers, de données publiques et des Contributions des Utilisateurs ; 
+- 
+le signalement d'événements routiers par les Utilisateurs ; 
+- 
+l'enregistrement de lieux favoris, de l'historique de trajets et de préférences ; 
+- 
+l'affichage, en option, d'un lecteur Apple Music intégré à l'interface de navigation ; 
+- 
+des fonctionnalités complémentaires réservées aux titulaires de l'Abonnement, décrites dans l'Application. 
+L'Application est un outil d'assistance. Elle ne remplace ni la vigilance du conducteur, ni l'observation de la signalisation réelle, ni le respect des règles de circulation. L'Utilisateur demeure à tout moment seul responsable de sa conduite et de ses déplacements.
+L'Application s'adresse principalement au grand public. Les conducteurs professionnels, notamment les taxis, peuvent l'utiliser ; ils sont alors soumis aux présentes CGU, à l'exception des dispositions réservées aux consommateurs, et leurs Contributions alimentent les Services offerts à l'ensemble des Utilisateurs.
+L'Éditeur ne vend aucune donnée relative aux Utilisateurs et ne communique aucune donnée à des tiers en dehors des prestataires nécessaires au fonctionnement des Services et des cas où la loi l'impose, dans les conditions décrites dans la Politique de confidentialité.
+## Article 4 — Acceptation et opposabilité
+L'utilisation de l'Application suppose l'acceptation préalable et sans réserve des présentes CGU, exprimée lors du premier lancement de l'Application ou de la création du Compte par un acte d'acceptation explicite. Les CGU sont accessibles à tout moment depuis l'Application (Menu > À propos) et à l'adresse cgu.zylo-app.fr L'Utilisateur peut les enregistrer et les imprimer.
+Les CGU s'appliquent à l'exclusion de toute autre condition, sous réserve des conditions propres aux boutiques d'applications et des conditions d'Apple Music pour la fonctionnalité correspondante. L'Utilisateur qui refuse les CGU ne doit pas utiliser l'Application.
+## Article 5 — Conditions d'accès et âge minimum
+L'Application est réservée aux personnes âgées d'au moins 17 ans. L'Utilisateur mineur déclare disposer de l'autorisation de ses représentants légaux, qui sont responsables de son utilisation de l'Application et du respect des présentes CGU.
+Les fonctions de guidage s'adressent aux Utilisateurs autorisés à conduire le véhicule concerné, y compris dans le cadre de la conduite accompagnée ou supervisée. L'Éditeur n'effectue aucune vérification à ce titre.
+L'utilisation de l'Application requiert un terminal compatible, une connexion à Internet et un service de localisation actif. Les coûts d'équipement, de connexion et de consommation de données restent à la charge de l'Utilisateur.
+## Article 6 — Compte utilisateur
+6.1 Utilisation sans Compte. Les fonctionnalités de base de l'Application sont accessibles sans création de Compte. Un Compte est nécessaire pour l'Abonnement, la synchronisation des favoris et de l'historique et certaines fonctions de Contribution.
+6.2 Création. L'Utilisateur s'engage à fournir des informations exactes et à les tenir à jour. Un Utilisateur ne peut détenir qu'un seul Compte. La création d'un Compte au nom d'un tiers sans son autorisation est interdite.
+6.3 Identifiants. Les identifiants sont personnels et confidentiels. L'Utilisateur est responsable de toute utilisation de son Compte jusqu'à ce qu'il ait signalé à l'Éditeur, à l'adresse adrien.florent@tutamail.com, la perte, le vol ou l'utilisation frauduleuse de ses identifiants. L'Éditeur sécurise alors le Compte dans les meilleurs délais.
+6.4 Services d'authentification tiers. Lorsque le Compte est créé via un service d'authentification tiers, l'Utilisateur reste soumis aux conditions de ce service.
+6.5 Suppression. L'Utilisateur peut supprimer son Compte à tout moment dans les conditions de l'article 20.
+## Article 7 — Conditions d'utilisation de la navigation et du guidage
+7.1 Nature des indications. Les itinéraires, temps de parcours, distances, alertes de trafic, limitations de vitesse, zones de danger et autres indications sont calculés ou affichés à partir de données cartographiques, de données de trafic, de données publiques et de Contributions dont l'Éditeur n'a pas la maîtrise complète. Ces données peuvent être incomplètes, obsolètes, tardives, imprécises ou incorrectes, notamment en raison de modifications récentes du réseau routier, de travaux, d'événements exceptionnels, de la qualité du signal de géolocalisation, de la couverture réseau ou d'erreurs de saisie.
+7.2 Avertissement. L'Utilisateur est expressément informé que les indications fournies par l'Application peuvent être incomplètes, tardives ou incorrectes. Elles ne constituent ni une information officielle, ni une garantie de praticabilité, de sécurité ou de légalité d'un itinéraire, ni une garantie de durée de trajet. L'Application ne tient pas nécessairement compte de toutes les restrictions de circulation applicables (gabarit, tonnage, matières dangereuses, zones à faibles émissions, restrictions horaires, voies réservées, sens de circulation temporaires, etc.), en particulier pour les poids lourds et les deux-roues.
+7.3 Primauté du Code de la route, de la signalisation réelle et des autorités. L'Utilisateur s'engage à respecter en toutes circonstances le Code de la route et la réglementation applicable au lieu où il se trouve, la signalisation routière réelle, les feux, les marquages au sol, ainsi que les consignes et injonctions des forces de l'ordre, des services de secours et de toute autorité compétente. En cas de contradiction entre une indication de l'Application et la signalisation réelle ou une consigne des autorités, la signalisation réelle et la consigne des autorités prévalent toujours.
+7.4 Interdiction de manipuler l'Application pendant la conduite. Il est interdit à l'Utilisateur de manipuler l'Application ou le terminal sur lequel elle est installée pendant la conduite. L'Application ne propose pas de commande vocale ni de mode de signalement conçu pour être utilisé en roulant : l'itinéraire, les préférences, le lecteur musical et les signalements doivent être réglés ou effectués avant le départ ou lorsque le véhicule est régulièrement stationné. L'usage d'un téléphone tenu en main en conduisant est interdit et sanctionné par l'article R. 412-6-1 du Code de la route, et le conducteur doit, en application de l'article R. 412-6 du même code, se tenir constamment en état et en position d'exécuter commodément et sans délai toutes les manœuvres qui lui incombent. Le terminal doit être fixé sur un support adapté.
+7.5 Zones de danger et informations de sécurité routière. L'Application signale des zones de danger et des informations relatives à la sécurité routière dans les limites autorisées par la réglementation, notamment l'article R. 413-15 du Code de la route, qui interdit les dispositifs destinés à détecter ou signaler la présence d'appareils de contrôle. L'Éditeur peut être tenu, en application de l'article R. 130-11 du Code de la route, de suspendre temporairement la diffusion de certaines informations dans un périmètre et pour une durée déterminés à la demande d'une autorité compétente ; l'Utilisateur en est informé dans l'Application lorsque la réglementation le permet.
+7.6 Responsabilité de l'Utilisateur. L'Utilisateur conserve à tout moment la maîtrise de son véhicule et la responsabilité du choix de son itinéraire et de sa conduite. Il lui appartient d'apprécier, au regard des conditions réelles de circulation, de son véhicule, de son chargement et de ses capacités, la pertinence des indications fournies.
+## Article 8 — Signalements et Contributions des Utilisateurs
+8.1 Principe. L'Application permet de signaler des événements (accidents, dangers, travaux, ralentissements, fermetures, contrôles, erreurs d'itinéraire, etc.) par sélection dans une liste prédéfinie. Aucune photographie ni aucun texte libre ne peut être joint. Les Contributions peuvent être affichées aux autres Utilisateurs, agrégées, recoupées, modérées ou supprimées par l'Éditeur.
+8.2 Engagements du contributeur. L'Utilisateur ne transmet que des signalements sincères, fondés sur une constatation personnelle et actuelle. Sont interdits les signalements fictifs, abusivement répétés, sciemment erronés ou destinés à tromper les autres Utilisateurs ou à perturber les Services. Aucun signalement ne doit être effectué en conduisant (article 7.4).
+8.3 Absence de vérification systématique. L'Éditeur n'est pas tenu de vérifier a priori l'exactitude des Contributions, qui n'engagent que leur auteur. Il met en œuvre des mécanismes raisonnables de fiabilisation (recoupement, expiration automatique, détection d'abus) sans garantir l'exactitude des Contributions affichées.
+8.4 Licence sur les Contributions. L'Utilisateur concède à l'Éditeur, à titre gratuit et non exclusif, pour le monde entier et pour la durée légale de protection des droits éventuellement attachés, le droit de reproduire, adapter, agréger, analyser et diffuser ses Contributions dans le cadre de l'exploitation, de l'amélioration et de la promotion des Services. Les Contributions sont agrégées sous une forme ne permettant pas d'identifier leur auteur auprès des autres Utilisateurs. La suppression du Compte met fin à la licence pour l'avenir, sans effet sur les données déjà agrégées sous forme anonymisée.
+8.5 Signalement d'abus. Tout Utilisateur peut signaler un contenu ou un comportement qu'il estime contraire aux CGU ou à la loi à l'adresse teamgreentt@gmail.com. L'Éditeur traite ces signalements avec diligence, conformément à la loi n° 2004-575 du 21 juin 2004 et au règlement (UE) 2022/2065. L'Utilisateur dont une Contribution a été retirée ou dont la fonction de signalement a été restreinte en est informé et peut contester la décision à la même adresse.
+## Article 8 bis — Partage de trajet et trajet en groupe
+
+8 bis.1 Principe. L'Application permet à un Utilisateur de partager son trajet en cours, soit au moyen d'un lien individuel, soit en constituant un trajet en groupe réunissant cinq conducteurs au maximum vers une même destination. Ces fonctions sont facultatives : elles ne se déclenchent qu'à la demande expresse de l'Utilisateur.
+
+8 bis.2 Caractère volontaire du partage. Le partage de la position, de la vitesse et de l'avancement est volontaire et peut être interrompu à tout moment depuis l'Application, sans quitter le groupe. L'Application indique à chaque participant qui partage ces informations et qui ne les partage pas. Un Utilisateur qui n'a pas activé le partage n'expose ni sa position, ni sa vitesse, ni son avancement.
+
+8 bis.3 Interdiction de la surveillance d'autrui. Il est interdit d'utiliser ces fonctions pour suivre ou faire suivre une personne à son insu ou contre sa volonté, notamment en activant le partage sur le terminal d'un tiers, en contraignant un Utilisateur à partager sa position, ou en diffusant un lien d'observation dans le but de surveiller un participant. Tout manquement peut entraîner les mesures prévues à l'article 15.
+
+8 bis.4 Lien d'observation. Le créateur d'un trajet en groupe peut ouvrir un lien permettant d'observer le trajet en direct. L'Utilisateur qui diffuse ce lien est responsable des personnes auxquelles il le transmet. Le lien ne donne accès qu'à la carte, à l'avancement, à l'itinéraire et à la vitesse des participants ayant accepté ce partage ; il peut être révoqué à tout moment et cesse de fonctionner à la fin du trajet.
+
+8 bis.5 Absence de conservation. Les informations échangées pendant un trajet partagé ou un trajet en groupe ne sont pas conservées par l'Éditeur au-delà de la durée du partage, dans les conditions détaillées par la Politique de confidentialité. À l'issue d'un trajet en groupe, un classement des arrivées est établi et conservé, sur le terminal de chaque participant, avec le pseudonyme, le rang et le temps de chacun.
+
+8 bis.6 Usage au volant. L'ouverture d'un partage, la saisie d'un code de groupe et le changement de vue relèvent de l'article 7.4 : ils se font avant le départ ou véhicule régulièrement stationné.
+## Article 9 — Contenus et comportements interdits
+Il est interdit à l'Utilisateur :
+- 
+d'effectuer de faux signalements ou d'utiliser les fonctions de Contribution à des fins de harcèlement, de désinformation ou de perturbation des Services ; 
+- 
+d'utiliser l'Application pour surveiller, suivre ou géolocaliser un tiers sans son consentement ; 
+- 
+d'usurper l'identité d'un tiers ou de l'Éditeur, ou de créer de faux Comptes ; 
+- 
+d'accéder ou de tenter d'accéder sans autorisation aux systèmes, serveurs, bases de données ou Comptes d'autres Utilisateurs ; 
+- 
+d'introduire des virus, codes malveillants ou programmes de nature à altérer le fonctionnement de l'Application ; 
+- 
+de recourir à des robots, scripts, extracteurs ou procédés automatisés pour collecter des données, créer des Comptes, envoyer des signalements ou accéder aux Services ; 
+- 
+de simuler ou falsifier sa position géographique afin de perturber les Services ou de tromper l'Éditeur ou les Utilisateurs ; 
+- 
+de décompiler, désassembler, modifier ou créer des œuvres dérivées de l'Application, hors des cas autorisés par l'article L. 122-6-1 du Code de la propriété intellectuelle ; 
+- 
+d'extraire, réutiliser ou revendre tout ou partie substantielle des données cartographiques, de trafic ou des Contributions ; 
+- 
+de contourner ou désactiver les mesures techniques de protection, de limitation ou de sécurité de l'Application, y compris celles de l'Abonnement ; 
+- 
+de revendre, sous-licencier ou mettre l'Application ou l'Abonnement à disposition de tiers à titre onéreux ; 
+- 
+d'utiliser l'Application d'une manière contraire au Code de la route ou mettant en danger la sécurité de l'Utilisateur ou de tiers. 
+## Article 10 — Propriété intellectuelle
+10.1 Droits de l'Éditeur. L'Application, sa structure, ses codes source et objet, ses interfaces, ses bases de données, ses textes, graphismes, logos, icônes, le nom EONA et les noms de domaine associés, à l'exception des Contenus tiers, sont la propriété exclusive de l'Éditeur ou font l'objet de licences dont il bénéficie. Ils sont protégés par le Code de la propriété intellectuelle et les conventions internationales.
+10.2 Licence d'utilisation. L'Éditeur concède à l'Utilisateur, pour la durée d'utilisation de l'Application et sous réserve du respect des CGU, un droit personnel, non exclusif, non cessible et non transférable d'installer et d'utiliser l'Application sur ses terminaux, à des fins personnelles ou, pour les conducteurs professionnels, pour leurs propres déplacements. Toute autre utilisation requiert l'autorisation écrite préalable de l'Éditeur.
+10.3 Bases de données. Les bases de données constituées par l'Éditeur, y compris à partir des Contributions agrégées, sont protégées par les articles L. 341-1 et suivants du Code de la propriété intellectuelle.
+10.4 Composants tiers et licences libres. L'Application intègre des composants logiciels et des données sous licences libres ou ouvertes (notamment les données OpenStreetMap sous licence ODbL). Ces composants restent soumis à leurs licences propres, dont les mentions figurent dans l'Application (Menu > À propos).
+## Article 11 — Services, cartes, données et contenus fournis par des tiers
+11.1 Fournisseurs. L'Application utilise des Contenus tiers fournis notamment par :
+- 
+OpenStreetMap (OSM) et ses contributeurs — données cartographiques, sous licence ODbL ; 
+- 
+openrouteservice (ORS) — calcul d'itinéraires ; 
+- 
+Stadia Maps — fonds de carte (Android); 
+- 
+Apple Plans — fonds de carte (Ios); 
+- 
+TomTom — données de trafic, complétées par les données de trafic propres à l'Éditeur issues des Contributions et des données d'usage des Utilisateurs traitées dans les conditions de la Politique de confidentialité ; 
+- 
+data.gouv.fr et autres jeux de données publiques ouvertes — informations routières complémentaires ; 
+- 
+Apple Music — lecteur musical intégré, en option (Ios). 
+Les mentions d'attribution complètes figurent dans l'Application (Menu > À propos). Ces Contenus tiers sont soumis aux conditions d'utilisation et aux mentions de propriété intellectuelle de leurs fournisseurs.
+11.2 Absence de contrôle. L'Éditeur n'exerce pas de contrôle sur les Contenus tiers et ne garantit ni leur exactitude, ni leur exhaustivité, ni leur actualité, ni leur disponibilité. La modification, l'interruption ou la cessation d'un Contenu tiers par son fournisseur peut entraîner la modification ou l'indisponibilité de certains Services, dans les conditions de l'article 13.
+11.3 Apple Music. La fonctionnalité de lecteur intégré requiert un abonnement Apple Music valide souscrit par l'Utilisateur auprès d'Apple, indépendamment de l'Éditeur, et l'autorisation d'accès à la médiathèque prévue à l'article 12. Elle est soumise aux conditions d'Apple Music. L'Éditeur n'est pas partie à ce contrat et ne perçoit aucune rémunération à ce titre.
+11.4 Boutiques d'applications. La distribution de l'Application via les boutiques d'applications est soumise aux conditions de ces plateformes, dont les opérateurs ne sont pas parties aux présentes CGU.
+## Article 12 — Autorisations de localisation et autres permissions techniques
+12.1 Localisation. Les Services de navigation nécessitent l'accès à la position du terminal, y compris en arrière-plan pour le guidage continu lorsque l'Application n'est pas affichée à l'écran. L'Utilisateur peut à tout moment autoriser, restreindre ou refuser cet accès dans les réglages de son terminal. Le refus ou la restriction peut rendre tout ou partie des Services indisponibles ou dégradés.
+12.2 Médiathèque et Apple Music. L'affichage du lecteur musical intégré requiert l'autorisation d'accès à la médiathèque et à Apple Music. Cette autorisation est facultative, sollicitée uniquement lors de l'activation de la fonctionnalité, et peut être retirée à tout moment dans les réglages du terminal sans effet sur les Services de navigation.
+12.3 Notifications. L'Application peut solliciter l'autorisation d'envoyer des notifications (alertes de trajet, informations sur le Compte ou l'Abonnement). Elle est facultative.
+12.4 Données. Les traitements liés à ces permissions, en particulier les données de localisation et leur éventuelle utilisation, sous forme agrégée, pour l'estimation du trafic, sont décrits dans la Politique de confidentialité.
+12.5 Ressources. L'usage continu de la localisation et de l'affichage cartographique peut entraîner une consommation significative de batterie et de données mobiles, notamment à l'étranger.
+## Article 13 — Disponibilité, interruptions, mises à jour et maintenance
+13.1 Disponibilité. L'Éditeur s'efforce de rendre l'Application accessible en permanence, sans pouvoir garantir une disponibilité continue. L'accès peut être suspendu ou limité en raison de maintenance, de mises à jour, de pannes, de défaillance des réseaux, de l'hébergeur ou des fournisseurs de Contenus tiers, ou de force majeure.
+13.2 Maintenance. L'Éditeur peut interrompre temporairement tout ou partie des Services pour maintenance. Il s'efforce d'informer préalablement les Utilisateurs des interruptions programmées significatives.
+13.3 Mises à jour. L'Éditeur fournit les mises à jour nécessaires au maintien de la conformité de l'Application pendant la période à laquelle l'Utilisateur peut légitimement s'attendre, conformément aux articles L. 224-25-25 et suivants du Code de la consommation, et en informe l'Utilisateur. L'Utilisateur est invité à les installer dans un délai raisonnable ; à défaut, l'Éditeur n'est pas responsable des défauts de conformité résultant uniquement de l'absence d'installation, dès lors que l'Utilisateur a été informé de la disponibilité de la mise à jour et des conséquences de sa non-installation. Les versions anciennes de l'Application ou du système d'exploitation peuvent cesser d'être prises en charge.
+13.4 Modification des Services. L'Éditeur peut modifier les fonctionnalités pour un motif légitime (évolution technique, réglementaire, sécuritaire, changement de fournisseur de Contenus tiers), sans coût supplémentaire. Lorsqu'une modification a une incidence négative et non mineure sur l'accès ou l'utilisation des Services, l'Éditeur en informe l'Utilisateur sur support durable dans un délai raisonnable avant sa mise en œuvre ; l'Utilisateur peut alors résilier sans frais dans un délai de trente jours, conformément à l'article L. 224-25-24 du Code de la consommation.
+## Article 14 — Sécurité
+L'Éditeur met en œuvre des mesures techniques et organisationnelles raisonnables pour protéger l'Application, les Comptes et les données contre les accès non autorisés, altérations et pertes. La sécurité absolue n'existant pas sur les réseaux, l'Utilisateur s'engage à utiliser un mot de passe robuste et unique, à maintenir son terminal à jour et à signaler sans délai tout incident ou toute faille à l'adresse adrien.florent@tutamail.com.
+L'Éditeur peut prendre toute mesure conservatoire (limitation de débit, blocage temporaire, vérification supplémentaire) en cas de suspicion raisonnable d'atteinte à la sécurité.
+## Article 15 — Suspension et suppression des Comptes par l'Éditeur
+15.1 Motifs. L'Éditeur peut suspendre, restreindre (notamment la fonction de signalement) ou supprimer un Compte en cas de manquement grave ou répété aux articles 7, 8 et 9, de faux signalements répétés, de fourniture d'informations d'identification fausses, d'atteinte à la sécurité, ou sur injonction d'une autorité judiciaire ou administrative compétente.
+15.2 Procédure. Sauf urgence, obligation légale ou risque manifeste pour la sécurité, l'Éditeur informe l'Utilisateur des motifs par courrier électronique à l'adresse associée au Compte et lui laisse un délai raisonnable pour présenter ses observations. Toute mesure peut être contestée à l'adresse teamgreentt@gmail.com ; l'Éditeur réexamine sa décision au vu des éléments fournis.
+15.3 Effets. La suspension rend le Compte temporairement inaccessible. La suppression entraîne la résiliation des CGU dans les conditions de l'article 20. Aucune indemnité n'est due au titre d'une mesure justifiée par un manquement de l'Utilisateur, sans préjudice de son droit de la contester. Le sort de l'Abonnement en cours est réglé à l'article 18.
+## Article 16 — Limitations de responsabilité
+16.1 Obligation de moyens. L'Éditeur est tenu d'une obligation de moyens. Les Services sont fournis au regard des données et technologies disponibles, sous réserve des garanties légales de l'article 17.
+16.2 Indications de navigation. Dans les limites autorisées par la loi, l'Éditeur n'est pas responsable des dommages résultant :
+- 
+d'une indication d'itinéraire, de trafic, de zone de danger, de limitation de vitesse ou de temps de parcours incomplète, tardive, imprécise ou incorrecte ; 
+- 
+du choix de suivre une indication contraire à la signalisation réelle, aux règles de circulation, aux consignes des autorités ou aux conditions manifestes de circulation ; 
+- 
+de l'utilisation de l'Application pendant la conduite en méconnaissance de l'article 7.4 ; 
+- 
+de l'inadéquation d'un itinéraire au véhicule (gabarit, tonnage, deux-roues), au chargement ou aux capacités de l'Utilisateur ; 
+- 
+de l'utilisation de l'Application dans des situations pour lesquelles elle n'est pas conçue (hors route, navigation non routière, urgence vitale, zones sans couverture) ; 
+- 
+de contraventions, amendes, péages, frais ou sanctions encourus par l'Utilisateur. 
+16.3 Contributions et Contenus tiers. L'Éditeur n'est pas responsable des Contributions des Utilisateurs, sous réserve de ses obligations d'hébergeur, ni des Contenus tiers, dans les limites de l'article 11.
+16.4 Causes extérieures. L'Éditeur n'est pas responsable des dommages résultant du terminal, du système d'exploitation, des réseaux de télécommunications, des systèmes de positionnement par satellite, de la boutique d'applications, d'Apple Music, d'un service d'authentification tiers, d'un cas de force majeure au sens de l'article 1218 du Code civil, ou du fait d'un tiers ou de l'Utilisateur.
+16.5 Utilisateurs professionnels. À l'égard des Utilisateurs n'ayant pas la qualité de consommateur, la responsabilité de l'Éditeur est limitée aux dommages directs et prévisibles, à l'exclusion de toute perte d'exploitation, de chiffre d'affaires, de clientèle ou de données, et ne peut excéder le montant des sommes versées par l'Utilisateur à l'Éditeur au cours des douze mois précédant le fait générateur ou, à défaut, cinquante euros.
+16.6 Réserves légales. Aucune stipulation n'exclut ni ne limite la responsabilité de l'Éditeur en cas de dol, de faute lourde, de dommage corporel, ou dans tout autre cas où une telle limitation serait prohibée. À l'égard des consommateurs, les présentes limitations ne s'appliquent que dans la mesure où elles ne créent pas de déséquilibre significatif au sens des articles L. 212-1, R. 212-1 et R. 212-2 du Code de la consommation et ne portent pas atteinte aux garanties légales.
+16.7 Responsabilité de l'Utilisateur. L'Utilisateur répond des dommages qu'il cause à l'Éditeur ou aux tiers du fait d'une utilisation de l'Application contraire aux CGU ou à la loi.
+## Article 17 — Garanties légales applicables
+17.1 Garantie légale de conformité. L'Utilisateur consommateur bénéficie de la garantie légale de conformité des contenus et services numériques prévue aux articles L. 224-25-12 et suivants du Code de la consommation, tant pour les Services gratuits fournis en contrepartie de données à caractère personnel (article L. 224-25-2) que pour l'Abonnement.
+L'Éditeur répond des défauts de conformité apparaissant pendant toute la période de fourniture des Services, ceux-ci étant fournis de manière continue. En cas de défaut, l'Utilisateur a droit à la mise en conformité sans retard injustifié, sans frais et sans inconvénient majeur ; à défaut, il a droit à une réduction du prix de l'Abonnement ou à la résolution du contrat dans les conditions des articles L. 224-25-17 à L. 224-25-22. Les défauts apparaissant pendant la période de fourniture sont présumés exister au moment de la fourniture, sauf preuve contraire.
+Les modalités de mise en œuvre de ces garanties sont rappelées dans l'encadré figurant en annexe des présentes CGU, conformément à l'article D. 211-3 du Code de la consommation.
+17.2 Garantie des vices cachés. L'Utilisateur bénéficie également de la garantie des vices cachés des articles 1641 à 1649 du Code civil.
+17.3 Utilisateurs professionnels. Les garanties propres aux consommateurs ne bénéficient pas aux Utilisateurs agissant à des fins professionnelles, sauf disposition impérative contraire.
+## Article 18 — Abonnement et droit de rétractation
+18.1 Offre. L'Application est gratuite. Elle propose un Abonnement unique, [NOM DE L'OFFRE], disponible en formule mensuelle au prix de [PRIX MENSUEL] € TTC ou annuelle au prix de [PRIX ANNUEL] € TTC, donnant accès aux fonctionnalités indiquées dans l'Application. Les prix en vigueur sont affichés dans l'Application et sur la boutique d'applications avant toute souscription.
+18.2 Souscription et paiement. L'Abonnement est souscrit et payé via la boutique d'applications du terminal, dont les conditions s'appliquent au paiement, à la facturation et aux remboursements. Il se renouvelle tacitement à chaque échéance jusqu'à résiliation.
+18.3 Résiliation. L'Abonnement peut être résilié à tout moment depuis les paramètres d'abonnement de la boutique d'applications ; la résiliation prend effet à la fin de la période en cours, sans remboursement de la période entamée, sous réserve des dispositions légales impératives. Conformément à l'article L. 215-1-1 du Code de la consommation, la résiliation d'un contrat conclu par voie électronique est possible par la même voie.
+18.4 Droit de rétractation. L'Utilisateur consommateur dispose de quatorze jours à compter de la souscription pour se rétracter sans motif (articles L. 221-18 et suivants du Code de la consommation). Lorsque la souscription est effectuée via une boutique d'applications, ce droit s'exerce selon la procédure de remboursement de cette boutique. Conformément à l'article L. 221-28, 13°, le droit de rétractation ne peut plus être exercé lorsque l'exécution de l'Abonnement a commencé avec l'accord préalable exprès de l'Utilisateur et sa reconnaissance de la perte de ce droit. L'Utilisateur peut également adresser sa demande de rétractation à teamgreentt@gmail.com en indiquant son identifiant de Compte et la date de souscription.
+18.5 Suppression du Compte. La suppression du Compte ne résilie pas automatiquement l'Abonnement souscrit via la boutique d'applications ; l'Utilisateur doit le résilier depuis les paramètres de la boutique.
+## Article 19 — Modification des CGU
+L'Éditeur peut modifier les CGU pour tenir compte d'une évolution légale, réglementaire, technique ou des Services. Toute modification donne lieu à une nouvelle version numérotée et datée, publiée à l'adresse cgu.zylo-app.fr
+L'Utilisateur est informé de toute modification substantielle par notification dans l'Application et, s'il dispose d'un Compte, par courrier électronique, au moins trente jours avant son entrée en vigueur, sauf lorsqu'une obligation légale ou un impératif de sécurité impose une application immédiate. L'Utilisateur qui refuse les CGU modifiées peut résilier sans frais avant leur entrée en vigueur. La poursuite de l'utilisation après cette date vaut acceptation, sous réserve, pour les modifications substantielles, d'un acte d'acceptation exprès dans l'Application. Les versions antérieures peuvent être obtenues à l'adresse teamgreentt@gmail.com.
+## Article 20 — Durée, résiliation et suppression du Compte
+20.1 Durée. Les CGU sont conclues pour une durée indéterminée à compter de leur acceptation.
+20.2 Résiliation par l'Utilisateur. L'Utilisateur peut résilier à tout moment, sans motif ni préavis, en supprimant son Compte depuis l'Application (Menu > Mon Compte > Supprimer mon compte) ou par demande à teamgreentt@gmail.com, et en désinstallant l'Application.
+20.3 Effets de la suppression. La suppression du Compte est immédiate. Les données du Compte sont effacées des systèmes de l'Éditeur sans conservation de copie de sauvegarde, à l'exception des seules données dont la conservation est imposée par la loi (données de facturation liées à l'Abonnement et données d'identification visées par la loi n° 2004-575 du 21 juin 2004 et ses décrets d'application), conservées pour la durée légale puis supprimées, ainsi que des Contributions déjà agrégées sous forme anonymisée. La Politique de confidentialité précise ces durées. Avant la suppression, l'Utilisateur peut exercer son droit à la portabilité dans les conditions de l'article L. 224-25-22 du Code de la consommation et de la Politique de confidentialité.
+20.4 Résiliation par l'Éditeur. L'Éditeur peut résilier dans les conditions de l'article 15 ou, pour tout motif légitime tel que l'arrêt définitif de l'Application, moyennant un préavis d'au moins trente jours notifié par tout moyen approprié ; les Abonnements en cours sont alors remboursés au prorata de la période non consommée.
+20.5 Survie. Les articles 8.4, 10, 16, 21 et 23 demeurent applicables après la résiliation dans la mesure nécessaire à leur objet.
+## Article 21 — Droit applicable, règlement des différends et médiation de la consommation
+21.1 Droit applicable. Les CGU sont régies par le droit français. L'Utilisateur consommateur résidant dans un autre État membre de l'Union européenne bénéficie en outre des dispositions impératives de la loi de cet État, conformément à l'article 6 du règlement (CE) n° 593/2008.
+21.2 Réclamation préalable. En cas de difficulté, l'Utilisateur contacte en premier lieu l'Éditeur à l'adresse teamgreentt@gmail.com ou par courrier à l'adresse de l'article 1. L'Éditeur répond dans les meilleurs délais et au plus tard dans les deux mois.
+21.3 Médiation de la consommation. Conformément aux articles L. 611-1 et suivants et L. 612-1 et suivants du Code de la consommation, tout Utilisateur consommateur peut recourir gratuitement à un médiateur de la consommation pour la résolution amiable de tout litige l'opposant à l'Éditeur, à condition d'avoir préalablement adressé une réclamation écrite à l'Éditeur et de ne pas avoir obtenu de réponse satisfaisante dans un délai de deux mois. La demande de médiation doit être introduite dans l'année suivant la réclamation écrite.
+Le recours à la médiation est facultatif ; l'Utilisateur conserve la possibilité de saisir les tribunaux compétents.
+21.4 Juridictions compétentes. À défaut de résolution amiable, tout litige relève des juridictions françaises compétentes. L'Utilisateur consommateur peut saisir, à son choix, l'une des juridictions territorialement compétentes en vertu du Code de procédure civile ou la juridiction du lieu où il demeurait au moment de la conclusion du contrat ou de la survenance du fait dommageable (article R. 631-3 du Code de la consommation). Pour les Utilisateurs professionnels, compétence exclusive est attribuée aux tribunaux du ressort de la Cour d'appel de Paris.
+## Article 22 — Données personnelles et Politique de confidentialité
+Le traitement des données à caractère personnel des Utilisateurs, y compris les données de localisation et leur éventuelle utilisation agrégée pour l'estimation du trafic, est régi par la Politique de confidentialité, document distinct accessible à l'adresse confidentialite.zylo-app.fr et depuis l'Application (Menu > À propos).
+L'Éditeur ne vend aucune donnée relative aux Utilisateurs. Aucune donnée n'est communiquée à des tiers en dehors des prestataires techniques strictement nécessaires aux Services et des cas où une obligation légale ou une réquisition régulière d'une autorité compétente l'impose.
+La Politique de confidentialité décrit les données collectées, leurs finalités, bases légales, durées de conservation, destinataires, transferts éventuels hors Union européenne et les modalités d'exercice des droits de l'Utilisateur (accès, rectification, effacement, limitation, opposition, portabilité, directives post mortem), conformément au règlement (UE) 2016/679 et à la loi n° 78-17 du 6 janvier 1978 modifiée. Pour toute question relative aux données personnelles : adrien.florent@tutamail.com.
+## Article 23 — Dispositions générales
+23.1 Intégralité. Les CGU et la Politique de confidentialité constituent l'intégralité de l'accord entre les Parties relatif à l'utilisation de l'Application.
+23.2 Nullité partielle. Si une stipulation est déclarée nulle ou réputée non écrite, les autres conservent leur plein effet.
+23.3 Non-renonciation. Le fait pour l'Éditeur de ne pas se prévaloir d'une stipulation à un moment donné ne vaut pas renonciation à s'en prévaloir ultérieurement.
+23.4 Cession. L'Éditeur peut transférer les droits et obligations résultant des CGU à un tiers, notamment en cas de constitution d'une société reprenant l'activité, sous réserve d'en informer l'Utilisateur et sans réduction des garanties dont il bénéficie.
+23.5 Preuve. Les registres informatisés conservés dans les systèmes de l'Éditeur dans des conditions raisonnables de sécurité font preuve des acceptations, connexions et opérations intervenues, sauf preuve contraire.
+23.6 Langue. Les CGU sont rédigées en français ; en cas de traduction, seule la version française fait foi.
+23.7 Contact. teamgreentt@gmail.com (support et réclamations) ; adrien.florent@tutamail.com (sécurité, données personnelles, questions juridiques) ; ou par courrier à l'adresse de l'article 1.
+## Article 24 — Historique des versions
+- 
+Version 1.0 — [JJ/MM/2026] : première version. 
+Version 1.1 — [23/09/2026] : ajout de l'article 8 bis (partage de trajet et trajet en groupe).
+## Annexe — Encadré relatif à la garantie légale de conformité (article D. 211-3 du Code de la consommation)
+[Texte réglementaire à reproduire à l'identique depuis l'annexe de l'article D. 211-3 sur Légifrance avant publication.]
+Le consommateur bénéficie d'un délai de deux ans à compter de la fourniture du contenu numérique ou du service numérique pour obtenir la mise en œuvre de la garantie légale de conformité en cas d'apparition d'un défaut de conformité. Pendant un délai d'un an à compter de la date de fourniture, le consommateur n'est tenu d'établir que l'existence du défaut de conformité et non la date d'apparition de celui-ci.
+La garantie légale de conformité emporte obligation de fournir toutes les mises à jour nécessaires au maintien de la conformité du contenu numérique ou du service numérique.
+La garantie légale de conformité donne au consommateur droit à la mise en conformité du contenu numérique ou du service numérique sans retard injustifié suite à sa demande, sans frais et sans inconvénient majeur pour lui.
+Le consommateur peut obtenir une réduction du prix en conservant le contenu numérique ou le service numérique ou il peut mettre fin au contrat en se faisant rembourser intégralement contre renoncement au contenu numérique ou au service numérique, si : 1° Le professionnel refuse de mettre le contenu numérique ou le service numérique en conformité ; 2° La mise en conformité du contenu numérique ou du service numérique est retardée de manière injustifiée ; 3° La mise en conformité du contenu numérique ou du service numérique ne peut intervenir sans frais imposés au consommateur ; 4° La mise en conformité du contenu numérique ou du service numérique occasionne un inconvénient majeur pour le consommateur ; 5° La non-conformité du contenu numérique ou du service numérique persiste en dépit de la tentative de mise en conformité du professionnel restée infructueuse.
+Le consommateur a également droit à une réduction du prix ou à la résolution du contrat lorsque le défaut de conformité est si grave qu'il justifie que la réduction du prix ou la résolution du contrat soit immédiate. Le consommateur n'est alors pas tenu de demander la mise en conformité du contenu numérique ou du service numérique au préalable.
+Dans les cas où le défaut de conformité est mineur, le consommateur n'a droit à l'annulation du contrat que si le contrat ne prévoit pas le paiement d'un prix.
+Toute période d'indisponibilité du contenu numérique ou du service numérique en vue de sa remise en conformité suspend la garantie qui restait à courir jusqu'à la fourniture du contenu numérique ou du service numérique de nouveau conforme.
+Les droits mentionnés ci-dessus résultent de l'application des articles L. 224-25-1 à L. 224-25-31 du code de la consommation.
+Le professionnel qui fait obstacle de mauvaise foi à la mise en œuvre de la garantie légale de conformité encourt une amende civile d'un montant maximal de 300 000 euros, qui peut être porté jusqu'à 10 % du chiffre d'affaires moyen annuel (article L. 242-18-1 du code de la consommation).
+Le consommateur bénéficie en outre de la garantie légale des vices cachés en application des articles 1641 à 1649 du code civil, pendant une durée de deux ans à compter de la découverte du défaut. Cette garantie donne droit à une réduction de prix si le contenu numérique ou le service numérique est conservé ou à un remboursement intégral contre renonciation au contenu numérique ou au service numérique.

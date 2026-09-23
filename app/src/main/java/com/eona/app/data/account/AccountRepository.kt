@@ -96,6 +96,9 @@ object AccountRepository {
     suspend fun postTrip(trip: com.eona.app.core.model.TripRecord): Boolean =
         token?.let { api.postTrip(it, trip) } ?: false
 
+    /** The terms the driver accepted: the account keeps the version and the moment, as proof. */
+    suspend fun recordTerms(version: String): Boolean = token?.let { api.recordTerms(it, version) } ?: false
+
     suspend fun postDrive(seconds: Int, meters: Int): Boolean =
         token?.let { api.postDrive(it, seconds, meters) } ?: false
 

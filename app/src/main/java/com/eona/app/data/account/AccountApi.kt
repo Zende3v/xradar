@@ -125,6 +125,11 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         authedPost(token, "/api/accounts/me/trips", body)
     }
 
+    /** The version of the terms accepted, and when: the backend stamps the moment itself. */
+    suspend fun recordTerms(token: String, version: String): Boolean = withContext(Dispatchers.IO) {
+        authedPost(token, "/api/accounts/me/terms", JSONObject().put("version", version))
+    }
+
     suspend fun postDrive(token: String, seconds: Int, meters: Int): Boolean = withContext(Dispatchers.IO) {
         authedPost(token, "/api/accounts/me/drive", JSONObject().put("seconds", seconds).put("meters", meters))
     }

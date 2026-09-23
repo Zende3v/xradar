@@ -27,6 +27,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +71,9 @@ import com.eona.app.designsystem.component.EonaText
 import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.designsystem.theme.EonaTheme
 import com.eona.app.feature.drive.component.AlertStack
+import com.eona.app.feature.drive.component.AudioOption
+import com.eona.app.feature.drive.component.AudioOptionBar
+import com.eona.app.feature.drive.component.audioMakesWay
 import com.eona.app.feature.drive.component.key
 import com.eona.app.feature.drive.component.DriveDock
 import com.eona.app.feature.drive.component.DriveMap
@@ -166,6 +172,8 @@ fun DriveScreen(
     var limitReportOpen by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     var dockOpen by remember { mutableStateOf(false) }
+    /** Which audio bar is open, if any: only one at a time, and it hides its neighbours. */
+    var audioMenu by remember { mutableStateOf<AudioMenu?>(null) }
 
     val topMode = when {
         state.guidance != null -> TopMode.Guidance
@@ -186,7 +194,17 @@ fun DriveScreen(
             onUserGesture = { following = false },
             onReportTap = if (isAdmin) ({ id -> pendingDelete = id }) else null,
             modifier = Modifier.fillMaxSize(),
+            speedLimitKmh = state.speedLimitKmh,
         )
+
+        // An open audio bar closes as soon as the driver touches anywhere else.
+        if (audioMenu != null) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { audioMenu = null },
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -354,9 +372,26 @@ fun DriveScreen(
                 enter = fadeIn(),
                 exit = fadeOut(),
             ) {
+                // Each audio bar keeps a button's width in the row and grows to the right over its
+                // neighbours, which fade where they stand: nothing slides, nothing jumps.
                 Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                    AlertSoundButton()
-                    VoiceButton()
+                    Box(Modifier.width(AUDIO_BUTTON_SIZE).zIndex(if (audioMenu == AudioMenu.Sound) 1f else 0f)) {
+                        AlertSoundBar(
+                            open = audioMenu == AudioMenu.Sound,
+                            onOpenChange = { audioMenu = if (it) AudioMenu.Sound else null },
+                        )
+                    }
+                    Box(
+                        Modifier
+                            .width(AUDIO_BUTTON_SIZE)
+                            .zIndex(if (audioMenu == AudioMenu.Voice) 1f else 0f)
+                            .audioMakesWay(audioMenu == AudioMenu.Sound),
+                    ) {
+                        VoiceBar(
+                            open = audioMenu == AudioMenu.Voice,
+                            onOpenChange = { audioMenu = if (it) AudioMenu.Voice else null },
+                        )
+                    }
                 }
             }
 
@@ -467,55 +502,61 @@ fun DriveScreen(
     }
 }
 
-/**
- * Alert sound: off → on → on with vibration. One button, three states, so the
- * driver can silence everything with a thumb without opening a menu.
- */
+/** Which of the two audio bars is open. */
+private enum class AudioMenu { Sound, Voice }
+
+/** What the alert-sound bar offers, in order. */
+private enum class AlertSoundMode { Silent, Sound, SoundAndBuzz }
+
+/** Alert sound: silent, sound, sound and vibration — the three laid side by side once open. */
 @Composable
-private fun AlertSoundButton() {
-    val colors = EonaTheme.colors
+private fun AlertSoundBar(open: Boolean, onOpenChange: (Boolean) -> Unit) {
     val prefs by AppPreferences.alerts.collectAsStateWithLifecycle()
-    val icon = when {
-        !prefs.sound -> R.drawable.ic_bell_off
-        prefs.vibration -> R.drawable.ic_bell_ringing
-        else -> R.drawable.ic_bell
+    val mode = when {
+        !prefs.sound -> AlertSoundMode.Silent
+        prefs.vibration -> AlertSoundMode.SoundAndBuzz
+        else -> AlertSoundMode.Sound
     }
-    EonaIconButton(
-        icon = ImageVector.vectorResource(icon),
-        contentDescription = "Son des alertes",
-        onClick = {
+    AudioOptionBar(
+        options = listOf(
+            AudioOption(AlertSoundMode.Silent, R.drawable.ic_bell_off, "Silencieux"),
+            AudioOption(AlertSoundMode.Sound, R.drawable.ic_bell, "Son"),
+            AudioOption(AlertSoundMode.SoundAndBuzz, R.drawable.ic_bell_ringing, "Son et vibration"),
+        ),
+        selected = mode,
+        label = "Son des alertes",
+        open = open,
+        onOpenChange = onOpenChange,
+        onPick = { picked ->
             AppPreferences.updateAlerts {
-                when {
-                    !it.sound -> it.copy(sound = true, vibration = false)
-                    !it.vibration -> it.copy(vibration = true)
-                    else -> it.copy(sound = false, vibration = false)
-                }
+                it.copy(sound = picked != AlertSoundMode.Silent, vibration = picked == AlertSoundMode.SoundAndBuzz)
             }
         },
-        tint = Color.Unspecified, // the asset carries its own colours
-        background = colors.surface.copy(alpha = 0.62f),
-        border = BorderStroke(1.dp, colors.border),
-        size = 48.dp,
+        modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true),
+        size = AUDIO_BUTTON_SIZE,
     )
 }
 
-/** Spoken guidance and alert announcements, on or off. */
+/** Spoken guidance and alert announcements, off or on. */
 @Composable
-private fun VoiceButton() {
-    val colors = EonaTheme.colors
+private fun VoiceBar(open: Boolean, onOpenChange: (Boolean) -> Unit) {
     val prefs by AppPreferences.alerts.collectAsStateWithLifecycle()
-    EonaIconButton(
-        icon = ImageVector.vectorResource(
-            if (prefs.voice) R.drawable.ic_volume_on else R.drawable.ic_volume_off,
+    AudioOptionBar(
+        options = listOf(
+            AudioOption(false, R.drawable.ic_volume_off, "Voix coupée"),
+            AudioOption(true, R.drawable.ic_volume_on, "Voix activée"),
         ),
-        contentDescription = "Annonces vocales",
-        onClick = { AppPreferences.updateAlerts { it.copy(voice = !it.voice) } },
-        tint = Color.Unspecified, // the asset carries its own colours
-        background = colors.surface.copy(alpha = 0.62f),
-        border = BorderStroke(1.dp, colors.border),
-        size = 48.dp,
+        selected = prefs.voice,
+        label = "Annonces vocales",
+        open = open,
+        onOpenChange = onOpenChange,
+        onPick = { voice -> AppPreferences.updateAlerts { it.copy(voice = voice) } },
+        modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true),
+        size = AUDIO_BUTTON_SIZE,
     )
 }
+
+private val AUDIO_BUTTON_SIZE = 48.dp
 
 @Composable
 private fun DeleteConfirm(onCancel: () -> Unit, onConfirm: () -> Unit) {

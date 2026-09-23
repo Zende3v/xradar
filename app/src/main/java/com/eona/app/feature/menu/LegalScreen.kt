@@ -9,6 +9,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.eona.app.data.preferences.AppPreferences
+import com.eona.app.feature.onboarding.TermsTextScreen
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import com.eona.app.designsystem.component.EonaDivider
@@ -27,6 +37,19 @@ const val PRIVACY_POLICY_URL = "https://confidentialite.zylo-app.fr/"
 @Composable
 fun LegalRoute(onBack: () -> Unit) {
     val spacing = EonaTheme.spacing
+    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+    var termsOpen by remember { mutableStateOf(false) }
+    if (termsOpen) {
+        TermsTextScreen(onClose = { termsOpen = false })
+        return
+    }
+    // "Version 1.1 · acceptées le 22/09/2026", or what the text is.
+    val termsSubtitle = when {
+        settings.termsVersion.isEmpty() -> "Le texte qui encadre l'usage d'EONA"
+        settings.termsAcceptedAt == null -> "Version ${settings.termsVersion} acceptée"
+        else -> "Version ${settings.termsVersion} · acceptées le " +
+            SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE).format(Date(settings.termsAcceptedAt!!))
+    }
     EonaScreenScaffold(title = "À propos", onBack = onBack) {
         Column(
             modifier = Modifier
@@ -37,6 +60,12 @@ fun LegalRoute(onBack: () -> Unit) {
         ) {
             EonaListGroup {
                 Source("Politique de confidentialité", "Données collectées, durées de conservation et droits (RGPD)", PRIVACY_POLICY_URL)
+                RowDivider()
+                EonaListRow(
+                    title = "Conditions générales d'utilisation",
+                    subtitle = termsSubtitle,
+                    onClick = { termsOpen = true },
+                )
             }
 
             EonaListGroup(title = "Carte") {
