@@ -49,6 +49,9 @@ import com.eona.app.data.stats.TripHistoryRepository
 import com.eona.app.feature.drive.component.key
 import com.eona.app.location.LocationRepository
 import com.eona.app.media.MediaRepository
+import com.eona.app.feature.drive.group.GroupSession
+import com.eona.app.feature.drive.group.TripContext
+import com.eona.app.core.model.TripGroupResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -177,6 +180,35 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private var trip: TripRecorder? = null
 
     /**
+     * True once the driver has really been on the route of this trip. Before that the trip is
+     * only planned: nothing is shared, and nothing can be stopped.
+     */
+    private val _tripUnderway = MutableStateFlow(false)
+    val tripUnderway: StateFlow<Boolean> = _tripUnderway
+
+    /** "Partager mon trajet" and "Trajet en groupe": what they read of the trip being driven. */
+    val group = GroupSession(
+        viewModelScope,
+        object : TripContext {
+            override val token: String? get() = AccountRepository.token
+            override val myAccountId: String? get() = AccountRepository.account.value?.id
+            override val tripUnderway: Boolean get() = _tripUnderway.value
+            override val location: LocationSample? get() = LocationRepository.location.value
+            override val destination: Place? get() = ActiveTripRepository.destination.value
+            override val route: Route? get() = ActiveTripRepository.route.value
+            override val routeVersion: Int get() = this@DriveViewModel.routeVersion
+            override fun progress(): Pair<RoutePath, RoutePath.Match>? {
+                val rp = path ?: return null
+                val match = this@DriveViewModel.progress() ?: return null
+                return rp to match
+            }
+            override val drivenMeters: Int? get() = trip?.distanceMeters?.roundToInt()
+            override fun setDestination(place: Place) = ActiveTripRepository.setDestination(place)
+            override fun attachGroupResult(result: TripGroupResult, tripId: String) = tripHistory.attach(result, tripId)
+        },
+    )
+
+    /**
      * The driving state. The voice and trip collectors below keep it running for as long as
      * the ViewModel lives; the screen reads it through [uiState].
      */
@@ -274,6 +306,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             LocationRepository.location.collect { sample ->
                 if (sample == null) return@collect
+                // A simulated trip is driven from its first fix: there is no route to join.
+                if (!_tripUnderway.value && trip != null && ActiveTripRepository.start.value != null) _tripUnderway.value = true
+                // Whoever follows the trip hears from the driver every few seconds.
+                group.onFix()
                 if (shouldFetch(sample)) {
                     lastFetchLat = sample.latitude
                     lastFetchLon = sample.longitude
@@ -561,6 +597,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 // On the route: the trip has really started, and a detour may be corrected later.
                 if (offBy <= OFF_ROUTE_M) {
                     joinedRoute = true
+                    if (!_tripUnderway.value) _tripUnderway.value = true
                     recalcWaitMs = RECALC_COOLDOWN_MS
                     return@collect
                 }
@@ -801,13 +838,17 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val finished = trip ?: return
         trip = null
         // Arrived, not stopped on the way: the HUD says so before going back to simply driving.
+        val arrivedAtDestination = arrived
         if (arrived) {
             arrived = false
             showArrival(finished)
         }
+        _tripUnderway.value = false
         // "Statistiques de conduite" off: the trip only served the guidance (its arrival).
-        if (!AppPreferences.settings.value.drivingStats) return
-        val record = finished.record(UUID.randomUUID().toString()) ?: return
+        val record = if (AppPreferences.settings.value.drivingStats) finished.record(UUID.randomUUID().toString()) else null
+        // The link and the group hear the arrival, or are stopped with the trip.
+        group.onTripEnded(arrivedAtDestination, finished.distanceMeters.roundToInt(), record?.id)
+        record ?: return
         tripHistory.add(record)
         // Statistics live on the server for everyone: survive a reinstall.
         viewModelScope.launch { AccountRepository.postTrip(record) }

@@ -1,6 +1,8 @@
 package com.eona.app.data.stats
 
 import android.content.Context
+import com.eona.app.core.model.TripGroupRank
+import com.eona.app.core.model.TripGroupResult
 import com.eona.app.core.model.TripRecord
 import com.eona.app.data.account.AccountApi
 import org.json.JSONArray
@@ -36,13 +38,28 @@ class TripHistoryRepository(context: Context) {
                     stops = o.optInt("stops"),
                     stoppedSeconds = o.optInt("stoppedSeconds"),
                     events = AccountApi.parseEvents(o.optJSONObject("events")),
+                    group = o.optJSONObject("group")?.let(::parseGroup),
                 )
             }.sortedByDescending { it.startedAt }
         }.getOrDefault(emptyList())
     }
 
     fun add(trip: TripRecord) {
-        val updated = (listOf(trip) + all()).take(MAX)
+        save((listOf(trip) + all()).take(MAX))
+    }
+
+    /** The group trip ended: its ranking joins the trip already saved. Nothing else moves. */
+    fun attach(group: TripGroupResult, tripId: String) {
+        val trips = all()
+        if (trips.none { it.id == tripId }) return
+        save(trips.map { if (it.id == tripId) it.copy(group = group) else it })
+    }
+
+    /** The group rankings kept here, by trip id: the server's history has none. */
+    fun groupResults(): Map<String, TripGroupResult> =
+        all().mapNotNull { trip -> trip.group?.let { trip.id to it } }.toMap()
+
+    private fun save(updated: List<TripRecord>) {
         val array = JSONArray()
         updated.forEach { t ->
             array.put(
@@ -59,10 +76,50 @@ class TripHistoryRepository(context: Context) {
                     put("stops", t.stops)
                     put("stoppedSeconds", t.stoppedSeconds)
                     put("events", AccountApi.wireEvents(t))
+                    t.group?.let { put("group", groupJson(it)) }
                 },
             )
         }
         prefs.edit().putString(KEY, array.toString()).apply()
+    }
+
+    private fun groupJson(g: TripGroupResult) = JSONObject().apply {
+        put("code", g.code)
+        g.myRank?.let { put("myRank", it) }
+        put(
+            "ranking",
+            JSONArray().apply {
+                g.ranking.forEach { r ->
+                    put(
+                        JSONObject().apply {
+                            put("name", r.name)
+                            r.rank?.let { put("rank", it) }
+                            r.durationSeconds?.let { put("durationSeconds", it) }
+                            r.distanceMeters?.let { put("distanceMeters", it) }
+                            put("me", r.me)
+                        },
+                    )
+                }
+            },
+        )
+    }
+
+    private fun parseGroup(o: JSONObject): TripGroupResult {
+        val list = o.optJSONArray("ranking") ?: JSONArray()
+        return TripGroupResult(
+            code = o.optString("code"),
+            myRank = if (o.has("myRank")) o.optInt("myRank") else null,
+            ranking = (0 until list.length()).mapNotNull { i ->
+                val r = list.optJSONObject(i) ?: return@mapNotNull null
+                TripGroupRank(
+                    name = r.optString("name"),
+                    rank = if (r.has("rank")) r.optInt("rank") else null,
+                    durationSeconds = if (r.has("durationSeconds")) r.optInt("durationSeconds") else null,
+                    distanceMeters = if (r.has("distanceMeters")) r.optInt("distanceMeters") else null,
+                    me = r.optBoolean("me"),
+                )
+            },
+        )
     }
 
     /** The account is deleted: its trips go with it. */

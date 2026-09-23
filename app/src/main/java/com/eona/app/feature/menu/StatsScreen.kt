@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import com.eona.app.core.model.TripRecord
 import com.eona.app.data.account.AccountRepository
 import com.eona.app.data.account.AccountStats
+import com.eona.app.data.stats.TripHistoryRepository
+import androidx.compose.ui.platform.LocalContext
 import com.eona.app.designsystem.component.EonaCard
 import com.eona.app.designsystem.component.EonaDivider
 import com.eona.app.designsystem.component.EonaIcon
@@ -49,8 +51,13 @@ fun StatsRoute(onBack: () -> Unit) {
         TripDetailScreen(trip, onBack = { selected = null })
         return
     }
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
-        stats = AccountRepository.stats()
+        // The server keeps the trips; a group trip's ranking stays on this phone, joined by id.
+        val groups = TripHistoryRepository(context).groupResults()
+        stats = AccountRepository.stats()?.let { s ->
+            s.copy(trips = s.trips.map { trip -> groups[trip.id]?.let { trip.copy(group = it) } ?: trip })
+        }
         loaded = true
     }
     EonaScreenScaffold(title = "Statistiques", onBack = onBack) {
@@ -137,9 +144,17 @@ private fun TripRow(trip: TripRecord, onClick: () -> Unit) {
         title = trip.toLabel,
         subtitle = "${trip.dateLabel} · ${trip.distanceLabel} · ${trip.durationLabel}",
         onClick = onClick,
+        leadingIcon = if (trip.group != null) EonaIcons.People else null,
+        glow = trip.group != null,
         trailing = {
-            trip.delayLabel?.let {
-                EonaText(it, style = EonaTheme.typography.caption, color = EonaTheme.colors.textTertiary)
+            val group = trip.group
+            if (group != null) {
+                // A group trip: the rank takes the place of the gap to the estimate.
+                EonaText(group.standingLabel, style = EonaTheme.typography.caption, color = EonaTheme.colors.accent)
+            } else {
+                trip.delayLabel?.let {
+                    EonaText(it, style = EonaTheme.typography.caption, color = EonaTheme.colors.textTertiary)
+                }
             }
             EonaIcon(EonaIcons.ChevronRight, contentDescription = null, tint = EonaTheme.colors.textTertiary, size = 20.dp)
         },

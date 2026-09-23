@@ -89,7 +89,13 @@ import com.eona.app.core.model.RoadSign
 import com.eona.app.core.model.RouteTraffic
 import com.eona.app.core.model.TrafficLevel
 import com.eona.app.designsystem.foundation.EonaIcons
+import com.eona.app.core.geo.LineSimplifier
+import com.eona.app.feature.drive.group.GroupMapLayer
+import com.eona.app.feature.drive.group.GroupMapRenderer
+import androidx.compose.runtime.rememberCoroutineScope
+import org.maplibre.android.geometry.LatLngBounds
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.ln
@@ -117,6 +123,10 @@ fun DriveMap(
     modifier: Modifier = Modifier,
     /** The limit under the driver: it decides how close the camera sits (null = town speeds). */
     speedLimitKmh: Int? = null,
+    /** The other members of a group trip: read by the map at every frame, never observed. */
+    group: GroupMapLayer? = null,
+    /** A group member's photo touched: their card. */
+    onMemberTap: ((String) -> Unit)? = null,
 ) {
     // Compose previews have no GL context — show a plain backdrop instead.
     if (LocalInspectionMode.current) {
@@ -163,10 +173,21 @@ fun DriveMap(
     val locationState = rememberUpdatedState(location)
     val followingState = rememberUpdatedState(following)
     val speedLimitState = rememberUpdatedState(speedLimitKmh)
+    val groupState = rememberUpdatedState(group)
+    val latestOnMemberTap by rememberUpdatedState(onMemberTap)
+    val renderScope = rememberCoroutineScope()
+    val groupRenderer = remember { GroupMapRenderer(context.resources.displayMetrics.density, renderScope) }
 
     // Map-matching state: the driver is snapped onto the route so the arrow stays
     // on the line and the passed part gets trimmed away ("eats the line").
     val routePath = remember(routePoints) { if (routePoints.size >= 2) RoutePath(routePoints) else null }
+    // What is drawn is lightened (the driver is matched on every point, in [routePath]): a 400 km
+    // route of thousands of points was redrawn far too slowly, and every other line waited behind
+    // it. The shape stays within a couple of metres.
+    val drawnPath = remember(routePoints) {
+        if (routePoints.size >= 2) RoutePath(LineSimplifier.simplify(routePoints, ROUTE_DRAW_MAX_POINTS, 2.0)) else null
+    }
+    val drawnPathState = rememberUpdatedState(drawnPath)
     val routePathState = rememberUpdatedState(routePath)
     val trafficState = rememberUpdatedState(traffic)
     // "Couleur de l'app": the route, the arrow and its halo take it; the style is redrawn with it.
@@ -237,8 +258,14 @@ fun DriveMap(
                     latestOnGesture()
                 }
             }
-            // Tapping a report marker (admins can then delete it).
+            // Tapping a group member (their card), a cluster, or a report marker (admins delete it).
             ready.addOnMapClickListener { latLng ->
+                latestOnMemberTap?.let { open ->
+                    groupRenderer.hit(ready, latLng)?.let { id ->
+                        open(id)
+                        return@addOnMapClickListener true
+                    }
+                }
                 val screen = ready.projection.toScreenLocation(latLng)
                 val cluster = ready
                     .queryRenderedFeatures(screen, RADAR_CLUSTER, REPORT_CLUSTER, SIGN_CLUSTER)
@@ -413,14 +440,16 @@ fun DriveMap(
                     PropertyFactory.iconSize(0.85f),
                 ),
             )
+            // The group, under the driver's route (their routes) and over the markers (them).
+            groupRenderer.install(style, ROUTE_GLOW, POSITION_HALO)
             location?.let { setArrow(style, it.latitude, it.longitude, 0f) }
             setRadars(style, radars)
             setReports(style, reports)
             setControlZones(style, reports)
             setZones(style, zones)
-            setRoute(style, routePoints)
+            setRoute(style, drawnPath?.points ?: emptyList())
             routeFrom[0] = 0.0
-            applyTraffic(style, routePath, 0.0, traffic, accent)
+            applyTraffic(style, drawnPath, 0.0, traffic, accent)
             styleReady = true
         }
     }
@@ -460,7 +489,7 @@ fun DriveMap(
     // New traffic (or a new style) colours the line at once, even when the car stands still.
     LaunchedEffect(traffic, styleReady) {
         val style = map?.style ?: return@LaunchedEffect
-        if (styleReady) applyTraffic(style, routePath, routeFrom[0], traffic, accentState.value)
+        if (styleReady) applyTraffic(style, drawnPath, routeFrom[0], traffic, accentState.value)
     }
 
     LaunchedEffect(location, routePath) {
@@ -502,6 +531,8 @@ fun DriveMap(
         var arrowLon = locationState.value?.longitude ?: 0.0
         var arrowBearing = 0f
         var lastRouteAt = 0L
+        /** Where the drawn route was last cut (metres along it), -1 while it shows whole. */
+        var trimmedAt = -1.0
         var seededArrow = false
         var firstFollow = true
         val startCam = current.cameraPosition
@@ -524,7 +555,9 @@ fun DriveMap(
                     displayedAlong = nav.targetAlong
                     if (rp == null) setRoute(style, emptyList())
                     appliedTraffic = null
+                    trimmedAt = -1.0
                 }
+                val drawn = drawnPathState.value
                 val now = System.currentTimeMillis()
                 if (rp != null && nav.onRoute) {
                     // Dead reckoning: GPS lands once a second, the eye needs sixty. Between
@@ -537,12 +570,19 @@ fun DriveMap(
                     val (pt, tangent) = rp.poseAt(displayedAlong)
                     arrowLat = pt.lat; arrowLon = pt.lon
                     arrowBearing = lerpAngle(arrowBearing.toDouble(), tangent.toFloat(), TANGENT_LERP).toFloat()
-                    if (now - lastRouteAt > ROUTE_TRIM_MS) {
+                    // The driven part is cut away by steps of a few dozen metres, hidden under the
+                    // arrow: each cut redraws the whole line, so not at every frame.
+                    if (drawn != null && now - lastRouteAt > ROUTE_TRIM_MS &&
+                        (trimmedAt < 0 || abs(displayedAlong - trimmedAt) >= ROUTE_TRIM_STEP_M || appliedTraffic !== trafficState.value)
+                    ) {
                         lastRouteAt = now
-                        val trimmed = rp.trimFrom(displayedAlong)
+                        trimmedAt = displayedAlong
+                        // The drawn line is a little shorter than the full one: the same share of it.
+                        val drawnAlong = if (rp.totalMeters > 0) displayedAlong * drawn.totalMeters / rp.totalMeters else 0.0
+                        val trimmed = drawn.trimFrom(drawnAlong)
                         setRoute(style, trimmed)
-                        routeFrom[0] = displayedAlong
-                        applyTraffic(style, rp, displayedAlong, trafficState.value, accentState.value, trimmed)
+                        routeFrom[0] = drawnAlong
+                        applyTraffic(style, drawn, drawnAlong, trafficState.value, accentState.value, trimmed)
                         appliedTraffic = trafficState.value
                     }
                 } else {
@@ -562,18 +602,32 @@ fun DriveMap(
                     arrowLon += (tLon - arrowLon) * POS_LERP
                     // North-up when stopped (avoids a wrong compass heading), GPS course when moving.
                     arrowBearing = if (moving) (brg?.toFloat() ?: arrowBearing) else 0f
-                    if (rp != null && now - lastRouteAt > ROUTE_TRIM_MS) {
+                    if (drawn != null && now - lastRouteAt > ROUTE_TRIM_MS && (trimmedAt != -2.0 || appliedTraffic !== trafficState.value)) {
                         lastRouteAt = now
-                        setRoute(style, rp.points) // show the whole route until we're back on it
-                        val wasCut = routeFrom[0] != 0.0
+                        // The whole route until we're back on it: drawn once, not at every frame.
+                        if (trimmedAt != -2.0) setRoute(style, drawn.points)
+                        trimmedAt = -2.0
                         routeFrom[0] = 0.0
-                        if (wasCut || appliedTraffic !== trafficState.value) {
-                            applyTraffic(style, rp, 0.0, trafficState.value, accentState.value)
-                            appliedTraffic = trafficState.value
-                        }
+                        applyTraffic(style, drawn, 0.0, trafficState.value, accentState.value)
+                        appliedTraffic = trafficState.value
                     }
                 }
                 setArrow(style, arrowLat, arrowLon, arrowBearing)
+                // The others of the group, where they were a few seconds ago.
+                val groupLayer = groupState.value
+                if (groupLayer != null) {
+                    groupRenderer.step(style, groupLayer, now)
+                    groupRenderer.takeOverview(groupLayer, arrowLat, arrowLon)?.let { bounds ->
+                        runCatching {
+                            current.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, OVERVIEW_PADDING_PX), OVERVIEW_MS)
+                        }
+                    }
+                }
+                // Following one member of the group: the camera takes their place, not the driver's.
+                val focused = groupLayer?.let { groupRenderer.focused(it) }
+                val followLat = focused?.first ?: arrowLat
+                val followLon = focused?.second ?: arrowLon
+                val followBearing = focused?.third?.toFloat() ?: arrowBearing
                 val pulse = (sin(phase.toDouble()).toFloat() + 1f) / 2f
                 (style.getLayer(POSITION_HALO) as? CircleLayer)?.setProperties(
                     PropertyFactory.circleRadius(16f + 8f * pulse),
@@ -584,16 +638,16 @@ fun DriveMap(
                     if (firstFollow) {
                         // Snap on the very first frame so the map opens already upright.
                         firstFollow = false
-                        camLat = arrowLat; camLon = arrowLon
+                        camLat = followLat; camLon = followLon
                         camZoom = targetZoom; camTilt = NAV_TILT
-                        camBearing = arrowBearing.toDouble()
+                        camBearing = followBearing.toDouble()
                     }
-                    camLat += (arrowLat - camLat) * POS_LERP
-                    camLon += (arrowLon - camLon) * POS_LERP
+                    camLat += (followLat - camLat) * POS_LERP
+                    camLon += (followLon - camLon) * POS_LERP
                     // The change of distance is eased like the rest: about two seconds, no jump.
                     camZoom += (targetZoom - camZoom) * EASE_LERP
                     camTilt += (NAV_TILT - camTilt) * EASE_LERP
-                    camBearing = lerpAngle(camBearing, arrowBearing, BEARING_LERP)
+                    camBearing = lerpAngle(camBearing, followBearing, BEARING_LERP)
                     current.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
                             CameraPosition.Builder()
@@ -1203,3 +1257,10 @@ private const val BACK_LERP = 0.04
 /** Never dead-reckon further than this past the last fix (GPS lost, tunnel…). */
 private const val MAX_DR_MS = 2_500L
 private const val ROUTE_TRIM_MS = 120L
+/** The driven part is cut away by steps of this many metres: fewer redraws of the line. */
+private const val ROUTE_TRIM_STEP_M = 30.0
+/** The driver's own route is drawn with this many points at most. */
+private const val ROUTE_DRAW_MAX_POINTS = 2500
+/** "Tous": the whole group framed with this margin, in this time. */
+private const val OVERVIEW_PADDING_PX = 160
+private const val OVERVIEW_MS = 800

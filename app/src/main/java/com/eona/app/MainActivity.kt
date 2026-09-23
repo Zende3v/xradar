@@ -1,6 +1,8 @@
 package com.eona.app
 
+import android.content.Intent
 import android.os.Bundle
+import com.eona.app.navigation.DeepLinks
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,6 +25,7 @@ class MainActivity : ComponentActivity() {
         // Read the stored scheme before the first frame, so the app never flashes
         // the default theme on launch.
         AppPreferences.init(applicationContext)
+        DeepLinks.handle(intent)
         setContent {
             val settings by AppPreferences.settings.collectAsStateWithLifecycle()
             val location by LocationRepository.location.collectAsStateWithLifecycle()
@@ -42,6 +45,13 @@ class MainActivity : ComponentActivity() {
                 EonaApp()
             }
         }
+    }
+
+    /** A link opened while the app is already running. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        DeepLinks.handle(intent)
     }
 }
 

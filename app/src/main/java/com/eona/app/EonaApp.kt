@@ -23,6 +23,12 @@ import com.eona.app.feature.permission.LocationPermissionRoute
 import com.eona.app.feature.subscription.OffersPrompt
 import com.eona.app.location.LocationServiceController
 import com.eona.app.navigation.EonaNavHost
+import com.eona.app.navigation.DeepLinks
+import com.eona.app.feature.drive.FollowTripScreen
+import com.eona.app.feature.drive.GroupWatchScreen
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 
 /**
  * App root. Nothing starts before the terms are accepted; then the onboarding/login screen; then
@@ -77,7 +83,14 @@ fun EonaApp() {
                 // (Android 14 forbids starting a location FGS without it).
                 if (granted) LocationServiceController.start(context)
             }
-            EonaNavHost()
+            // A shared trip or a group link opened from outside: over the app, until closed.
+            val follow by DeepLinks.follow.collectAsStateWithLifecycle()
+            val watch by DeepLinks.watch.collectAsStateWithLifecycle()
+            Box(Modifier.fillMaxSize()) {
+                EonaNavHost()
+                follow?.let { token -> FollowTripScreen(token, onClose = DeepLinks::closeFollow) }
+                watch?.let { token -> GroupWatchScreen(token, onClose = DeepLinks::closeWatch) }
+            }
         }
     }
 }

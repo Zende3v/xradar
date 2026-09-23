@@ -71,6 +71,14 @@ import com.eona.app.designsystem.component.EonaText
 import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.designsystem.theme.EonaTheme
 import com.eona.app.feature.drive.component.AlertStack
+import com.eona.app.feature.drive.group.GroupFinishCard
+import com.eona.app.feature.drive.group.GroupNoticeBanner
+import com.eona.app.feature.drive.group.GroupSession
+import com.eona.app.feature.drive.group.GroupStrip
+import com.eona.app.feature.drive.group.MemberCardSheet
+import com.eona.app.feature.drive.group.MemberCardTarget
+import com.eona.app.designsystem.component.EonaConfirmDialog
+import com.eona.app.feature.drive.group.GroupPalette
 import com.eona.app.feature.drive.component.AudioOption
 import com.eona.app.feature.drive.component.AudioOptionBar
 import com.eona.app.feature.drive.component.audioMakesWay
@@ -121,6 +129,8 @@ fun DriveRoute(
         onVote = viewModel::vote,
         onSlowdownAnswer = viewModel::answerSlowdown,
         onDismissArrival = viewModel::dismissArrival,
+        group = viewModel.group,
+        tripUnderway = viewModel.tripUnderway.collectAsStateWithLifecycle().value,
         modifier = modifier,
     )
 }
@@ -163,6 +173,10 @@ fun DriveScreen(
     onSlowdownAnswer: (Boolean) -> Unit = {},
     /** The driver closed the arrival card. */
     onDismissArrival: () -> Unit = {},
+    /** "Partager mon trajet" and "Trajet en groupe"; null in previews. */
+    group: GroupSession? = null,
+    /** The driver has really been on the route: a link can be opened. */
+    tripUnderway: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = EonaTheme.colors
@@ -174,6 +188,22 @@ fun DriveScreen(
     var dockOpen by remember { mutableStateOf(false) }
     /** Which audio bar is open, if any: only one at a time, and it hides its neighbours. */
     var audioMenu by remember { mutableStateOf<AudioMenu?>(null) }
+    var shareOpen by remember { mutableStateOf(false) }
+    /** A group member's card, opened from their photo (strip, map or list). */
+    var card by remember { mutableStateOf<MemberCardTarget?>(null) }
+    /** Stopping the navigation during a group trip is leaving the group: asked first. */
+    var confirmStop by remember { mutableStateOf(false) }
+    val groupState = group?.group?.collectAsStateWithLifecycle()
+    val currentGroup = groupState?.value
+    val groupLive = currentGroup?.isLive == true
+    val groupChips = group?.chips?.collectAsStateWithLifecycle()?.value ?: emptyList()
+    val groupFocus = group?.focus?.collectAsStateWithLifecycle()?.value
+    val groupNotice = group?.notice?.collectAsStateWithLifecycle()?.value
+    val finishedGroup = group?.finished?.collectAsStateWithLifecycle()?.value
+    val tripShare = group?.share?.collectAsStateWithLifecycle()?.value
+    val groupSharing = group?.sharing?.collectAsStateWithLifecycle()?.value ?: true
+    val destination = ActiveTripRepository.destination.collectAsStateWithLifecycle().value
+    val myId = account?.id
 
     val topMode = when {
         state.guidance != null -> TopMode.Guidance
@@ -195,6 +225,8 @@ fun DriveScreen(
             onReportTap = if (isAdmin) ({ id -> pendingDelete = id }) else null,
             modifier = Modifier.fillMaxSize(),
             speedLimitKmh = state.speedLimitKmh,
+            group = group?.mapLayer,
+            onMemberTap = group?.let { session -> { id: String -> card = session.cardTarget(id) } },
         )
 
         // An open audio bar closes as soon as the driver touches anywhere else.
@@ -246,7 +278,7 @@ fun DriveScreen(
                     EonaIconButton(
                         icon = EonaIcons.Close,
                         contentDescription = "Arrêter la navigation",
-                        onClick = onStopNavigation,
+                        onClick = { if (groupLive) confirmStop = true else onStopNavigation() },
                         tint = colors.textPrimary,
                         background = colors.surface.copy(alpha = 0.62f),
                         border = BorderStroke(1.dp, colors.border),
@@ -287,6 +319,41 @@ fun DriveScreen(
                 MusicBanner(
                     state = state.media,
                     onAction = onMusic,
+                    modifier = Modifier.padding(top = spacing.sm),
+                )
+            }
+
+            // A word about the group: someone joined, left, arrived…
+            val lastNoticeText = remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(groupNotice) { groupNotice?.let { lastNoticeText.value = it } }
+            AnimatedVisibility(
+                visible = groupNotice != null,
+                enter = slideInVertically { -it / 2 } + fadeIn(),
+                exit = slideOutVertically { -it / 2 } + fadeOut(),
+            ) {
+                lastNoticeText.value?.let { text ->
+                    GroupNoticeBanner(text, onDismiss = { group?.acknowledgeNotice() }, modifier = Modifier.padding(top = spacing.sm))
+                }
+            }
+
+            // The others of the group, one chip each: the photo opens their card, the name follows them.
+            AnimatedVisibility(
+                visible = groupLive && groupChips.isNotEmpty(),
+                enter = slideInVertically { -it / 2 } + fadeIn(),
+                exit = slideOutVertically { -it / 2 } + fadeOut(),
+            ) {
+                GroupStrip(
+                    chips = groupChips,
+                    focus = groupFocus,
+                    onOverview = {
+                        following = false
+                        group?.showEveryone()
+                    },
+                    onFocus = { id ->
+                        group?.focusOn(id)
+                        following = true
+                    },
+                    onCard = { id -> group?.let { card = it.cardTarget(id) } },
                     modifier = Modifier.padding(top = spacing.sm),
                 )
             }
@@ -343,6 +410,15 @@ fun DriveScreen(
                 lastArrival.value?.let { ArrivalCard(it, onDismiss = onDismissArrival) }
             }
 
+            // The group trip is over: its ranking, until the driver closes it.
+            AnimatedVisibility(
+                visible = finishedGroup != null,
+                enter = slideInVertically { it / 2 } + fadeIn(),
+                exit = slideOutVertically { it / 2 } + fadeOut(),
+            ) {
+                finishedGroup?.let { GroupFinishCard(it, myId, onDismiss = { group?.dismiss() }) }
+            }
+
             AnimatedVisibility(visible = state.routeError) {
                 EonaSurface(
                     modifier = Modifier.fillMaxWidth(),
@@ -391,6 +467,26 @@ fun DriveScreen(
                             open = audioMenu == AudioMenu.Voice,
                             onOpenChange = { audioMenu = if (it) AudioMenu.Voice else null },
                         )
+                    }
+                    if (group != null) {
+                        // Always there, trip or not: a group is joined before leaving home.
+                        HudRoundButton(
+                            icon = ImageVector.vectorResource(R.drawable.ic_line_share),
+                            description = "Partager mon trajet",
+                            dot = if (tripShare != null) colors.accent else null,
+                            modifier = Modifier.audioMakesWay(audioMenu != null),
+                            onClick = { shareOpen = true },
+                        )
+                        // The group, its code, what I share; the dot says whether my position goes out.
+                        if (currentGroup != null) {
+                            HudRoundButton(
+                                icon = EonaIcons.People,
+                                description = "Trajet en groupe",
+                                dot = if (groupSharing) colors.accent else colors.textTertiary,
+                                modifier = Modifier.audioMakesWay(audioMenu != null),
+                                onClick = { shareOpen = true },
+                            )
+                        }
                     }
                 }
             }
@@ -491,6 +587,49 @@ fun DriveScreen(
         }
 
 
+        if (shareOpen && group != null) {
+            TripShareSheet(
+                session = group,
+                tripUnderway = tripUnderway,
+                destinationName = destination?.name,
+                hasDestination = destination != null,
+                myId = myId,
+                onCard = { card = it },
+                onDismiss = { shareOpen = false },
+            )
+        }
+
+        card?.let { target ->
+            if (group != null) {
+                MemberCardSheet(
+                    session = group,
+                    target = target,
+                    myId = myId,
+                    chips = groupChips,
+                    onDismiss = { card = null },
+                    onFollow = { id ->
+                        card = null
+                        shareOpen = false
+                        group.focusOn(id)
+                        following = true
+                    },
+                )
+            }
+        }
+
+        if (confirmStop) {
+            EonaConfirmDialog(
+                title = "Arrêter la navigation ?",
+                message = "Tu quitteras aussi le trajet en groupe. Les autres continuent sans toi.",
+                confirmLabel = "Arrêter et quitter",
+                onCancel = { confirmStop = false },
+                onConfirm = {
+                    confirmStop = false
+                    onStopNavigation()
+                },
+            )
+        }
+
         pendingDelete?.let { id ->
             DeleteConfirm(
                 onCancel = { pendingDelete = null },
@@ -499,6 +638,38 @@ fun DriveScreen(
         }
 
         offers?.let { reason -> OffersSheet(reason, account, onClose = onCloseOffers) }
+    }
+}
+
+/** A round glass button of the HUD's audio row, with a small dot in its corner when [dot] is set. */
+@Composable
+private fun HudRoundButton(
+    icon: ImageVector,
+    description: String,
+    dot: Color?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = EonaTheme.colors
+    Box(modifier = modifier) {
+        EonaIconButton(
+            icon = icon,
+            contentDescription = description,
+            onClick = onClick,
+            tint = colors.textPrimary,
+            background = colors.surface.copy(alpha = 0.62f),
+            border = BorderStroke(1.dp, colors.border),
+            size = AUDIO_BUTTON_SIZE,
+        )
+        if (dot != null) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(dot),
+            )
+        }
     }
 }
 

@@ -130,6 +130,32 @@ object EonaIcons {
         moveTo(6f, 3f); lineTo(6f, 21f)
         moveTo(6f, 4.5f); lineTo(17f, 4.5f); lineTo(14f, 8.5f); lineTo(17f, 12.5f); lineTo(6f, 12.5f)
     }
+    /** "Trajet en groupe": two people, the one behind a little smaller. */
+    val People = line("People") {
+        moveTo(6.5f, 8f); arcTo(3f, 3f, 0f, true, true, 12.5f, 8f); arcTo(3f, 3f, 0f, true, true, 6.5f, 8f)
+        moveTo(3f, 19f); curveTo(3f, 15.5f, 5.5f, 13.5f, 9.5f, 13.5f); curveTo(13.5f, 13.5f, 16f, 15.5f, 16f, 19f)
+        moveTo(15f, 5.2f); curveTo(17.3f, 5.2f, 18.6f, 7.8f, 17.3f, 9.7f); curveTo(16.8f, 10.4f, 16f, 10.8f, 15.2f, 10.9f)
+        moveTo(17.5f, 13.8f); curveTo(19.8f, 14.4f, 21f, 16.2f, 21f, 19f)
+    }
+
+    /** Somebody who does not share their position. */
+    val EyeSlash = line("EyeSlash") {
+        moveTo(2.5f, 12f); curveTo(5f, 7.5f, 8.2f, 5.5f, 12f, 5.5f); curveTo(15.8f, 5.5f, 19f, 7.5f, 21.5f, 12f)
+        curveTo(19f, 16.5f, 15.8f, 18.5f, 12f, 18.5f); curveTo(8.2f, 18.5f, 5f, 16.5f, 2.5f, 12f)
+        moveTo(9.5f, 12f); arcTo(2.5f, 2.5f, 0f, true, true, 14.5f, 12f); arcTo(2.5f, 2.5f, 0f, true, true, 9.5f, 12f)
+        moveTo(4f, 4f); lineTo(20f, 20f)
+    }
+
+    /** A rank in the group's arrival. */
+    val Trophy = line("Trophy") {
+        moveTo(7f, 4f); lineTo(17f, 4f); lineTo(17f, 9f); curveTo(17f, 12f, 14.8f, 14f, 12f, 14f)
+        curveTo(9.2f, 14f, 7f, 12f, 7f, 9f); close()
+        moveTo(7f, 6f); lineTo(4f, 6f); curveTo(4f, 9f, 5.5f, 10.5f, 7.3f, 10.8f)
+        moveTo(17f, 6f); lineTo(20f, 6f); curveTo(20f, 9f, 18.5f, 10.5f, 16.7f, 10.8f)
+        moveTo(12f, 14f); lineTo(12f, 18f)
+        moveTo(8f, 20f); lineTo(16f, 20f); moveTo(9.5f, 18f); lineTo(14.5f, 18f)
+    }
+
     val Gps = line("Gps") {
         moveTo(6f, 12f); arcTo(6f, 6f, 0f, true, true, 18f, 12f); arcTo(6f, 6f, 0f, true, true, 6f, 12f)
         moveTo(12f, 12f); lineTo(12f, 12.01f)

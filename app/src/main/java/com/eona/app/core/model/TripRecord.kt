@@ -8,6 +8,38 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+/** One line of a group trip's frozen ranking, as the history keeps it. */
+data class TripGroupRank(
+    val name: String,
+    /** null for a driver who never arrived. */
+    val rank: Int?,
+    val durationSeconds: Int?,
+    val distanceMeters: Int?,
+    /** True for the line of whoever owns this history. */
+    val me: Boolean,
+) {
+    /** "1er", "3e", "—". */
+    val rankLabel: String get() = rank?.let { if (it == 1) "1er" else "${it}e" } ?: "—"
+
+    /** "1 h 12 · 465 km". */
+    val timeLabel: String
+        get() = listOfNotNull(
+            durationSeconds?.let { TripRecord.duration(it) },
+            distanceMeters?.let { if (it < 1000) "$it m" else "${Math.round(it / 1000.0)} km" },
+        ).joinToString(" · ")
+}
+
+/** A group trip, once over: its code, my rank, and the ranking as it was frozen. */
+data class TripGroupResult(val code: String, val myRank: Int?, val ranking: List<TripGroupRank>) {
+    /** "2e sur 4". */
+    val standingLabel: String
+        get() {
+            val mine = myRank ?: return "Non classé"
+            val arrived = ranking.count { it.rank != null }
+            return (if (mine == 1) "1er" else "${mine}e") + " sur ${maxOf(arrived, mine)}"
+        }
+}
+
 /**
  * A completed trip in the history. Stores raw values; labels are derived for display. Pure
  * model (JVM time only), same fields and labels as the iOS app.
@@ -29,6 +61,8 @@ data class TripRecord(
     val stoppedSeconds: Int = 0,
     /** The alerts met on the way, per kind. */
     val events: Map<AlertType, Int> = emptyMap(),
+    /** Driven in a group: the frozen ranking (kept on the phone only). */
+    val group: TripGroupResult? = null,
 ) {
     val distanceLabel: String
         get() {

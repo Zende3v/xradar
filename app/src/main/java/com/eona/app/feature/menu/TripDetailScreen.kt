@@ -67,6 +67,35 @@ fun TripDetailScreen(trip: TripRecord, onBack: () -> Unit) {
                 EonaListRow(title = "Temps dans les bouchons", trailing = { EonaBadge("Bientôt", glow = true) })
             }
 
+            trip.group?.let { group ->
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                    EonaListGroup(title = "Trajet en groupe") {
+                        Info("Mon rang", group.standingLabel)
+                        Divider()
+                        Info("Code du groupe", group.code)
+                        group.ranking.forEach { entry ->
+                            Divider()
+                            EonaListRow(
+                                title = if (entry.me) "${entry.name} (moi)" else entry.name,
+                                trailing = {
+                                    EonaText(
+                                        "${entry.rankLabel} · ${entry.timeLabel}",
+                                        style = EonaTheme.typography.callout,
+                                        color = if (entry.me) colors.accent else colors.textSecondary,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    EonaText(
+                        "Le classement a été figé à la fin du trajet. Des autres participants, seuls leur pseudo, leur rang et leur temps sont conservés.",
+                        style = EonaTheme.typography.footnote,
+                        color = colors.textTertiary,
+                        modifier = Modifier.padding(horizontal = spacing.md),
+                    )
+                }
+            }
+
             EonaListGroup(title = "Événements rencontrés") {
                 val kinds = AlertType.entries.filter { (trip.events[it] ?: 0) > 0 }
                 if (kinds.isEmpty()) {
