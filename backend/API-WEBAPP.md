@@ -265,6 +265,17 @@ propre itinéraire. Comme le partage simple : tout en mémoire, rien écrit.
 | Son groupe | `GET /api/trips/group` | compte |
 | Envoyer sa position | `PATCH /api/trips/group/me` `{lat, lon, bearing?, speedKmh?, remainingM?, etaS?, progress?, distanceM?, route?, started?, arrived?, sharing?, observable?}` | compte |
 | Suivre un participant | `GET /api/trips/group/member/:id` | compte du groupe |
+| Écouter le groupe en direct | `GET /api/trips/group/stream` (SSE) | compte du groupe |
+| Tracés des autres | `GET /api/trips/group/routes?known=<id>:<rev>,…` | compte du groupe |
+
+`/stream` pousse deux sortes d'événements : `group` (le groupe entier, quand sa forme change :
+arrivée ou départ d'un membre, partage coupé, chef qui change, tracé changé, fin) et `pos` (une
+position, dès qu'un membre l'envoie : `id`, `lat`, `lon`, `bearing`, `at`, `speedKmh`, `progress`,
+`remainingM`, `etaAt`). Chaque événement porte `now`, l'heure du serveur. Un commentaire part toutes
+les 15 s pour garder la connexion. Pendant que le flux est ouvert, l'app envoie sa position toutes
+les 3 s avec `lite: true` : la réponse se réduit à `{ ok, now }`.
+
+`/routes` ne renvoie que les tracés dont la version diffère de celle que le téléphone a déjà.
 | Quitter | `POST /api/trips/group/leave` | compte |
 | Annuler le trajet | `DELETE /api/trips/group` | créateur |
 | Ouvrir / révoquer le lien | `POST` / `DELETE /api/trips/group/link` | créateur |

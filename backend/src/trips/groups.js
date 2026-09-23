@@ -26,6 +26,51 @@ class GroupStore {
     this.byCode = new Map(); // joining code -> group id
     this.byAccount = new Map(); // account id -> group id (one group at a time)
     this.byWatch = new Map(); // observer token -> group id
+    // Phones listening to a group (the stream): every change is pushed to them at once.
+    this.listeners = new Map(); // group id -> Set of { accountId, send, end }
+  }
+
+  /**
+   * A member's phone listens to its group. [send](event, data) writes to its stream, [end]
+   * closes it. Returns what stops listening.
+   */
+  listen(group, accountId, send, end) {
+    let set = this.listeners.get(group.id);
+    if (!set) this.listeners.set(group.id, (set = new Set()));
+    const entry = { accountId, send, end };
+    set.add(entry);
+    return () => {
+      set.delete(entry);
+      if (!set.size && this.listeners.get(group.id) === set) this.listeners.delete(group.id);
+    };
+  }
+
+  /**
+   * The group changed shape — someone joined, left, arrived, stopped sharing, the lead moved,
+   * a route changed, the trip ended: each listener gets the group as they see it. Positions
+   * alone do not come through here (see pushPosition), and nothing is pushed twice.
+   */
+  notify(group) {
+    const shape = JSON.stringify([
+      group.hostId, group.finishedAt, group.cancelledAt, group.watch?.token ?? null, group.observerIds.size,
+      [...group.members.values()].map((m) => [m.accountId, m.state, m.sharing, m.observable, m.routeRev, m.rank]),
+    ]);
+    if (shape === group.shape) return;
+    group.shape = shape;
+    for (const listener of [...(this.listeners.get(group.id) ?? [])]) {
+      listener.send('group', groupView(group, listener.accountId));
+      // A cancelled group is told once, then it is theirs no more.
+      this.release(group, listener.accountId);
+    }
+  }
+
+  /** One member moved: the others hear it at once — only if they share. */
+  pushPosition(group, m) {
+    if (!m.sharing || !m.position || m.state === 'left') return;
+    const data = positionView(m);
+    for (const listener of this.listeners.get(group.id) ?? []) {
+      if (listener.accountId !== m.accountId) listener.send('pos', data);
+    }
   }
 
   /** Opens a group led by [account], heading for [destination]; the host is its first member. */
@@ -76,6 +121,7 @@ class GroupStore {
     // Someone who left and comes back starts over: nothing of the first attempt is kept.
     group.members.set(account.id, member(account, { route }));
     this.byAccount.set(account.id, group.id);
+    this.notify(group);
     return { group };
   }
 
@@ -132,6 +178,7 @@ class GroupStore {
     // is gets written any more.
     if (group.finishedAt || me.state === 'arrived' || me.state === 'left') {
       this.settle(group);
+      this.notify(group);
       return group;
     }
     if (fields.toLabel) me.toLabel = String(fields.toLabel).slice(0, 160);
@@ -139,7 +186,8 @@ class GroupStore {
       me.route = simplify(fields.route);
       me.routeRev += 1;
     }
-    if (Number.isFinite(fields.lat) && Number.isFinite(fields.lon)) {
+    const moved = Number.isFinite(fields.lat) && Number.isFinite(fields.lon);
+    if (moved) {
       me.position = {
         lat: fields.lat,
         lon: fields.lon,
@@ -165,6 +213,8 @@ class GroupStore {
 
     if (fields.arrived === true && me.state !== 'arrived') this.arrive(group, me);
     this.settle(group);
+    if (moved) this.pushPosition(group, me);
+    this.notify(group);
     return group;
   }
 
@@ -216,6 +266,7 @@ class GroupStore {
       }
     }
     this.settle(group);
+    this.notify(group);
     return group;
   }
 
@@ -244,6 +295,7 @@ class GroupStore {
     group.finalRanking = ranking(group);
     group.publicRanking = ranking(group, [...group.members.values()].filter((m) => m.sharing && m.observable));
     this.revokeLink(group);
+    this.notify(group);
   }
 
   /**
@@ -271,6 +323,7 @@ class GroupStore {
     }
     const live = [...group.members.values()].filter((m) => m.state === 'invited' || m.state === 'driving');
     if (live.length === 0 && arrived) this.close(group);
+    this.notify(group);
   }
 
   /** Opens (or replaces) the link that lets someone watch the group without driving. */
@@ -281,6 +334,7 @@ class GroupStore {
     group.observerIds.clear();
     group.removedObserverIds.clear();
     this.byWatch.set(token, group.id);
+    this.notify(group);
     return group.watch;
   }
 
@@ -290,12 +344,14 @@ class GroupStore {
     this.byWatch.delete(group.watch.token);
     group.watch = null;
     group.observerIds.clear();
+    this.notify(group);
   }
 
   /** One observer is shown the door; the others keep watching. */
   removeObserver(group, observerId) {
     group.observerIds.delete(observerId);
     group.removedObserverIds.add(observerId);
+    this.notify(group);
   }
 
   expired(group) {
@@ -303,6 +359,8 @@ class GroupStore {
   }
 
   forget(group) {
+    for (const listener of [...(this.listeners.get(group.id) ?? [])]) listener.end();
+    this.listeners.delete(group.id);
     this.byId.delete(group.id);
     this.byCode.delete(group.code);
     if (group.watch) this.byWatch.delete(group.watch.token);
@@ -365,6 +423,21 @@ function member(account, { route } = {}) {
   };
 }
 
+/** A position as the stream pushes it: where, which way, how fast, when (server clock). */
+export function positionView(m) {
+  return {
+    id: m.accountId,
+    lat: m.position.lat,
+    lon: m.position.lon,
+    bearing: m.position.bearing,
+    at: m.position.at,
+    speedKmh: m.speedKmh,
+    progress: m.progress,
+    remainingM: m.remainingM,
+    etaAt: m.etaAt ? new Date(m.etaAt).toISOString() : null,
+  };
+}
+
 /** Live now, or silent long enough that the map should say so. */
 function online(m) {
   return Date.now() - m.lastSeenAt <= config.groupOnlineMs;
@@ -409,6 +482,8 @@ function memberView(m, { withRoute = false } = {}) {
 export function groupView(group, viewerId) {
   const me = group.members.get(viewerId) ?? null;
   return {
+    // The server's clock: the phone places positions in time with it, whatever its own says.
+    now: Date.now(),
     id: group.id,
     code: group.code,
     host: group.hostId === viewerId,

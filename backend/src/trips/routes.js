@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authAccount } from '../accounts/auth.js';
 import { followerView, ownerView, shareStore } from './shares.js';
-import { groupStore, groupView, memberDetail, observerView, routesFor } from './groups.js';
+import { groupStore, groupView, memberDetail, observerView, positionView, routesFor } from './groups.js';
 
 export const tripRouter = Router();
 
@@ -160,9 +160,14 @@ tripRouter.patch('/group/me', (req, res) => {
     observable: typeof req.body?.observable === 'boolean' ? req.body.observable : undefined,
   });
   if (!group) return res.status(404).json({ error: 'no group' });
+  // lite: the phone listens to the stream, which already says everything; only the end of the
+  // trip still comes back here, in case the stream missed it.
+  if ((req.query.lite === '1' || req.body?.lite === true) && !group.finishedAt) {
+    return res.json({ ok: true, now: Date.now() });
+  }
   const view = groupView(group, account.id);
   groupStore.release(group, account.id);
-  res.json({ group: view });
+  res.json({ group: view, now: Date.now() });
 });
 
 /**
@@ -178,6 +183,40 @@ tripRouter.get('/group/member/:id', (req, res) => {
   if (!detail) return res.status(404).json({ error: 'not in this group' });
   if (detail.sharing === false) return res.status(403).json({ error: 'not sharing' });
   res.json({ member: detail });
+});
+
+/**
+ * GET /api/trips/group/stream — the group, pushed as it changes (Server-Sent Events).
+ *   event: group  the whole group, when its shape changes (join, leave, arrival, sharing…)
+ *   event: pos    one member's position, the moment their phone sends it
+ * Every event carries `now`, the server's clock, so the phone can place positions in time
+ * whatever its own clock says. A comment every 15 s keeps the connection open.
+ */
+tripRouter.get('/group/stream', (req, res) => {
+  const account = caller(req, res);
+  if (!account) return;
+  const group = groupStore.forAccount(account.id);
+  if (!group) return res.status(404).json({ error: 'no group' });
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify({ ...data, now: Date.now() })}\n\n`);
+  };
+  send('group', groupView(group, account.id));
+  for (const m of group.members.values()) {
+    if (m.accountId !== account.id && m.sharing && m.position && m.state !== 'left') send('pos', positionView(m));
+  }
+  const stop = groupStore.listen(group, account.id, send, () => res.end());
+  const beat = setInterval(() => res.write(`: ${Date.now()}\n\n`), 15_000);
+  req.on('close', () => {
+    clearInterval(beat);
+    stop();
+  });
 });
 
 /**
