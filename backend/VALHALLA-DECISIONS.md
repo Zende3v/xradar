@@ -344,3 +344,45 @@ valeurs actuelles (60 et 85 km), puis on ouvre par paliers sur le banc tant que 
 acceptable ; l'horizon est exprimé en temps de conduite. Paliers et seuil de latence : à mesurer.
 *Raison* : la limite de 85 km venait d'ORS ; le coût de 300 polygones sur Valhalla n'est pas
 mesuré.
+
+---
+
+## Thème 5 : secours ORS (24/09/2026)
+
+### Constaté
+
+- `ors.js` : 2 clés, 1 500 appels par clé et par jour UTC, pause de 60 s, 60 min ou jusqu'à minuit
+  selon le refus ; compteurs en mémoire ; aucun timeout sur les appels.
+- Le repli OSRM démo ne sert que sans clé ORS, ignore `avoid` (péages et autoroutes ne sont pas
+  évités), et sa politique limite l'usage à 1 requête par seconde, non commercial, sans garantie
+  ([wiki OSRM](https://github.com/Project-OSRM/osrm-backend/wiki/Demo-server)).
+- Les apps abandonnent une requête de route au bout de 15 s (Android : lecture 15 s ; iOS :
+  15 s).
+- `search_cutoff` vaut 35 km par défaut dans Valhalla : avec une carte France seule, un point en
+  Belgique ou en Suisse peut s'accrocher sans erreur à une route française jusqu'à 35 km plus loin.
+- `/faster` répond 503 s'il manque la clé ORS ou la clé TomTom (`routing/routes.js`).
+
+### Décisions
+
+**D5.1 — Quand basculer sur ORS.** Erreur de Valhalla, délai dépassé, disjoncteur ouvert (après
+plusieurs échecs d'affilée, tout part sur ORS pendant un moment), ou trajet hors de France :
+départ ou arrivée accroché trop loin du point demandé, avec un `search_cutoff` réduit. Délai,
+nombre d'échecs et seuil d'accroche sont calibrés en mode ombre ; Valhalla puis ORS doivent tenir
+sous les 15 s des apps. Le nouvel essai sans bouchons (D4.3) se fait sur Valhalla avant ORS.
+*Raison* : ne jamais laisser l'app sans route, ni tracer vers un faux point à l'étranger.
+
+**D5.2 — `/faster` coupé en secours.** Quand Valhalla est en panne ou que le trajet est servi par
+ORS, `/faster` répond `better: null` avec `reason: "fallback"` (réponse que les apps savent déjà
+lire).
+*Raison* : une panne doit rester courte ; pendant ce temps, on n'use ni ORS ni TomTom pour
+chercher un détour.
+
+**D5.3 — OSRM démo retiré.** Si Valhalla et ORS échouent tous les deux, le backend répond 502 ou
+503 et l'app réessaie comme aujourd'hui.
+*Raison* : il ignore les évitements stricts (D4.2) et son usage commercial est interdit.
+
+**D5.4 — Gestion des clés ORS gardée, avec suivi.** `ors.js` garde ses 2 clés, son budget et ses
+pauses. On ajoute un timeout, des compteurs gardés sur disque, les bascules et leur cause dans
+`/health`, et un champ additif `engine` (`valhalla` ou `ors`) dans la réponse de `/api/route`,
+que les apps enregistrent avec le trajet (D1.7).
+*Raison* : une bascule qui dure doit se voir, et chaque trajet doit dire quel moteur l'a servi.
