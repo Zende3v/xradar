@@ -31,7 +31,7 @@ ce plan.**
 | 7-8 | Vitesses en direct, puis historique | — | à détailler après mesure |
 | — | Sytadin (D3.5) | — | quand un accès officiel existe |
 
-La mesure de l'ETA figée (phase 1) dure 2 à 3 semaines (D1.3) ; les phases 2 et 3 avancent pendant
+La mesure de l'ETA au prorata (phase 1) dure 2 à 3 semaines (D1.3) ; les phases 2 et 3 avancent pendant
 ce temps.
 
 ---
@@ -45,7 +45,8 @@ et les itinéraires (D1.1 à D1.10), et poser le banc.
 - Trajet enregistré, champs ajoutés (D1.7) : arrivé ou non, départ réel (moment où la route est
   rejointe), départ choisi à la main, distance prévue, temps de pause et d'arrêts incertains (règle
   D1.4), ETA affichée à 0, 25, 50 et 75 %, nombre de recalculs, moteur, version de la carte, version
-  de l'app, mode d'ETA (`static`), sources de trafic vues. Aucune coordonnée.
+  de l'app, mode d'ETA (`proportional` : ETA au prorata de la route restante, depuis bfd04af iOS et
+  4073930 Android), sources de trafic vues. Aucune coordonnée.
 - `/api/route` : champs additifs `engine` (`ors`) et `mapVersion` (D5.4, D7.4).
 - Appels ORS : timeout (D5.4) ; compteurs ORS et TomTom gardés sur disque et visibles dans
   `/health` (D3.1, D5.4).

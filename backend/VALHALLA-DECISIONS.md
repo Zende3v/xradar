@@ -188,6 +188,9 @@ formule évite deux ETA différentes pour le même trajet.
 bascule sur Valhalla. La phase de mesure (D1.9) reste la première et mesure l'ETA figée actuelle.
 *Raison* : décision d'Arthur ; la mesure de l'ETA figée sert de point de départ pour juger le
 gain.
+*Mise à jour 24/09* : ETA des apps plus figée depuis bfd04af (iOS) et 4073930 (Android). Durée et
+distance du moteur au prorata de la route restante, même règle que partage et groupe. Phase 1
+mesure cette ETA-là : mode d'ETA `proportional`. Mode futur phase 4 reste `dynamic`.
 
 **D2.6 — data.gouv derrière un interrupteur serveur, comparé sur tous les trajets.**
 - L'interrupteur vit dans `settingsStore` : activable et coupable depuis l'admin, sans nouvelle
