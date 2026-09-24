@@ -502,3 +502,49 @@ trajet en cours ou le dernier ; la réponse de `/api/route` ajoute pour cela un 
 thème 8.
 *Raison* : les retours de l'équipe arrivent avec leur contexte, sans outil de plus, et sans
 détourner l'attention du conducteur.
+
+---
+
+## Thème 8 : légal et docs (24/09/2026)
+
+### Constaté
+
+- Les deux apps créditent « © contributeurs OpenStreetMap » (lien ODbL) dans Menu > À propos. Les
+  règles de l'OSMF demandent qu'une app utilisant un moteur de routage basé sur OSM crédite OSM,
+  sans attribution sur chaque instruction de guidage
+  ([règles d'attribution OSMF](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines)).
+  « À propos » cite openrouteservice pour le calcul des itinéraires ; Valhalla, TomTom, Photon et
+  les données trafic de la DIR n'y figurent pas.
+- La Licence Ouverte 2.0 impose de citer la source (le producteur) et la date de dernière mise à
+  jour ([Etalab](https://www.etalab.gouv.fr/licence-ouverte-open-licence/)).
+- CGU, article 11.1 : openrouteservice y est le moteur de calcul d'itinéraires.
+- Politique de confidentialité (datée du 24/09/2026) : TomTom décrit comme appelé environ toutes
+  les deux minutes avec jusqu'à 1 000 points (faux après D2.2), ORS présenté comme le moteur, les
+  nouveaux champs de trajet, le mode ombre, les tracés des comptes admin et le trajet joint à
+  « Signaler un bug » absents. Deux écarts existent déjà aujourd'hui : la recherche envoie la
+  position à la BAN et à Photon alors que la politique dit le contraire (et Photon n'y figure pas) ;
+  la politique cite Tailscale comme tunnel, alors que c'est Cloudflare depuis le 19/09.
+- `API-WEBAPP.md`, `README.md` et `VALHALLA.md` sont dépassés par les décisions de cet atelier.
+
+### Décisions
+
+**D8.1 — « À propos », au minimum.** Dans les deux apps, seul « openrouteservice : calcul des
+itinéraires » est remplacé par Valhalla. Exception obligatoire : quand les données trafic de la DIR
+sont utilisées (phase data.gouv), une ligne cite leur source et leur date, comme l'exige la Licence
+Ouverte.
+*Raison* : choix d'Arthur ; la ligne DIR est une obligation de licence, pas une option.
+
+**D8.2 — Politique de confidentialité mise à jour une seule fois, à la fin**, quand Valhalla sert
+tout le monde. Elle couvre alors tout, y compris les deux écarts actuels (position envoyée à la BAN
+et à Photon, Cloudflare à la place de Tailscale).
+*Raison* : choix d'Arthur. Risque accepté : le texte reste inexact entre-temps, comme il l'est déjà
+aujourd'hui sur ces deux points.
+
+**D8.3 — CGU, article 11.1.** Texte (liste des fournisseurs) et date mis à jour, sans nouvelle
+acceptation, au même moment que la politique.
+*Raison* : les obligations de l'utilisateur ne changent pas.
+
+**D8.4 — Docs à chaque phase.** Chaque phase met à jour `API-WEBAPP.md`, `README.md` et
+`CHECKLIST-TRAJETS.md`. `VALHALLA.md` est marqué « remplacé par `VALHALLA-DECISIONS.md` et
+`PLAN-VALHALLA.md` ».
+*Raison* : la doc d'exploitation doit toujours décrire ce qui tourne.
