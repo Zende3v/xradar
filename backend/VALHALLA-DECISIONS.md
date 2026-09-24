@@ -386,3 +386,64 @@ pauses. On ajoute un timeout, des compteurs gardés sur disque, les bascules et 
 `/health`, et un champ additif `engine` (`valhalla` ou `ors`) dans la réponse de `/api/route`,
 que les apps enregistrent avec le trajet (D1.7).
 *Raison* : une bascule qui dure doit se voir, et chaque trajet doit dire quel moteur l'a servi.
+
+---
+
+## Thème 6 : infra VPS (24/09/2026)
+
+### Constaté (lecture seule)
+
+- Cron actif depuis le 24/09 : sauvegarde quotidienne (03:10) présente pour le 20/09 et le 24/09,
+  sur le VPS seulement ; première reconstruction de la signalisation dimanche 27/09 à 03:30 (log
+  `/var/lib/eona-signs/rebuild.log`).
+- `rebuild.sh` télécharge `/var/lib/eona-signs/france-latest.osm.pbf` (fichier `.part` renommé
+  seulement si le téléchargement réussit), vérifie le md5 et garde le fichier après usage.
+- 16 Go de RAM, 15 Go disponibles (surtout le cache de PostgreSQL), pas de swap. PostgreSQL est
+  protégé contre le tueur de mémoire (`oom_score_adj` -900), Node non (0). Pic mémoire d'un build
+  France : à mesurer (`/usr/bin/time -v` au premier build).
+- Valhalla 3.9.0 (19/09/2026, [releases](https://github.com/valhalla/valhalla/releases)) :
+  - aucun paquet Debian (trixie, backports) ;
+  - sources : dépendances dans apt (cmake 3.31, protobuf, geos, spatialite, lz4, luajit, zmq,
+    boost 1.83) sauf `prime_server`, nécessaire au service HTTP
+    ([doc build](https://valhalla.github.io/valhalla/start/building/)) ;
+  - images officielles `ghcr.io/valhalla/valhalla` et `valhalla-scripted`, port 8002
+    ([README docker](https://github.com/valhalla/valhalla/blob/master/docker/README.md)) ;
+    `docker.io` 26.1 et `podman` 5.4 dans apt ; les ports publiés par Docker passent avant les
+    règles ufw ([doc Docker](https://docs.docker.com/engine/network/packet-filtering-firewalls/)).
+- `/status` de Valhalla : `version`, `tileset_last_modified`, et en mode détaillé `has_tiles`,
+  `has_admins`, `has_timezones`, `has_live_traffic`, `bbox`
+  ([doc status](https://valhalla.github.io/valhalla/api/status/)).
+- Le backend sait envoyer des mails (`mailer.js`, SMTP configuré).
+
+### Décisions
+
+**D6.1 — Installation : Podman + image officielle.** Image de base `ghcr.io/valhalla/valhalla`
+fixée sur une version (3.9.0 aujourd'hui), lancée par systemd (Quadlet), écoute sur
+`127.0.0.1:8002` seulement. Mise à jour = changer de version d'image.
+*Raison* : pas de démon ni de contournement d'ufw, pas de compilation de `prime_server`, mise à
+jour simple et réversible.
+
+**D6.2 — Construction de la carte chaque semaine, la nuit.** Un script séparé, lancé juste après
+la signalisation (cron du dimanche 03:30), jamais en même temps qu'elle, et même si elle échoue :
+il ne lui faut que le PBF vérifié. Si le téléchargement OSM a raté (le PBF sur disque est celui de
+la semaine d'avant), pas de reconstruction : l'ancienne carte reste et c'est noté dans le journal.
+Build à basse priorité CPU et disque, mémoire plafonnée, premier tué si la mémoire manque
+(PostgreSQL reste protégé). Fichier d'échange de sécurité, taille fixée après mesure du pic du
+premier build. La nouvelle carte est construite à part ; l'ancienne est gardée pour le retour
+arrière.
+*Raison* : un seul téléchargement pour les deux chaînes, aucune concurrence de mémoire avec
+PostgreSQL, et une carte qui ne change jamais sur des données douteuses.
+
+**D6.3 — Test automatique, puis bascule courte.** La nouvelle carte est testée sur une instance
+temporaire : `/status` et quelques trajets France connus (ceux du banc). Test réussi : le lien
+passe sur la nouvelle carte et le service redémarre ; pendant ces quelques secondes (à mesurer),
+ORS répond (D5.1). Test raté : l'ancienne carte reste, c'est noté dans le journal et un mail part.
+*Raison* : une carte cassée ne doit jamais arriver en production ; le secours ORS couvre le
+redémarrage sans faire tourner deux cartes en mémoire.
+
+**D6.4 — Plafonds et surveillance.** Service Valhalla plafonné en threads et en mémoire (valeurs
+fixées après la mesure en mode ombre). `/health` montre la version et la date de la carte,
+`has_live_traffic`, les bascules sur ORS et le compteur TomTom. Un mail part aux admins (SMTP
+existant) si le build ou le test échoue, ou si la bascule sur ORS dure (seuil à fixer).
+*Raison* : protéger PostgreSQL et le backend sur une machine partagée, et savoir tout de suite
+quand quelque chose ne va pas.
