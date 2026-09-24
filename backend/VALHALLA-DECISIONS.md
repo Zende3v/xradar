@@ -283,3 +283,64 @@ n'offre ni flux ni licence de réutilisation, et son pied de page interdit toute
 accord écrit préalable de la DiRIF. En attendant, l'Île-de-France est couverte par TomTom et EONA.
 *Raison* : c'est le plus gros trou de couverture des données ouvertes ; il faut un flux officiel
 ou un accord écrit avant de s'en servir.
+
+---
+
+## Thème 4 : itinéraires plus malins (24/09/2026)
+
+### Constaté
+
+- Les deux apps n'envoient que `tolls` et `highways`. Aucune n'a d'option pour les ferries : le
+  backend l'accepte (`ORS_AVOID.ferries`), mais personne ne l'envoie. « Éviter les bouchons »
+  passe par `/faster`, pas par `avoid`.
+- Valhalla ([doc route](https://valhalla.github.io/valhalla/api/route/api-reference/)) :
+  `exclude_tolls`, `exclude_highways`, `exclude_ferries` sont stricts, sauf un départ ou une
+  arrivée sur la route exclue. Profil `auto` par défaut : `top_speed` 140 km/h, `use_distance` 0
+  (temps seul), `maneuver_penalty` 5 s, `use_living_streets` 0,1, `use_tracks` 0,
+  `private_access_penalty` 450 s. Chaque point accepte `heading` (tolérance par défaut 60°).
+- Limites par défaut de Valhalla
+  ([valhalla_build_config](https://github.com/valhalla/valhalla/blob/master/scripts/valhalla_build_config)) :
+  `max_exclude_polygons_length` 10 000 m de périmètre cumulé, `max_alternates` 2,
+  `max_timedep_distance` 500 km. Le couloir de `/faster` fait au moins 144 km de périmètre
+  (300 carrés d'au moins 480 m), l'ancien `avoid=traffic` jusqu'à 200 km.
+- `/api/route` ne reçoit aucun cap ; les apps ont le cap GPS (`bearingDeg`, `course`). `/faster`
+  envoie déjà le sien (tolérance 45°).
+- `/faster` : horizon 60 km, fenêtre 85 km, retour sur la route 5 km après le dernier bouchon,
+  300 carrés au plus. Ces bornes viennent uniquement des limites d'ORS.
+
+### Décisions
+
+**D4.1 — Profil voiture France.** `top_speed` 130 ; le reste aux valeurs par défaut au départ.
+Ensuite, `maneuver_penalty`, `use_distance`, `use_living_streets` et `service_penalty` sont réglés
+sur le banc, un réglage à la fois, mesuré avant et après, pour supprimer les itinéraires bizarres
+(D1.8). Ces durées servent à choisir l'itinéraire, pas l'ETA (D2.1).
+*Raison* : 140 km/h surévalue les autoroutes face aux nationales ; régler sans mesure serait au
+jugé.
+
+**D4.2 — Évitements stricts, et une option ferries.** Péages, autoroutes et ferries passent en
+`exclude_*` Valhalla. Une option « Éviter les ferries » est ajoutée dans les deux apps, dans la
+phase qui touche les apps. Seule exception, propre à Valhalla : un départ ou une arrivée sur une
+route exclue. Le banc vérifie qu'aucune route ne viole un évitement (cible : 0).
+*Raison* : garder l'exclusion stricte d'aujourd'hui ; le bac de Gironde, la Corse et les îles
+justifient l'option ferries.
+
+**D4.3 — Évitement des bouchons.** Les bouchons TomTom restent contournés par des polygones
+(`exclude_polygons`), avec départ et arrivée laissés libres (300 m) et un nouvel essai sans eux si
+l'itinéraire devient impossible. Les bouchons connus du moteur (data.gouv, EONA, D3.3) sont évités
+par Valhalla lui-même. Les variantes et les polygones restent demandés séparément, comme dans
+`faster.js` aujourd'hui.
+*Raison* : TomTom ne donne des retards que sur notre route, pas sur tout le réseau ; le reste du
+trafic, le moteur le connaît directement.
+
+**D4.4 — Cap envoyé.** Paramètre optionnel `heading` dans `/api/route` (ajout sans casse), envoyé
+au recalcul et au départ, seulement à 1,5 m/s ou plus (seuil de conduite des apps), tolérance 45°.
+Les apps déjà installées n'envoient rien et gardent le comportement actuel. Mesuré par le taux de
+demi-tours (cible : 0).
+*Raison* : à l'arrêt, le cap GPS ne vaut rien ; en roulant, il évite de proposer un demi-tour.
+
+**D4.5 — Fenêtre de `/faster` rouverte par paliers.** `max_exclude_polygons_length` relevé pour
+couvrir au moins les couloirs actuels (200 km de périmètre), `max_alternates` à 3. On démarre aux
+valeurs actuelles (60 et 85 km), puis on ouvre par paliers sur le banc tant que la latence reste
+acceptable ; l'horizon est exprimé en temps de conduite. Paliers et seuil de latence : à mesurer.
+*Raison* : la limite de 85 km venait d'ORS ; le coût de 300 polygones sur Valhalla n'est pas
+mesuré.
