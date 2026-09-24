@@ -210,3 +210,68 @@ chaque trajet les sources utilisées, en plus du moteur, de la version de l'app 
 (D1.7).
 *Raison* : c'est ce qui permet de calculer l'ETA sans une source donnée, et de savoir ce qui
 apporte quoi.
+
+---
+
+## Thème 3 : trafic (24/09/2026)
+
+### Constaté
+
+- **TomTom gratuit** : 2 500 requêtes par jour hors tuiles, partagées entre toutes les API TomTom
+  ([tarifs](https://docs.tomtom.com/pricing)). La consommation actuelle n'est comptée nulle part
+  dans le backend. Au rythme actuel (un appel toutes les 120 s pendant un trajet, soit 30 par
+  heure), 2 500 appels couvrent environ 80 h de conduite par jour, tous conducteurs confondus.
+- **data.gouv, deux jeux de la DIR** (Licence Ouverte 2.0), réseau national **non concédé**
+  seulement :
+  - [vitesses et débits](https://transport.data.gouv.fr/datasets/etat-de-circulation-en-temps-reel-sur-le-reseau-national-routier-non-concede) :
+    DATEX II 2.2, mis à jour toutes les 6 min ; référentiel de 1 237 stations, dont 701 avec des
+    coordonnées (Lambert-93, début et fin du tronçon) ; aucune station de la DiRIF dans le
+    référentiel (vérifié le 24/09) ;
+  - [événements](https://transport.data.gouv.fr/datasets/evenements-routiers-sur-le-reseau-routier-national-non-concede) :
+    DATEX II 2.2 ; relevé du 24/09 à 16:13 : 406 situations (255 travaux d'entretien, 97
+    fermetures de voie, 44 routes fermées, 30 basculements, 6 accidents), aucun bouchon ; chaque
+    lieu donné en coordonnées GPS (TPEG) et en ALERT-C.
+- Aucune donnée ouverte trouvée pour les autoroutes concédées.
+- **Trafic dans Valhalla** ([vitesses](https://valhalla.github.io/valhalla/speeds/),
+  [trafic historique](https://valhalla.github.io/valhalla/mjolnir/historical_traffic/)) : un
+  fichier `traffic.tar` lu en direct donne une vitesse par tronçon (en 3 morceaux au plus) ; son
+  squelette vient de `valhalla_build_extract --with-traffic` et doit être refait à chaque nouvelle
+  carte ; l'outil qui écrit les vitesses n'est pas fourni
+  ([issue #5006](https://github.com/valhalla/valhalla/issues/5006)). L'historique s'ajoute à la
+  construction de la carte (`valhalla_add_predicted_traffic`). Chaque mesure doit être rattachée à
+  un tronçon Valhalla (`/trace_attributes` ou `/locate`).
+- Fusion actuelle (`withCrowd`) : EONA s'ajoute à TomTom seulement pour le retard en plus, le pire
+  des deux, jamais la somme.
+
+### Décisions
+
+**D3.1 — Budget TomTom.** Un compteur par jour, exposé dans `/health` et gardé sur disque (les
+compteurs ORS actuels repartent de zéro à chaque redémarrage). Parts réservées : le banc (environ
+50), `/faster`, puis le recalage de l'ETA. Quand le budget baisse, le recalage s'espace puis
+s'arrête ; l'ETA continue avec le moteur, EONA et data.gouv. Plafond strict de 2 500, jamais de
+facturation. La marge d'arrêt et les seuils d'espacement sont calibrés par mesure. L'heure de
+remise à zéro du quota TomTom est à vérifier (console TomTom ou support).
+*Raison* : un pic ne doit jamais vider le quota pour tout le monde, et l'ETA doit rester
+utilisable sans TomTom.
+
+**D3.2 — data.gouv : événements et vitesses.** Les deux jeux de la DIR sont intégrés : vitesses
+lues toutes les 6 min, fréquence de mise à jour des événements à mesurer. Les coordonnées
+Lambert-93 sont converties par PostGIS (2154, déjà utilisé). Tout passe par l'interrupteur D2.6.
+Trou connu : le réseau concédé, où seuls TomTom et EONA informent.
+*Raison* : les fermetures et travaux servent directement l'évitement et l'ETA ; les vitesses
+couvrent 701 tronçons mesurés toutes les 6 min.
+
+**D3.3 — Le trafic compris par Valhalla, en 3 temps.** 1) routes fermées et travaux dans
+`traffic.tar` ; 2) vitesses en direct (stations data.gouv et sondes EONA) ; 3) historique ajouté à
+la construction de la carte. Chaque étape est décidée après mesure de la couverture. L'outil qui
+écrit les vitesses est à coder, et le squelette est refait à chaque nouvelle carte.
+Conséquence de D2.6 : quand l'interrupteur coupe data.gouv, ses données ne vont pas non plus dans
+le moteur ; le banc calcule les itinéraires avec et sans pour les comparer. L'option Valhalla
+pour ignorer le trafic temps réel dans une requête est à vérifier au branchement.
+*Raison* : un moteur qui connaît les fermetures et les vitesses choisit lui-même le bon itinéraire,
+au lieu de contourner après coup avec des polygones et de payer TomTom pour chronométrer.
+
+**D3.4 — Fusion : la pire source encore fraîche l'emporte.** Fraîcheur : vitesses data.gouv
+pendant 2 cycles de 6 min, événements jusqu'à leur fin, EONA selon son score. Une fermeture gagne
+toujours. data.gouv s'ajoute en dernier, seulement pour son retard en plus.
+*Raison* : c'est la règle de `withCrowd` aujourd'hui ; une moyenne diluerait un vrai bouchon.
