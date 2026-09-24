@@ -551,3 +551,17 @@ acceptation, au même moment que la politique.
 `CHECKLIST-TRAJETS.md`. `VALHALLA.md` est marqué « remplacé par `VALHALLA-DECISIONS.md` et
 `PLAN-VALHALLA.md` ».
 *Raison* : la doc d'exploitation doit toujours décrire ce qui tourne.
+
+---
+
+## Phase 1 : choix d'Arthur (24/09/2026)
+
+**P1.1 — Heures de pointe (D1.6).** Heure de Paris. Lundi-vendredi 07:00-10:00 et 16:00-20:00,
+samedi 10:00-19:00. Reste = hors pointe.
+
+**P1.2 — Horaires du banc.** 08:00 matin, 12:30 midi, 18:00 soir, 23:00 nuit. Rien entre 03:00 et
+05:00 (sauvegarde, reconstruction du dimanche).
+
+**P1.3 — Petites routes (D1.8).** Classes OSM `unclassified`, `residential`, `living_street`,
+`service`. `tertiary` = route normale. Banc garde km par classe : définition changeable sans
+refaire les mesures.
