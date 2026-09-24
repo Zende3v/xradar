@@ -127,3 +127,86 @@ traitée au thème 8.
 - **« Nettement plus de km »** : seuil fixé au thème 4, après un premier passage du banc.
 - **Format de la checklist de trajets** : thème 7.
 - **Politique de confidentialité** : thème 8.
+
+---
+
+## Thème 2 : ETA dynamique (24/09/2026)
+
+### Constaté (lecture seule)
+
+- Les apps ont déjà la progression du conducteur sur la route (`RoutePath.match` →
+  `alongMeters`, à chaque fix) et les retards placés sur la route (`sections[fromM, toM, delayS]`
+  de `/api/traffic/route`, déjà lus).
+- Le backend envoie aussi la durée de chaque étape (`steps[].durationS`) et le temps TomTom avec
+  trafic (`travelS`) : les apps les ignorent.
+- TomTom est appelé toutes les 120 s pendant un trajet et à chaque nouvelle route, soit environ
+  30 appels par heure et par conducteur, avec la route entière (pas le reste). Le cache du backend
+  (60 s) est indexé sur les points exacts de la route : deux conducteurs ne le partagent jamais.
+- TomTom peut rendre, dans la même requête, les temps sans trafic, historique et avec incidents
+  en direct (`computeTravelTimeFor=all`,
+  [doc Calculate Route](https://docs.tomtom.com/routing-api/documentation/tomtom-maps/calculate-route)).
+  Non utilisé aujourd'hui.
+- Le partage et le trajet en groupe calculent déjà une ETA qui avance (`durationS` × part
+  restante) : une deuxième formule, différente de celle du HUD.
+- `settingsStore` (`accounts/settings.js`) garde des réglages modifiables en direct par un admin,
+  enregistrés dans `data/settings.json` avec l'historique de qui a changé quoi.
+
+### Décisions
+
+**D2.1 — Formule de l'ETA.** Temps restant = base restante + retards des bouchons encore devant.
+- Base = temps TomTom avec trafic (`travelTimeInSeconds`) moins les retards des bouchons listés
+  dans ses sections. Le trafic diffus (heures de pointe) reste donc dans la base. Elle est répartie
+  le long de la route selon les durées d'étapes du moteur.
+- On y ajoute les retards des bouchons encore devant le conducteur (TomTom, EONA, data.gouv),
+  au prorata de la longueur restante pour celui qu'on traverse.
+- Recalculée à chaque fix GPS, sans requête. Sans réponse TomTom : durées du moteur seules.
+- Test d'acceptation : au départ, l'ETA vaut le temps TomTom avec trafic plus les retards EONA.
+
+*Raison* : partir du temps sans trafic ferait perdre le ralentissement diffus des heures de
+pointe, que TomTom ne liste pas comme bouchon ; retirer puis rajouter les bouchons listés permet
+de les faire disparaître de l'ETA une fois dépassés.
+
+**D2.2 — Recalage TomTom sur événement, avec un plafond.** Un appel à chaque nouvelle route,
+quand la progression réelle s'écarte de la progression prévue au-delà d'un seuil, quand un bouchon
+est dépassé, et sinon après un délai maximal qui dépend du temps restant. Seul le reste de la
+route est envoyé. Les seuils sont calibrés au thème 3, par mesure.
+*Raison* : l'ETA se recalcule localement à chaque fix ; TomTom ne sert qu'à la corriger, ce qui
+économise le quota.
+
+**D2.3 — Pas de correction selon le rythme du conducteur, pour l'instant.** Le biais est d'abord
+mesuré (par conducteur, par type de route) avec les champs du thème 1, puis on décide sur chiffres.
+*Raison* : un facteur de correction sans mesure serait une hypothèse, et le volume actuel est
+faible.
+
+**D2.4 — Calcul dans les apps.** Logique pure partagée : Kotlin dans `core`, port Swift dans
+`EonaCore`, avec les mêmes tests. Le HUD, le partage et le groupe utilisent la même formule.
+L'arrivée affichée ne change que si l'écart atteint 1 min. Le backend n'ajoute que des champs.
+*Raison* : l'ETA bouge à chaque fix sans réseau, continue quand le réseau coupe, et une seule
+formule évite deux ETA différentes pour le même trajet.
+
+**D2.5 — Phasage.** L'ETA dynamique et le trafic data.gouv arrivent dans la même phase, après la
+bascule sur Valhalla. La phase de mesure (D1.9) reste la première et mesure l'ETA figée actuelle.
+*Raison* : décision d'Arthur ; la mesure de l'ETA figée sert de point de départ pour juger le
+gain.
+
+**D2.6 — data.gouv derrière un interrupteur serveur, comparé sur tous les trajets.**
+- L'interrupteur vit dans `settingsStore` : activable et coupable depuis l'admin, sans nouvelle
+  version des apps.
+- L'app calcule à chaque trajet les deux ETA (avec et sans data.gouv), affiche celle que dit
+  l'interrupteur et enregistre les deux. La comparaison porte sur 100 % des trajets, dans le même
+  trafic.
+- Conséquences à tenir au thème 3 : les retards data.gouv s'ajoutent en dernier, seulement pour
+  ce qu'ils coûtent en plus de TomTom et EONA (comme `withCrowd` aujourd'hui), pour que les
+  retirer donne exactement l'ETA sans data.gouv. Les apps déjà installées ne savent pas trier les
+  sources : elles ne doivent recevoir les retards data.gouv que si l'interrupteur est actif (les
+  nouvelles apps le signalent dans leur requête, champ additif).
+
+*Raison* : un tirage par trajet ou par période compare des trajets différents ; calculer les deux
+ETA sur chaque trajet compare dans les mêmes conditions, sans diviser le volume.
+
+**D2.7 — Chaque retard porte sa source.** Chaque section de `/api/traffic/route` a un champ
+`source` (`tomtom`, `crowd`, `datagouv`), et plus seulement celles d'EONA. L'app enregistre avec
+chaque trajet les sources utilisées, en plus du moteur, de la version de l'app et du mode d'ETA
+(D1.7).
+*Raison* : c'est ce qui permet de calculer l'ETA sans une source donnée, et de savoir ce qui
+apporte quoi.
