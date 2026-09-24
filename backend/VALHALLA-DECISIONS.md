@@ -275,3 +275,11 @@ au lieu de contourner après coup avec des polygones et de payer TomTom pour chr
 pendant 2 cycles de 6 min, événements jusqu'à leur fin, EONA selon son score. Une fermeture gagne
 toujours. data.gouv s'ajoute en dernier, seulement pour son retard en plus.
 *Raison* : c'est la règle de `withCrowd` aujourd'hui ; une moyenne diluerait un vrai bouchon.
+
+**D3.5 — Sytadin (Île-de-France), plus tard.** Des données Sytadin arriveront sûrement pour
+l'Île-de-France et les trajets qui la traversent ; le détail se décidera à ce moment-là. Constaté
+le 24/09 : les flux ouverts de la DIR n'ont aucune station DiRIF, [sytadin.fr](https://www.sytadin.fr/)
+n'offre ni flux ni licence de réutilisation, et son pied de page interdit toute reproduction sans
+accord écrit préalable de la DiRIF. En attendant, l'Île-de-France est couverte par TomTom et EONA.
+*Raison* : c'est le plus gros trou de couverture des données ouvertes ; il faut un flux officiel
+ou un accord écrit avant de s'en servir.
