@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.eona.app.core.drive.AlertBeeps
+import com.eona.app.core.drive.TripProgress
 import com.eona.app.core.drive.TripRecorder
 import com.eona.app.core.geo.Geo
 import com.eona.app.core.geo.GuidanceSides
@@ -26,7 +27,6 @@ import com.eona.app.core.model.RouteStep
 import com.eona.app.core.model.SignType
 import com.eona.app.core.model.SpeedLimitChange
 import com.eona.app.core.model.SpeedLimitSource
-import com.eona.app.core.model.TripInfo
 import com.eona.app.core.model.TripRecord
 import com.eona.app.core.model.UserReport
 import com.eona.app.core.model.isEnforcement
@@ -63,8 +63,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -178,6 +176,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
     // Live accumulation of the trip in progress (saved locally when it ends).
     private var trip: TripRecorder? = null
+    /** Where the driver was last seen on the route (metres along it), for the time and distance left. */
+    private var lastAlong: Pair<RoutePath, Double>? = null
 
     /**
      * True once the driver has really been on the route of this trip. Before that the trip is
@@ -255,7 +255,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             speedKmh = speedKmh,
             speedLimitKmh = limit,
             speedLimitSource = if (limit != null) SpeedLimitSource.Radar else null,
-            trip = tripFrom(route),
+            trip = route?.let { TripProgress.info(it, remainingShare(it)) },
             alert = alerts.firstOrNull(),
             gpsSignal = signal,
             alerts = alerts,
@@ -1350,14 +1350,17 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         return Geo.haversine(lastFetchLat, lastFetchLon, sample.latitude, sample.longitude) > FETCH_MOVE_M
     }
 
-    private fun tripFrom(route: Route?): TripInfo? {
-        if (route == null) return null
-        val minutes = (route.durationSeconds / 60.0).roundToInt()
-        val remaining = if (minutes >= 60) "${minutes / 60} h ${(minutes % 60).toString().padStart(2, '0')}" else "$minutes min"
-        val km = route.distanceMeters / 1000.0
-        val distance = if (km >= 10) "${km.roundToInt()} km" else "%.1f km".format(km).replace('.', ',')
-        val arrival = LocalTime.now().plusSeconds(route.durationSeconds.toLong()).format(HHMM)
-        return TripInfo(remainingLabel = remaining, distanceLabel = distance, arrivalLabel = arrival)
+    /**
+     * What is left of [route], as a share of it: 1 until the driver is on it, then shrinking as they
+     * go. Off the route for a moment (a detour before the recalculation), the last place known on it
+     * holds; a new route starts whole again.
+     */
+    private fun remainingShare(route: Route): Double {
+        // The measured path must be this route's (the route flow and this one may cross).
+        val rp = path?.takeIf { it.points === route.points && it.totalMeters > 0 } ?: return 1.0
+        progress()?.let { lastAlong = rp to it.alongMeters }
+        val last = lastAlong?.takeIf { it.first === rp } ?: return 1.0
+        return (1 - last.second / rp.totalMeters).coerceIn(0.0, 1.0)
     }
 
     /** Every radar ahead within alert range → alerts, nearest first; nearest speed radar ahead → the active limit. */
@@ -1403,7 +1406,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private companion object {
-        val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         const val STOP_TIMEOUT_MS = 5_000L
         // Reports: everything in France comes in one go, so the move-based refetch only
         // catches changes after a long drive (they also refresh every REPORT_REFRESH_MS).
