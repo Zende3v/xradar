@@ -447,3 +447,58 @@ fixées après la mesure en mode ombre). `/health` montre la version et la date 
 existant) si le build ou le test échoue, ou si la bascule sur ORS dure (seuil à fixer).
 *Raison* : protéger PostgreSQL et le backend sur une machine partagée, et savoir tout de suite
 quand quelque chose ne va pas.
+
+---
+
+## Thème 7 : validation et bascule (24/09/2026)
+
+### Constaté
+
+- `/api/route` connaît le rôle du compte (`authAccount`) ; 5 comptes admin aujourd'hui.
+  `settingsStore` permet un réglage modifiable en direct depuis l'admin, avec l'historique.
+- `routing/geometry.js` mesure la part commune de deux tracés (`share`, déjà utilisé par
+  `/faster`).
+- Le backend ne journalise que les erreurs, dans journald : rien pour analyser des comparaisons.
+- Un journal comparatif sur de vrais trajets contiendrait les départs et arrivées des conducteurs
+  (donnée personnelle). Durées de conservation actuelles : positions partagées 30 jours,
+  historique des signalements 90 jours.
+- « Signaler un bug » existe dans les deux apps (catégorie `navigation`, plateforme, version de
+  l'app), stocké dans `crowd.bug_report` et visible dans la console admin.
+
+### Décisions
+
+**D7.1 — Mode ombre.** Chaque vrai calcul de route (hors cache) et chaque `/faster` est aussi fait
+par l'autre moteur, après la réponse à l'app, sans la ralentir. Une table PostGIS à part (schéma
+`routing`) garde les mesures seulement : écarts de distance et de durée, part commune des tracés,
+nombre d'étapes, demi-tour au départ, latences, erreurs. Aucune coordonnée de conducteur ;
+conservation 90 jours. Pour les comptes admin seulement (l'équipe), quand l'écart est gros (valeurs
+de départ ajustables : durée ±10 % ou moins de 70 % de tracé commun), les deux tracés complets
+(ORS et Valhalla) sont gardés 30 jours pour les revoir sur une carte. Rien de tel pour les autres
+comptes. Le banc garde ses coordonnées complètes (trajets fixes).
+*Raison* : comparer sur de vrais trajets sans garder où vont les conducteurs ; l'équipe peut
+revoir sur une carte les cas qui divergent.
+
+**D7.2 — Étapes et retour arrière.** Un réglage `routingEngine` dans `settingsStore` : `ors`
+(Valhalla en ombre), `admins` (le rôle admin est servi par Valhalla, ORS en ombre), `all`.
+Modifiable en direct depuis l'admin : le retour arrière se fait en un clic, sans redéploiement ni
+redémarrage.
+*Raison* : l'équipe essaie Valhalla sur la route avant tout le monde, et une erreur se corrige en
+quelques secondes.
+
+**D7.3 — Critères de passage d'une étape à la suivante.** Écrits d'avance : aucune violation
+d'évitement ; taux d'erreur de Valhalla inférieur ou égal à celui d'ORS ; latence p95 sous un
+seuil ; pas de hausse des itinéraires bizarres ni des demi-tours sur le banc ; checklist de
+l'équipe sans défaut bloquant ; un minimum de calculs comparés. Les seuils sont chiffrés après les
+premières mesures de l'ombre. Arthur seul décide du passage.
+*Raison* : des critères connus d'avance évitent de juger au ressenti, sans inventer de seuils
+avant d'avoir mesuré.
+
+**D7.4 — Checklist de l'équipe.** `backend/CHECKLIST-TRAJETS.md` liste les trajets tests et les
+points à vérifier. Dans la même mise à jour des apps que les champs de mesure (phase 1), « Signaler
+un bug », catégorie navigation, joint automatiquement le moteur, la version de la carte et le
+trajet en cours ou le dernier ; la réponse de `/api/route` ajoute pour cela un champ additif
+`mapVersion` à côté de `engine`. Le formulaire ne s'ouvre qu'à l'arrêt (vitesse inférieure à
+1,5 m/s), jamais en roulant. Le trajet joint est une donnée personnelle : ligne à prévoir au
+thème 8.
+*Raison* : les retours de l'équipe arrivent avec leur contexte, sans outil de plus, et sans
+détourner l'attention du conducteur.
