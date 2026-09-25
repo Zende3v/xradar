@@ -10,8 +10,11 @@ Contexte projet et règles communes : @AGENTS.md
   - build Android release (le sandbox Codex ne peut pas lancer Gradle) ;
   - relectures indépendantes en lecture seule, avec preuves `fichier:ligne` ;
   - lots de code parallélisables confiés par Codex.
-- Livrer via `bridge_submit_deliverable`, avec les seules vérifs réellement lancées
-  (`bridge_record_verification`).
+- En worker (lancé par le bridge, prompt de tâche avec `task_id`) : remplir ce contrat, dans son
+  scope, puis finir par un résumé clair (fait, fichiers, vérifs lancées et leur résultat). Le
+  bridge transmet le livrable. Ne pas créer de tâche ni redéléguer.
+- En session ouverte par Arthur avec le bridge : livrer via `bridge_submit_deliverable`, avec les
+  seules vérifs réellement lancées (`bridge_record_verification`).
 - Si Arthur parle directement à Claude : répondre, puis signaler à Codex ce qui a changé (tâche ou
   artefact bridge) au lieu de lancer seul un chantier.
 - Toujours caveman, en français.

@@ -15,3 +15,11 @@ build/
 *.jks
 *.keystore
 secrets.properties
+
+# Bridge Claude<->Codex (etat local)
+.bridge/
+
+# Config locale agents (bridge, Codex, Claude)
+.codex/
+.mcp.json
+.claude/

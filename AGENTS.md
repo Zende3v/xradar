@@ -25,9 +25,33 @@ Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'impor
   3. délégations depth 1 (`max_attempts: 0`, délai 15 à 30 min, scopes d'écriture disjoints) ;
   4. vérifier chaque livrable ;
   5. `bridge_record_verification` pour les seules vérifs réellement lancées.
-- Tâche coupée (limite 10 min) : `bridge_resume_delegated_task` sur la tâche existante, jamais de
+- Tâche coupée ou bloquée : `bridge_resume_delegated_task` sur la tâche existante, jamais de
   tâche de remplacement.
 - Agent indisponible ou quota épuisé : le dire en une ligne, faire la tâche soi-même.
+- Config : `.codex/config.toml` (Codex, `caller=codex`) et `.mcp.json` (Claude, `caller=claude`),
+  locaux, non versionnés. Base partagée : `.bridge/bridge.db`.
+
+### Worker Claude (lancé par le bridge quand Codex délègue)
+
+- Commande imposée par le bridge : `claude -p … --model opus --effort max --permission-mode
+  acceptEdits`, outils `Read`, `Edit`, `Write`, `Bash` seulement. Pas d'outils MCP, pas de
+  skills, pas de `Grep`/`Glob` : chercher avec `grep` dans `Bash`.
+- Tours : 12 par défaut. Mettre `max_turns` 32 à 64 dans la tâche pour un vrai travail (build +
+  corrections, relecture large).
+- Build Android dans `Bash` : `export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" &&
+  ./gradlew :app:assembleRelease`.
+- Le livrable part tout seul à la fin de la tâche : le worker ne l'appelle pas lui-même.
+- Scopes : chemins relatifs à `x_radar`. Le repo iOS (`../xradar_ios`) est hors workspace : le
+  confier au worker seulement avec un scope explicite `../xradar_ios/**`, sinon le traiter
+  soi-même.
+
+### Caveman (Codex et Claude, toujours)
+
+Skill caveman niveau full, en français. Sans articles superflus, sans formules de politesse, sans
+remplissage. Phrases courtes (20 mots max), une idée par phrase, voix active, impératif pour les
+consignes. Termes techniques, code, commandes et messages d'erreur exacts. Jamais d'abréviation
+inventée. Clarté d'abord : style normal pour les alertes de sécurité et les actions
+irréversibles.
 
 ## Arthur (propriétaire)
 
