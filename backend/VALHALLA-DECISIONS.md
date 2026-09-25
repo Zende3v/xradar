@@ -565,3 +565,15 @@ samedi 10:00-19:00. Reste = hors pointe.
 **P1.3 — Petites routes (D1.8).** Classes OSM `unclassified`, `residential`, `living_street`,
 `service`. `tertiary` = route normale. Banc garde km par classe : définition changeable sans
 refaire les mesures.
+
+**P1.4 — Trajet joint à « Signaler un bug » (D7.4).** Toujours joint en catégorie navigation,
+même si Statistiques de conduite coupées : conducteur envoie lui-même. Ligne visible dans le
+formulaire des 2 apps : « Le trajet en cours (ou le dernier) et son itinéraire sont joints. »
+
+**P1.5 — Build iOS.** 1.0.0 (2) : seul `CURRENT_PROJECT_VERSION` monte, à chaque nouvelle IPA,
+comme `versionCode` Android.
+
+**P1.6 — Destination changée en route.** Champ `retargeted: true` sur le trajet. Rapport ETA
+exclut ces trajets, compte à part.
+
+**P1.7 — Résultats du banc.** Gardés pour toujours, aucune purge (pas de donnée personnelle).
