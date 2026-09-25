@@ -112,14 +112,39 @@ l'action est écrite au journal (section 6 bis).
 |---|---|---|
 | Lister | `GET /api/bugs?status=new\|progress\|resolved&before=<ISO>` | admin |
 | Changer le statut | `PATCH /api/bugs/:id` `{ "status": "progress" }` | admin |
-| En envoyer un | `POST /api/bugs` `{category, description, steps?, app{}}` | compte |
+| En envoyer un | `POST /api/bugs` `{category, description, steps?, app{}, context?}` | compte |
 
 50 par page, du plus récent au plus ancien. Pour la page suivante, renvoyer `before` = le
 `createdAt` du dernier reçu.
 
 Un rapport contient : `id`, `status`, `category` (map, navigation, alerts, account, other),
 `description`, `steps`, `createdAt`, `author` (`username` + `role`, ou `null` si le compte a été
-supprimé), `app` (`platform`, `version`, `os`, `model`).
+supprimé), `app` (`platform`, `version`, `os`, `model`), `context` (ci-dessous, sinon `null`).
+
+**`context`** (D7.4) : catégorie `navigation` seulement, joint par l'app (nouvelles versions). Autre
+catégorie : ignoré. Corps accepté jusqu'à 256 ko.
+
+```json
+"context": {
+  "engine": "ors",                    // moteur de la route en cours ou dernière ; null sans trajet
+  "mapVersion": "2026-09-14T…",       // date de la carte ORS ; null inconnue
+  "trip": {                           // null : aucun trajet depuis l'ouverture de l'app
+    "inProgress": true,               // true = trajet en cours, false = dernier trajet fini
+    "toLabel": "Rennes",
+    "startedAt": 1790000000000,       // destination choisie (ms)
+    "departedAt": 1790000060000,      // route rejointe (ms), null si pas encore
+    "distanceMeters": 12000,          // roulé
+    "plannedMeters": 35000,           // route au départ
+    "destination": { "lat": 48.11, "lon": -1.68 },
+    "route": [[lon, lat], …]          // route en cours ou dernière, ≤ 600 points
+  }
+}
+```
+
+Contrôles serveur : textes coupés (40 car., `toLabel` 160), nombres ≥ 0 arrondis, positions
+réelles arrondies au 1e-6, route > 600 points amincie régulièrement (bouts gardés). Formulaire
+ouvert dans l'app **à l'arrêt seulement** (< 1,5 m/s). Donnée perso (destination, tracé) : visible
+admins seulement.
 
 Les rapports résolus de plus de 90 jours sont effacés automatiquement.
 
@@ -182,7 +207,35 @@ journal (section 6 bis).
   `alertsTraversed`, `reportsDeclared`, `reportsConfirmed`.
 - **Trajets** : `trips[]`, les 200 derniers — `startedAt`, `fromLabel`, `toLabel`,
   `distanceMeters`, `durationSeconds`, `alertsCount`, `topSpeedKmh`, `plannedSeconds`, `stops`,
-  `stoppedSeconds`, `events` (alertes rencontrées par type).
+  `stoppedSeconds`, `events` (alertes rencontrées par type). Plus, pour les apps de la phase 1
+  Valhalla, les **mesures d'ETA et de routage** (tableau ci-dessous). Trajet d'une ancienne app :
+  aucun de ces champs, ne pas l'afficher comme une anomalie.
+
+| Champ | Type | Sens |
+|---|---|---|
+| `arrived` | bool | fini à destination (arrivée auto < 45 m) ; `false` = arrêté par le conducteur |
+| `departedAt` | ms ou `null` | vrai départ : route rejointe la première fois |
+| `manualStart` | bool | départ choisi à la main (pas la position du conducteur) |
+| `retargeted` | bool | destination changée pendant le trajet (P1.6) ; absent sur les anciens trajets, lu comme `false` |
+| `plannedMeters` | entier ou `null` | longueur de la route au départ |
+| `pausedSeconds` | entier | arrêts ≥ 5 min hors bouchon connu (pauses, D1.4) |
+| `uncertainSeconds` | entier | arrêts ≥ 5 min sans trafic connu (incertains) |
+| `etaChecks` | liste ≤ 4 | ETA affichée à 0, 25, 50, 75 % : `{at, shownAt, arrivalAt, pausedBefore, uncertainBefore}` (ms, s) |
+| `recalcCount` | entier | recalculs hors route |
+| `fasterCount` | entier | bascules sur un itinéraire plus rapide |
+| `engines` | liste | moteurs vus (`ors`, `osrm`, `valhalla`, `unknown`) |
+| `mapVersion` | texte ou `null` | carte de la route au départ |
+| `appVersion` | texte | ex. `1.0.1 (4)` |
+| `platform` | texte | `android` ou `ios` |
+| `etaMode` | texte | `proportional` (phase 1) |
+| `trafficSources` | liste | sources de trafic vues (`tomtom`, `crowd`, `datagouv`, `sytadin`) |
+
+Le rapport `bin/eona-eta-report.js` exclut les trajets avec `retargeted: true` de toutes les
+mesures d'ETA et les compte à part dans `trips.excluded.retargeted` (raison `retargeted` en
+sortie texte), même si une autre raison d'exclusion s'applique aussi.
+
+Aucune coordonnée dans un trajet. Seuls les conducteurs avec « Statistiques de conduite » envoient
+des trajets (D1.10).
 - **Quotas du jour** (invités) : `usage.reports`, `usage.trips`.
 - **Parrainage** : `referralCodes[]`.
 
@@ -404,6 +457,64 @@ Une ligne : `id`, `at` (ISO), `actor` (`{ id, name }` — `id` à `null` pour l'
 
 Gardé **un an**, puis effacé. Les corrections de signalisation ont déjà leur propre historique
 (section 6), et les codes de parrainage aussi (dans le compte).
+
+---
+
+## 6 ter. Routage : moteur, compteurs, banc
+
+Phase 1 du plan Valhalla (`PLAN-VALHALLA.md`) : mesurer l'existant, rien ne change pour les
+conducteurs.
+
+**Itinéraires.** `GET /api/route` et `POST /api/route/faster` (`better.route`) ajoutent deux champs :
+
+| Champ | Valeurs |
+|---|---|
+| `engine` | `ors` (OpenRouteService) ou `osrm` (repli sans clé ORS) |
+| `mapVersion` | ORS : `metadata.engine.graph_date` de sa réponse ; `null` si absente ou OSRM |
+
+Même chose sur une réponse du cache d'une minute. Rien d'autre ne change.
+
+**Compteurs dans `/health`** (jour UTC, gardés sur disque, survivent au redémarrage) :
+
+```json
+"routing": { "provider": "ors", "keys": 2, "ready": 2, "budgetLeft": 2950,
+  "usage": { "day": "2026-09-25", "keys": [{ "used": 50, "blockedUntil": null }, { "used": 0, "blockedUntil": null }] } },
+"traffic": { "provider": "tomtom", "probes": 0,
+  "tomtom": { "day": "2026-09-25", "used": 130, "byUse": { "eta": 70, "faster": 12, "bench": 48, "other": 0 }, "freeDailyQuota": 2500 } }
+```
+
+- ORS : `usage.keys` dans l'ordre des clés ; `blockedUntil` = clé écartée jusqu'à (ISO), `null` = sert.
+- TomTom : toute requête envoyée compte (réponse en cache = 0). `eta` = `/api/traffic/route`,
+  `faster` = `/api/route/faster`, `bench` = banc. Heure de remise à zéro du quota TomTom : **à
+  vérifier** (console TomTom ou support) ; ici minuit UTC.
+
+**Journal de routage** : table `routing.route_log` (base), pas d'API. Une ligne par réponse de
+`/api/route` et `/faster` : statut, latence, moteur, nouveau trajet ou recalcul, cache, distance,
+durée, étapes, demi-tour dans les 2 premières manœuvres, évitements, erreur. Ni compte ni
+coordonnée. 90 jours.
+
+**Banc** (admin) :
+
+| Besoin | Appel |
+|---|---|
+| Lancer un passage | `POST /api/admin/bench/run?slot=matin\|midi\|soir\|nuit` (`slot` facultatif : sans = à la main) |
+| Lire les mesures | `GET /api/admin/bench/runs?since=<ISO ou ms>&limit=` (200 par défaut, 1000 max), du plus récent au plus ancien |
+
+- Passage : 6 trajets suivants de `bench/trajets.json` (curseur tournant en base), 2 requêtes
+  TomTom chacun ; arrêt anticipé quand le banc a dépensé 50 requêtes TomTom dans la journée. `409`
+  si un passage tourne déjà, `503` sans clé TomTom. Réponse à la fin du passage (durée à mesurer ;
+  le script cron attend 15 min max).
+- Réponse du passage : `slot`, `startedAt`, `trips`, `ok`, `stopped` (raison d'arrêt ou `null`),
+  `nextTrip`, `tomtom` `{bench, benchDailyMax}`, `results[]` : `id`, `ok`, `error`, `engine`,
+  `latencyMs`, `ourDurationS` (moteur), `ourTomtomS` (TomTom, notre route), `bestTomtomS` (meilleure
+  route TomTom), `gapS` (écart), `ourKm`, `bestKm`, `ourMinorKm`, `bestMinorKm`, `uturnStart`.
+- Une mesure (`runs[]`) : `id`, `at`, `slot`, `tripId`, `engine`, `mapVersion`, `ok`, `error`,
+  `latencyMs`, `ourDistanceM`, `ourDurationS`, `ourTomtomS`, `bestDistanceM`, `bestTomtomS`,
+  `gapS`, `ourKmByClass` / `bestKmByClass` (km par classe OSM `highway`, `none` = pas de route
+  voiture : bac), `ourMinorKm` / `bestMinorKm`, `uturnStart`, `steps`, `avoid`, `from`, `to`.
+- Petites routes (P1.3) : `unclassified`, `residential`, `living_street`, `service`. Calculées à
+  la lecture depuis les km par classe : définition changeable sans refaire les mesures.
+- Coordonnées gardées : trajets de test fixes, personne derrière.
 
 ---
 

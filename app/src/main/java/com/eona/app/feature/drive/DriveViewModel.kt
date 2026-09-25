@@ -4,7 +4,9 @@ import android.app.Application
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.eona.app.BuildConfig
 import com.eona.app.core.drive.AlertBeeps
+import com.eona.app.core.drive.StopTraffic
 import com.eona.app.core.drive.TripProgress
 import com.eona.app.core.drive.TripRecorder
 import com.eona.app.core.geo.Geo
@@ -31,6 +33,7 @@ import com.eona.app.core.model.TripRecord
 import com.eona.app.core.model.UserReport
 import com.eona.app.core.model.isEnforcement
 import com.eona.app.data.account.AccountRepository
+import com.eona.app.data.bugs.BugTripTrace
 import com.eona.app.data.preferences.AlertPreferences
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.data.preferences.OverspeedWarning
@@ -307,7 +310,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             LocationRepository.location.collect { sample ->
                 if (sample == null) return@collect
                 // A simulated trip is driven from its first fix: there is no route to join.
-                if (!_tripUnderway.value && trip != null && ActiveTripRepository.start.value != null) _tripUnderway.value = true
+                if (trip != null && ActiveTripRepository.start.value != null) markUnderway()
                 // Whoever follows the trip hears from the driver every few seconds.
                 group.onFix()
                 if (shouldFetch(sample)) {
@@ -530,12 +533,16 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        // Distance, speed and stops while a trip is active, and its arrival.
+        // Distance, speed and stops while a trip is active, the ETA along the way, and its arrival.
         viewModelScope.launch {
             LocationRepository.location.collect { sample ->
                 val current = trip ?: return@collect
                 if (sample == null) return@collect
-                current.add(sample)
+                current.add(sample) { stopTraffic(sample) }
+                // The arrival the dock announces, kept at 25, 50 and 75 % of the way (D1.1).
+                if (current.awaitsCheckpoint) {
+                    ActiveTripRepository.route.value?.let { route -> current.checkpoint(route, remainingShare(route)) }
+                }
                 // Auto-finish when we reach the destination.
                 ActiveTripRepository.destination.value?.let { dest ->
                     val toDest = Geo.haversine(sample.latitude, sample.longitude, dest.lat, dest.lon)
@@ -597,7 +604,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 // On the route: the trip has really started, and a detour may be corrected later.
                 if (offBy <= OFF_ROUTE_M) {
                     joinedRoute = true
-                    if (!_tripUnderway.value) _tripUnderway.value = true
+                    markUnderway()
                     recalcWaitMs = RECALC_COOLDOWN_MS
                     return@collect
                 }
@@ -632,6 +639,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 ).routeOrNull
                 if (fresh != null) {
                     recalcWaitMs = RECALC_COOLDOWN_MS
+                    trip?.recalculated()
                     ActiveTripRepository.setRoute(fresh)
                 } else {
                     // No answer: wait longer each time instead of asking again straight away.
@@ -658,6 +666,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 stepAlong = buildStepAlong(path, route)
                 guidanceSteps = GuidanceSides.checked(route?.steps.orEmpty(), stepAlong, path)
                 buildCorridor(route)
+                // Every route the trip follows says which engine made it (D1.7).
+                if (route != null) trip?.follow(route)
                 // Another route, another geometry: its traffic is asked for at once.
                 routeVersion += 1
                 traffic.value = null
@@ -830,13 +840,31 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** A new destination starts a trip, or redirects the one running (a new estimate follows). */
     private fun startTrip(destination: Place) {
         val current = trip
-        if (current == null) trip = TripRecorder(destination.name) else current.retarget(destination.name)
+        if (current == null) trip = TripRecorder(destination.name, PLATFORM, APP_VERSION) else current.retarget(destination.name)
+        // A navigation bug report joins this trip, to this destination, from now on.
+        trip?.let { BugTripTrace.driving(it, GeoPoint(destination.lat, destination.lon)) }
+    }
+
+    /**
+     * The driver is on the trip's route at last, or drives a simulated trip: the trip is under
+     * way. Its real departure is that moment, once per trip.
+     */
+    private fun markUnderway() {
+        if (_tripUnderway.value) return
+        _tripUnderway.value = true
+        val route = ActiveTripRepository.route.value
+        trip?.depart(
+            route = route,
+            remainingShare = route?.let { remainingShare(it) } ?: 1.0,
+            manualStart = ActiveTripRepository.start.value != null,
+        )
     }
 
     /** Save the finished trip if it is worth keeping, locally and on the server. */
     private fun finalizeTrip() {
         val finished = trip ?: return
         trip = null
+        BugTripTrace.ended()
         // Arrived, not stopped on the way: the HUD says so before going back to simply driving.
         val arrivedAtDestination = arrived
         if (arrived) {
@@ -845,7 +873,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
         _tripUnderway.value = false
         // "Statistiques de conduite" off: the trip only served the guidance (its arrival).
-        val record = if (AppPreferences.settings.value.drivingStats) finished.record(UUID.randomUUID().toString()) else null
+        val record = if (AppPreferences.settings.value.drivingStats) {
+            finished.record(UUID.randomUUID().toString(), arrived = arrivedAtDestination)
+        } else {
+            null
+        }
         // The link and the group hear the arrival, or are stopped with the trip.
         group.onTripEnded(arrivedAtDestination, finished.distanceMeters.roundToInt(), record?.id)
         record ?: return
@@ -921,6 +953,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val fresh = trafficApi.route(route.points, progress()?.alongMeters, AccountRepository.token) ?: return
         if (version != routeVersion) return
         traffic.value = fresh
+        trip?.sawTraffic(fresh.stretches.map { it.source })
         considerFasterRoute(fresh, version)
     }
 
@@ -947,6 +980,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since) ?: return
             if (version != routeVersion || ActiveTripRepository.destination.value != destination) return
             lastTrafficRerouteAt = System.currentTimeMillis()
+            trip?.tookFaster()
             ActiveTripRepository.setRoute(faster.route)
             announceFaster(FasterRouteNotice(maxOf(1, (faster.gainSeconds / 60.0).roundToInt()), faster.closed))
         } finally {
@@ -997,13 +1031,36 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Whether the trip's traffic already slows the road where the driver is, or a "Bouchon" report lies close by. */
-    private fun trafficKnownHere(slowdown: com.eona.app.core.drive.Slowdown): Boolean {
-        val known = traffic.value
-        val rp = path
-        val match = progress()
-        if (known != null && rp != null && match != null && known.slowed(match.alongMeters, rp.totalMeters)) return true
-        return reports.value.any {
-            it.type == ReportType.TrafficJam && Geo.haversine(it.lat, it.lon, slowdown.lat, slowdown.lon) < SLOWDOWN_KNOWN_M
+    private fun trafficKnownHere(slowdown: com.eona.app.core.drive.Slowdown): Boolean =
+        slowedHere() == true || jamReportedNear(slowdown.lat, slowdown.lon)
+
+    /**
+     * Whether the route's traffic slows the road where the driver is; null when it cannot say: no
+     * traffic known for this route yet, off the route, no route, or a simulated trip.
+     */
+    private fun slowedHere(): Boolean? {
+        val known = traffic.value ?: return null
+        val rp = path ?: return null
+        val match = progress() ?: return null
+        return known.slowed(match.alongMeters, rp.totalMeters)
+    }
+
+    /** Whether a drivers' "Bouchon" report lies close to ([lat], [lon]). */
+    private fun jamReportedNear(lat: Double, lon: Double): Boolean = reports.value.any {
+        it.type == ReportType.TrafficJam && Geo.haversine(it.lat, it.lon, lat, lon) < SLOWDOWN_KNOWN_M
+    }
+
+    /**
+     * The traffic where the car stands still, for the trip's long stops (D1.4): a jam when the
+     * route's traffic slows it or a "Bouchon" lies close by, a clear road when that traffic is
+     * known here, unknown otherwise.
+     */
+    private fun stopTraffic(fix: LocationSample): StopTraffic {
+        val slowed = slowedHere()
+        return when {
+            slowed == true || jamReportedNear(fix.latitude, fix.longitude) -> StopTraffic.Jam
+            slowed == false -> StopTraffic.Clear
+            else -> StopTraffic.Unknown
         }
     }
 
@@ -1439,8 +1496,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val NAV_ALERT_RADIUS_M = 15000.0
         /** Spacing of the route corridor samples — well under the radius above. */
         const val CORRIDOR_STEP_M = 2_000.0
-        // Trip recording.
+        // Trip recording, and who records it ("1.0.1 (4)").
         const val ARRIVE_M = 45.0
+        const val PLATFORM = "android"
+        const val APP_VERSION = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
         const val TRIP_MIN_STEP_M = 1.0
         const val TRIP_MAX_STEP_M = 250.0
         // Drive-time accounting: moving above ~5 km/h, gaps over 10 s ignored, synced per minute.

@@ -1,13 +1,15 @@
 import { Router } from 'express';
+import { config } from '../config.js';
 import { adminActor } from '../accounts/auth.js';
 import { accountStore } from '../accounts/store.js';
 import { reportStore } from '../reports/store.js';
+import { BENCH_SLOTS, benchRuns, runBench } from '../routing/bench.js';
 import { adminAudit } from './audit.js';
 
 /**
- * The console's own routes (`/api/admin`): every report with its author, and the journal of
- * what admins did. An admin account signed in with its session, or the ADMIN_TOKEN — nothing
- * else gets in.
+ * The console's own routes (`/api/admin`): every report with its author, the journal of what
+ * admins did, and the routing bench. An admin account signed in with its session, or the
+ * ADMIN_TOKEN — nothing else gets in.
  */
 export const adminRouter = Router();
 
@@ -87,6 +89,32 @@ adminRouter.get('/audit', guarded(async (req, res) => {
     next: entries.length === limit ? entries[entries.length - 1].at : null,
     entries,
   });
+}));
+
+/**
+ * POST /api/admin/bench/run[?slot=matin|midi|soir|nuit] — one bench run (routing/bench.js):
+ * the next trips of the rotation, each timed against TomTom and stored. Started by
+ * deploy/eona-bench.cron (the slot says which), or by hand (no slot). Answers the run's summary;
+ * 409 while another run goes, 503 without a TomTom key.
+ */
+adminRouter.post('/bench/run', guarded(async (req, res) => {
+  const slot = req.query.slot ? String(req.query.slot) : null;
+  if (slot && !BENCH_SLOTS.includes(slot)) return res.status(400).json({ error: 'slot = matin|midi|soir|nuit' });
+  if (!config.tomtomApiKey) return res.status(503).json({ error: 'bench unavailable' });
+  const summary = await runBench({ slot });
+  if (!summary) return res.status(409).json({ error: 'bench already running' });
+  res.json(summary);
+}));
+
+/**
+ * GET /api/admin/bench/runs?since=&limit= — the bench's measures, newest first: from `since`
+ * (ISO or milliseconds) on, `limit` of them (200 by default, 1000 at most).
+ */
+adminRouter.get('/bench/runs', guarded(async (req, res) => {
+  const n = Number(req.query.limit);
+  const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 1000) : 200;
+  const runs = await benchRuns({ since: moment(req.query.since), limit });
+  res.json({ count: runs.length, runs });
 }));
 
 /** GET /api/admin/me — who the console is signed in as, to show it and check it is an admin. */

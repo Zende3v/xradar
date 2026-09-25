@@ -16,13 +16,22 @@ enum class TrafficLevel(val wire: String) {
     }
 }
 
-/** One slowed stretch, in metres along the route polyline the backend received, and the time lost on it. */
+/**
+ * One slowed stretch, in metres along the route polyline the backend received, the time lost on
+ * it, and who says so: "tomtom", or "crowd" for the drivers' own jams.
+ */
 data class TrafficStretch(
     val fromMeters: Double,
     val toMeters: Double,
     val level: TrafficLevel,
     val delaySeconds: Int? = null,
-)
+    val source: String = TOMTOM,
+) {
+    companion object {
+        /** A section the backend sends without a source is TomTom's. */
+        const val TOMTOM = "tomtom"
+    }
+}
 
 /**
  * The traffic on the route being followed: its slowed stretches (TomTom's, and the drivers' own

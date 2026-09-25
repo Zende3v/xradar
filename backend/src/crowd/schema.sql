@@ -123,8 +123,13 @@ CREATE TABLE IF NOT EXISTS crowd.bug_report (
     platform text,
     app_version text,
     os_version text,
-    device_model text
+    device_model text,
+    -- "navigation" only: the route's engine and map, and the trip in progress or the last one
+    -- (destination and route included), as the app attached them (D7.4).
+    context jsonb
 );
+-- Added after the table existed: an older database gets the column here.
+ALTER TABLE crowd.bug_report ADD COLUMN IF NOT EXISTS context jsonb;
 CREATE INDEX IF NOT EXISTS bug_report_recent ON crowd.bug_report (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS bug_report_author ON crowd.bug_report (account_id, created_at);
 

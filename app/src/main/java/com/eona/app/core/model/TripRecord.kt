@@ -41,6 +41,53 @@ data class TripGroupResult(val code: String, val myRank: Int?, val ranking: List
 }
 
 /**
+ * The ETA the dock showed at one point of the trip: [at] 0, 25, 50 or 75 % of the way, the moment
+ * ([shownAt]) and the arrival announced ([arrivalAt]), in epoch millis, and the seconds of pauses
+ * and uncertain stops before it (a stop still running then is not counted).
+ */
+data class EtaCheck(
+    val at: Int,
+    val shownAt: Long,
+    val arrivalAt: Long,
+    val pausedBefore: Int,
+    val uncertainBefore: Int,
+)
+
+/**
+ * What a trip tells about the ETA and the routes (D1.7 of the Valhalla plan), sent with it; no
+ * coordinates. Null for a trip recorded before these measures. Same fields as iOS and the backend.
+ */
+data class TripMeasure(
+    /** Ended by reaching the destination, not stopped on the way. */
+    val arrived: Boolean,
+    /** When the driver first joined the route (epoch millis); null when they never did. */
+    val departedAt: Long?,
+    /** The departure was chosen by hand, not the driver's position. */
+    val manualStart: Boolean,
+    /** The distance of the route in force at [departedAt]. */
+    val plannedMeters: Int?,
+    /** Long stops on a clear road (pauses), and those where the traffic was not known. */
+    val pausedSeconds: Int,
+    val uncertainSeconds: Int,
+    val etaChecks: List<EtaCheck>,
+    /** New routes after leaving the route, and switches to a faster one. */
+    val recalcCount: Int,
+    val fasterCount: Int,
+    /** The engines of the routes used, in the order met ("unknown" for a route that does not say). */
+    val engines: List<String>,
+    /** The map of the route in force at [departedAt]. */
+    val mapVersion: String?,
+    /** "1.0.1 (4)", "android", and how the ETA was computed ("proportional"). */
+    val appVersion: String,
+    val platform: String,
+    val etaMode: String,
+    /** Where the route's traffic came from during the trip: "tomtom", "crowd". */
+    val trafficSources: List<String>,
+    /** The destination changed during this trip; excluded from the ETA report (P1.6). */
+    val retargeted: Boolean = false,
+)
+
+/**
  * A completed trip in the history. Stores raw values; labels are derived for display. Pure
  * model (JVM time only), same fields and labels as the iOS app.
  */
@@ -63,6 +110,8 @@ data class TripRecord(
     val events: Map<AlertType, Int> = emptyMap(),
     /** Driven in a group: the frozen ranking (kept on the phone only). */
     val group: TripGroupResult? = null,
+    /** The ETA and route measures; null for a trip recorded before them. */
+    val measure: TripMeasure? = null,
 ) {
     val distanceLabel: String
         get() {

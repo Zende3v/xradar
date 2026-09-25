@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import { crowdAlong, crowdExtraS, withCrowd } from '../traffic/crowd.js';
 import { trafficAlong } from '../traffic/tomtom.js';
 import { gridOf, headingAt, measure, samplesBetween, share, sliceOf } from './geometry.js';
-import { ORS_AVOID, normalizeOrsFeature, postORS, square } from './ors.js';
+import { ORS_AVOID, normalizeOrsFeature, orsMapVersion, postORS, square } from './ors.js';
 
 // Around a jam, ORS is kept off squares this wide on each side of the route...
 const AVOID_HALF_SIDE_M = 60;
@@ -175,7 +175,7 @@ export function worthChecking(sections, totalM, aheadM) {
  * TomTom's alone.
  */
 async function timeRoute(points, path = measure(points)) {
-  const traffic = await trafficAlong(points);
+  const traffic = await trafficAlong(points, { use: 'faster' });
   const crowd = await crowdAlong(path).catch((e) => {
     console.warn('[faster] drivers\' jams unavailable —', String(e.message || e));
     return [];
@@ -187,7 +187,7 @@ async function timeRoute(points, path = measure(points)) {
 
 /**
  * The winning detour, then ORS's route from the rejoin point to the destination (the same road
- * as the route's rest): one route to follow, with its steps.
+ * as the route's rest): one route to follow, with its steps, its engine and its map.
  */
 async function withRest(detour, rest, heading, features) {
   const [from, to] = [rest[0], rest[rest.length - 1]];
@@ -206,6 +206,9 @@ async function withRest(detour, rest, heading, features) {
     coordinates: detour.coordinates.concat(route.coordinates.slice(1)),
     // One trip: no "arrive" at the rejoin point, no "depart" from it.
     steps: detour.steps.filter((step) => step.type !== 'arrive').concat(route.steps.filter((step) => step.type !== 'depart')),
+    // The detour is what changes: its engine and map describe the answer (spec §1).
+    engine: detour.engine,
+    mapVersion: detour.mapVersion ?? route.mapVersion ?? null,
   };
 }
 
@@ -260,7 +263,7 @@ async function orsRoutes(label, body) {
       return [];
     }
     const json = await r.json();
-    return (json.features ?? []).map(normalizeOrsFeature);
+    return (json.features ?? []).map((feature) => normalizeOrsFeature(feature, orsMapVersion(json)));
   } catch (e) {
     console.warn(`[faster] ORS ${label} —`, String(e.message || e));
     return [];

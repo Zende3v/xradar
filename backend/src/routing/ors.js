@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { config } from '../config.js';
+import { stateFile } from '../state-file.js';
 
 /** The app's avoid options → ORS avoid_features. */
 export const ORS_AVOID = { tolls: 'tollways', highways: 'highways', ferries: 'ferries' };
@@ -10,7 +12,37 @@ export const ORS_AVOID = { tolls: 'tollways', highways: 'highways', ferries: 'fe
  * share. A key ORS refuses (quota spent, too many calls at once) is set aside and the next key
  * takes over until it is worth trying again — the spare only serves while the first is blocked.
  */
-const keys = config.orsApiKeys.map((key) => ({ key, day: '', used: 0, blockedUntil: 0, warned: false }));
+const keys = config.orsApiKeys.map((key) => ({ key, id: fingerprint(key), day: '', used: 0, blockedUntil: 0, warned: false }));
+
+/** A key's name on disk: a short hash, never the key itself. */
+function fingerprint(key) {
+  return createHash('sha256').update(key).digest('hex').slice(0, 12);
+}
+
+/**
+ * What each key spent today and until when it is set aside, on disk (config.orsUsageFile): a
+ * restart hands neither the day's calls nor a key ORS refused back to the budget.
+ */
+const usage = stateFile(config.orsUsageFile, 'route', () => ({
+  keys: keys.map(({ id, day, used, blockedUntil }) => ({ id, day, used, blockedUntil })),
+}));
+let restored = false;
+
+/** The saved counters, taken back once before anything is counted: today's (UTC) only. */
+function restore() {
+  if (restored) return;
+  restored = true;
+  const saved = usage.read();
+  const list = Array.isArray(saved?.keys) ? saved.keys : [];
+  const day = utcDay();
+  for (const k of keys) {
+    const entry = list.find((e) => e?.id === k.id);
+    if (!entry || entry.day !== day) continue;
+    k.day = day;
+    k.used = Math.max(0, Math.round(Number(entry.used) || 0));
+    k.blockedUntil = Number(entry.blockedUntil) > Date.now() ? Number(entry.blockedUntil) : 0;
+  }
+}
 
 /** A request that was never sent: postORS answers with it when no key can serve. */
 const SPENT = {
@@ -25,6 +57,7 @@ const utcDay = () => new Date().toISOString().slice(0, 10);
 
 /** The key to use now: the first one with budget left and not set aside. Null when none can. */
 function pick() {
+  restore();
   const day = utcDay();
   const now = Date.now();
   for (const k of keys) {
@@ -60,12 +93,16 @@ function blockMs(status, detail) {
   return config.orsKeyBlockMs; // refused for another reason (key disabled, wrong plan)
 }
 
-/** One call with one key. A refusal comes back readable, its body already in hand. */
+/**
+ * One call with one key. A refusal comes back readable, its body already in hand. Past
+ * config.orsTimeoutMs (answer and body together) the call is dropped and this throws.
+ */
 async function send(key, body) {
   const r = await fetch(`${config.orsUrl.replace(/\/$/, '')}/v2/directions/driving-car/geojson`, {
     method: 'POST',
     headers: { Authorization: key, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(config.orsTimeoutMs),
   });
   if (r.ok) return r;
   const detail = await r.text().catch(() => '');
@@ -80,6 +117,7 @@ async function send(key, body) {
 
 /** How many keys there are, how many can serve now, and the routes left today, for /health. */
 export function orsKeysMeta() {
+  restore();
   const day = utcDay();
   const now = Date.now();
   const left = keys.map((k) => (k.day === day ? Math.max(0, config.orsDailyBudget - k.used) : config.orsDailyBudget));
@@ -89,6 +127,23 @@ export function orsKeysMeta() {
     ready: usable.filter((n) => n > 0).length,
     // What can really be asked now: a key set aside counts for nothing until it comes back.
     budgetLeft: usable.reduce((a, b) => a + b, 0),
+  };
+}
+
+/**
+ * What each key spent today (UTC), in the keys' order, and until when ORS set it aside (ISO,
+ * null when it serves), for /health. Survives a restart.
+ */
+export function orsUsage() {
+  restore();
+  const day = utcDay();
+  const now = Date.now();
+  return {
+    day,
+    keys: keys.map((k) => ({
+      used: k.day === day ? k.used : 0,
+      blockedUntil: k.blockedUntil > now ? new Date(k.blockedUntil).toISOString() : null,
+    })),
   };
 }
 
@@ -103,11 +158,13 @@ export async function postORS(body) {
     const state = pick();
     if (!state) return refusal;
     state.used += 1;
+    usage.touch();
     const r = await send(state.key, body);
     if (r.ok) return r;
     const pause = blockMs(r.status, r.detail || '');
     if (!pause) return r; // the call itself went wrong: another key would fail the same way
     state.blockedUntil = Date.now() + pause;
+    usage.touch();
     console.warn(
       `[route] clé ORS n°${keys.indexOf(state) + 1} écartée ${Math.round(pause / 60000)} min (HTTP ${r.status}) — passage à la suivante`,
     );
@@ -128,8 +185,17 @@ export function square(lat, lon, halfM) {
   ]];
 }
 
-/** One ORS feature as the app's route: [lon, lat] coordinates and OSRM-style steps. */
-export function normalizeOrsFeature(feature) {
+/** The date of the map ORS routed on (`metadata.engine.graph_date` of its answer), or null. */
+export function orsMapVersion(json) {
+  const date = json?.metadata?.engine?.graph_date;
+  return typeof date === 'string' && date ? date.slice(0, 40) : null;
+}
+
+/**
+ * One ORS feature as the app's route: [lon, lat] coordinates and OSRM-style steps, with the
+ * engine that drew it and its map ([mapVersion]: orsMapVersion of the whole answer).
+ */
+export function normalizeOrsFeature(feature, mapVersion = null) {
   const summary = feature.properties.summary || {};
   const coordinates = feature.geometry.coordinates; // [[lon, lat], ...]
   return {
@@ -137,6 +203,8 @@ export function normalizeOrsFeature(feature) {
     durationS: Math.round(summary.duration ?? 0),
     coordinates,
     steps: normalizeOrsSteps(feature.properties.segments || [], coordinates),
+    engine: 'ors',
+    mapVersion,
   };
 }
 

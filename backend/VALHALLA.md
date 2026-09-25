@@ -1,5 +1,8 @@
 # Remplacer ORS par un moteur Valhalla auto-hébergé
 
+> **Remplacé** par [VALHALLA-DECISIONS.md](VALHALLA-DECISIONS.md) et [PLAN-VALHALLA.md](PLAN-VALHALLA.md).
+> Gardé pour l'historique.
+
 Ce qu'un moteur Valhalla doit prendre en charge pour remplacer OpenRouteService (ORS) sans rien
 perdre de ce qu'EONA fait aujourd'hui. Rien n'est codé : c'est la liste des conditions.
 

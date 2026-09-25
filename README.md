@@ -28,12 +28,15 @@ App Android ──HTTPS──▶ Cloudflare Tunnel ──▶ backend Node :8090 
    │                                              │
    ├─ tuiles carte : Stadia Maps (direct)          ├─ PostgreSQL/PostGIS « eona »
    └─ adresses : api-adresse.data.gouv.fr          │    ├─ schéma signs  : routes + panneaux + services autour (rebuild hebdo depuis OSM)
-                                                   │    └─ schéma crowd  : signalements + corrections de limite
+                                                   │    ├─ schéma crowd  : signalements + corrections de limite
+                                                   │    └─ schéma routing : journal de routage + banc (mesures phase 1 Valhalla)
                                                    ├─ data/accounts.json : comptes, stats, parrainage
+                                                   ├─ data/ors-usage.json, tomtom-usage.json : compteurs du jour ORS / TomTom
                                                    ├─ data/avatars/      : photos de profil
                                                    ├─ data.gouv : radars fixes (téléchargé au démarrage + chaque jour)
                                                    ├─ prix-carburants : flux officiel, prix + horaires (toutes les 10 min)
-                                                   └─ OpenRouteService (si ORS_API_KEY) sinon OSRM public : itinéraires
+                                                   ├─ OpenRouteService (si ORS_API_KEY) sinon OSRM public : itinéraires
+                                                   └─ TomTom : trafic sur le trajet, évitement des bouchons, banc
 ```
 
 Présence (app ouverte, en trajet ou non ; **aucune position**) : mémoire seulement (90 s), comptée dans `/health` (`live.online`, `live.inTrip`), montrée à personne. Sessions (tokens) : mémoire seulement → un redémarrage déconnecte, l'app se reconnecte seule par son `deviceId` (compte rattaché au téléphone).
@@ -48,14 +51,20 @@ backend/
 │  ├─ config.js           TOUTE la config (env vars ci-dessous)
 │  ├─ db.js               pool PostgreSQL (socket local, auth peer)
 │  ├─ crowd/schema.sql    schéma crowd, appliqué à chaque démarrage (idempotent)
-│  ├─ accounts/ live/ radars/ routing/ fuel/
+│  ├─ routing/            itinéraires : engine.js (ORS/OSRM), faster.js, log.js (journal), bench.js (banc),
+│  │                      schema.sql (schéma routing, appliqué à chaque démarrage)
+│  ├─ traffic/            TomTom (tomtom.js), compteur TomTom (budget.js), bouchons des conducteurs
+│  ├─ accounts/ live/ radars/ fuel/
 │  ├─ places/             services autour (PostGIS) + horaires (hours.js, lib opening_hours)
 │  ├─ reports/            signalements (anti-doublon, votes, score.js)
 │  ├─ speedlimits/        corrections de limitation
 │  └─ signs/postgis.js    limite sous le conducteur, panneaux du trajet
 ├─ signalisation/         pipeline OSM → PostGIS (import.sh, style.lua, build.sql, checks.sql, publish.sql, rebuild.sh)
+├─ bench/trajets.json     50 trajets du banc (coordonnées BAN)
 ├─ bin/eona-accounts.js CLI admin comptes
-├─ deploy/                unit systemd + setup-admin.sh
+├─ bin/eona-eta-report.js rapport ETA (lecture seule)
+├─ bin/eona-bench-run.sh  lance un créneau du banc (appelé par cron)
+├─ deploy/                unit systemd + setup-admin.sh + eona-bench.cron (pas installé par défaut)
 └─ scripts/apk-server.js  serveur temporaire de téléchargement APK
 app/                      app Android
 ```
@@ -94,7 +103,7 @@ mkdir -p /opt/eona-backend/data/avatars /var/lib/eona-signs
 Depuis le PC (dossier du repo) :
 
 ```bash
-scp -r backend/src backend/bin backend/deploy backend/signalisation backend/scripts backend/package.json backend/package-lock.json root@193.168.146.56:/opt/eona-backend/
+scp -r backend/src backend/bin backend/bench backend/deploy backend/signalisation backend/scripts backend/package.json backend/package-lock.json root@193.168.146.56:/opt/eona-backend/
 ```
 
 Sur le VPS :
@@ -165,7 +174,10 @@ systemctl daemon-reload && systemctl restart eona-backend
 | `ORS_API_KEY` / `ORS_URL` | itinéraires OpenRouteService | absent = OSRM public |
 | `ORS_API_KEY_2` (et `_3`) | clé de secours : elle prend le relais dès que la précédente est refusée (quota du jour épuisé, trop d'appels d'un coup), jusqu'à minuit UTC | — |
 | `ORS_DAILY_BUDGET` | appels ORS par clé et par jour, sous le quota du plan gratuit (2000) | `1500` |
+| `ORS_USAGE_FILE` | compteurs du jour des clés ORS (clé nommée par un hash court, jamais en clair) | `./data/ors-usage.json` |
 | `OSRM_URL` | OSRM de repli | `https://router.project-osrm.org` |
+| `TOMTOM_USAGE_FILE` | compteur du jour TomTom, par usage | `./data/tomtom-usage.json` |
+| `BENCH_TRIPS_FILE` | trajets du banc | `./bench/trajets.json` |
 | `PGHOST` / `PGDATABASE` | base | `/var/run/postgresql` / `eona` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
 | `PUBLIC_BASE_URL` | base des URLs d'avatars (les anciennes en `ts.net` sont réécrites au chargement) | `https://api.lrda-mercuriale.uk` |
@@ -240,18 +252,19 @@ Depuis le PC, dossier du repo.
    ssh root@193.168.146.56 "rm -rf /opt/eona-backend/src"
    scp -r backend/src backend/package.json backend/package-lock.json root@193.168.146.56:/opt/eona-backend/
    ```
-   Pipeline signalisation modifié → envoyer aussi `backend/signalisation`.
+   Pipeline signalisation modifié → envoyer aussi `backend/signalisation`. Trajets du banc ou scripts
+   modifiés → aussi `backend/bench` et `backend/bin`.
 3. Sur le VPS :
    ```bash
    cd /opt/eona-backend
    npm ci --omit=dev                      # seulement si package.json a changé
-   chown -R eona:eona src node_modules package.json package-lock.json signalisation
+   chown -R eona:eona src node_modules package.json package-lock.json signalisation bench bin
    systemctl restart eona-backend
    curl -s http://127.0.0.1:8090/health
    journalctl -u eona-backend -n 30 --no-pager
    ```
 
-Schéma `crowd` modifié (`src/crowd/schema.sql`) → appliqué seul au redémarrage (idempotent, jamais de `DROP`).
+Schéma `crowd` modifié (`src/crowd/schema.sql`) → appliqué seul au redémarrage (idempotent, jamais de `DROP`). Pareil pour le schéma `routing` (`src/routing/schema.sql`).
 
 ### Instance de test (optionnel, avant la prod)
 
@@ -309,6 +322,8 @@ Sans `ALTER`, la base ne touche jamais `crowd` : signalements et corrections sur
 | Comptes, stats, parrainage | `data/accounts.json` | **OUI** |
 | Photos de profil | `data/avatars/` | oui |
 | Signalements + votes, corrections de limite + historique | PostGIS schéma `crowd` | **OUI** |
+| Journal de routage (90 j), mesures du banc | PostGIS schéma `routing` | oui (mesures phase 1) |
+| Compteurs du jour ORS / TomTom | `data/ors-usage.json`, `data/tomtom-usage.json` | non (repart à zéro chaque jour) |
 | Routes + panneaux | PostGIS schémas `signs`, `signs_prev` | non (rebuild) |
 | Extrait OSM | `/var/lib/eona-signs/france-latest.osm.pbf` | non (retéléchargé) |
 | Copies auto des comptes avant purge | `data/accounts.backup-<date>.json` | oui |
@@ -358,6 +373,8 @@ df -h / && free -h
 | `speedLimits` | `pending` / `validated` / `total` |
 | `signs.published` | `built_at` ≤ 8 jours, `roads` ~5,8 M, `signs` ~2 M ; `null` = base injoignable |
 | `routing.provider` | `ors` (clé présente) ou `osrm` |
+| `routing.usage` | `day` (UTC), `keys[]` : `used` (appels du jour), `blockedUntil` (clé écartée jusqu'à, sinon `null`) ; survit au redémarrage |
+| `traffic.tomtom` | `day` (UTC), `used`, `byUse` {`eta`, `faster`, `bench`, `other`}, `freeDailyQuota` 2500 ; survit au redémarrage |
 | `fuel.ready` / `lastError` | `true` / `null` |
 | `memoryMB` | ~180–400 |
 
@@ -372,6 +389,64 @@ SQL
 ```
 
 Mémoire au repos : backend ~180 Mo, PostgreSQL ~1 Go de cache. Disque : `signs` ~4,7 Go (x2 avec `signs_prev`), pic ~8 Go en plus pendant un rebuild.
+
+---
+
+## 7 bis. Mesures du routage (phase 1 Valhalla)
+
+Plan : `backend/PLAN-VALHALLA.md`, décisions : `backend/VALHALLA-DECISIONS.md`. Rien ne change pour les conducteurs.
+
+**Compteurs** ORS et TomTom : `/health` (§7), jour UTC, fichiers `data/ors-usage.json` et `data/tomtom-usage.json` (écriture ~1 s après chaque appel, fichier temporaire renommé). Un redémarrage garde le jour en cours. Heure de remise à zéro du quota TomTom : **à vérifier**.
+
+**Délais** : ORS et OSRM coupés à 10 s (`orsTimeoutMs`, `osrmTimeoutMs` dans `config.js`, à calibrer en phase 2 ; les apps abandonnent à 15 s) → 502.
+
+**Journal de routage** : `routing.route_log`, une ligne par réponse de `/api/route` (cache et erreurs compris ; pas les 401) et de `/faster`. Ni compte ni coordonnée. Purge > 90 jours (`routeLogKeepDays`), au plus une fois par heure.
+
+```bash
+runuser -u eona -- psql -d eona <<'SQL'
+-- latence p50 / p95 et erreurs par jour
+SELECT at::date, kind, count(*), percentile_cont(ARRAY[0.5, 0.95]) WITHIN GROUP (ORDER BY latency_ms) AS p50_p95,
+       count(*) FILTER (WHERE status >= 400) AS erreurs, count(*) FILTER (WHERE uturn_start) AS demi_tours
+FROM routing.route_log WHERE cached IS NOT TRUE GROUP BY 1, 2 ORDER BY 1 DESC, 2;
+SQL
+```
+
+**Banc** (D1.7) : 50 trajets fixes (`backend/bench/trajets.json`, coordonnées Base Adresse Nationale). Tourne **dans** le backend (mêmes clés ORS, même compteur TomTom, même base). Un passage = 6 trajets suivants d'un curseur tournant (`routing.bench_state`) ; par trajet : notre route (même moteur que `/api/route`), son temps TomTom avec trafic, la meilleure route TomTom, km par classe de route (`signs.road.highway`, échantillon tous les 50 m, route à moins de 30 m). Résultats : `routing.bench_run`. Part TomTom du banc : 50 requêtes par jour (`benchTomtomDailyMax`), passage arrêté avant.
+
+⚠️ Nombre de trajets : garder N tel que N / pgcd(N, 6) ne soit pas multiple de 4 (50 : 25, ok ; 48 ou 52 : non). Sinon un trajet retombe toujours sur les mêmes créneaux.
+
+Installer le cron (à la main, après accord d'Arthur) :
+
+```bash
+timedatectl | grep 'Time zone'                                   # doit dire Europe/Paris (heures du cron = heure système)
+cd /opt/eona-backend
+bash bin/eona-bench-run.sh manuel                                # un passage sans créneau : JSON de résumé, jeton jamais affiché
+install -m 644 deploy/eona-bench.cron /etc/cron.d/eona-bench     # nom sans point, sinon cron l'ignore
+tail -f /var/log/eona-bench.log
+```
+
+Créneaux (P1.2) : 08:00 matin, 12:30 midi, 18:00 soir, 23:00 nuit. Les changer : dans `deploy/eona-bench.cron` seulement, puis réinstaller. Retirer : `rm /etc/cron.d/eona-bench`.
+
+Lire : `GET /api/admin/bench/runs?since=…` (API-WEBAPP.md §6 ter) ou :
+
+```bash
+runuser -u eona -- psql -d eona -c "SELECT at, slot, trip_id, ok, our_tomtom_s - best_tomtom_s AS ecart_s, uturn_start, error FROM routing.bench_run ORDER BY at DESC LIMIT 30"
+```
+
+**Rapport ETA** (D1.2 à D1.6), lecture seule, n'affiche ni libellé ni id ni compte :
+
+```bash
+cd /opt/eona-backend
+node bin/eona-eta-report.js data/accounts.json          # tableau
+node bin/eona-eta-report.js data/accounts.json --json   # JSON
+```
+
+- Gardés : `arrived` vrai, départ pas à la main, `departedAt` et `etaChecks` présents. Exclus comptés par raison.
+- Erreur = arrivée réelle (pauses après le relevé retirées) − arrivée affichée ; > 0 = arrivé plus tard qu'annoncé. Bonne si |erreur| ≤ min(8 min, max(2 min, 10 % du temps restant réel)).
+- Deux variantes : arrêts incertains retirés comme des pauses / gardés comme conduite.
+- Tranches : durée conduite (< 20, 20-60, > 60 min) × pointe / hors pointe (lun-ven 7-10 h et 16-20 h, sam 10-19 h, heure de Paris ; constante en tête du script), mode d'ETA, moteur, version. Par relevé 0/25/50/75 % : n, taux de bonnes, intervalle de Wilson 95 %, erreur médiane, biais médian.
+
+**Checklist de l'équipe** : `backend/CHECKLIST-TRAJETS.md`.
 
 ---
 
@@ -518,12 +593,14 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 | GET | `/health` | état complet (§7) |
 | POST | `/api/accounts/auth` `/guest` `/register` `/login` `/logout` `/verify` `/resend-verify` `/forgot` `/reset` | login : `identifier` (pseudo ou email) + `deviceId` |
 | GET/PATCH/DELETE | `/api/accounts/me` · GET `/api/accounts/username-available` | Bearer ; GET : `limits` `{reportsPerDay, reportsToday, tripsPerDay, tripsToday}` (null client/admin), `canChangeUsername`, `usernameChangeableAt` ; PATCH `{username?, avatarUrl?}` : photo client/admin, **pseudo seulement client avec accès actif** (403 sinon), 1 fois / 7 j (429 + `nextAt`), libre (409 `username taken`), ni invalide ni réservé (400 ; admin, support, moderateur…, tout « eona… », comparés sans `_ .` ni chiffres) ; l'ancien pseudo reste réservé 30 j à son titulaire ; username-available (Bearer facultatif : son ancien pseudo compte libre) ; DELETE : suppression définitive par le titulaire (compte, stats, trajets, sessions, présence, avatar ; signalements et propositions de limitation gardés, anonymisés) |
-| GET/POST | `/api/accounts/me/stats` `/me/trips` `/me/drive` · `/api/accounts/referrals` | Bearer (referrals : admin) ; trajet : `plannedSeconds` (estimation, null inconnue), `stops` / `stoppedSeconds` (arrêts ≥ 10 s), `events` {radarFixed, radarMobile, controlZone, camera, hazard, accident, roadwork, radarCar : nombre} |
+| GET/POST | `/api/accounts/me/stats` `/me/trips` `/me/drive` · `/api/accounts/referrals` | Bearer (referrals : admin) ; trajet : `plannedSeconds` (estimation, null inconnue), `stops` / `stoppedSeconds` (arrêts ≥ 10 s), `events` {radarFixed, radarMobile, controlZone, camera, hazard, accident, roadwork, radarCar : nombre} ; mesures phase 1 (facultatives, apps récentes) : `arrived`, `departedAt`, `manualStart`, `plannedMeters`, `pausedSeconds`, `uncertainSeconds`, `etaChecks` [{at 0/25/50/75, shownAt, arrivalAt, pausedBefore, uncertainBefore}], `recalcCount`, `fasterCount`, `engines`, `mapVersion`, `appVersion`, `platform`, `etaMode`, `trafficSources` (détail API-WEBAPP.md §5) |
 | POST | `/api/accounts/avatar` | Bearer, base64 ≤ 4 Mo |
 | GET/POST/PATCH/DELETE | `/api/admin/accounts[/:id]` | ADMIN_TOKEN |
 | GET | `/api/radars/near` `/bbox` · POST `/api/radars/route` | radars fixes |
-| GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways,traffic` | compte obligatoire (401), restreint 403, limite du jour 429 ; ORS ou OSRM ; `traffic` (ORS, anciennes versions des apps seulement : iOS et Android passent par `/api/route/faster`) contourne les bouchons signalés en direct (carré de 500 m autour de chacun, 100 max, sauf à moins de 500 m du départ ou de l'arrivée ; recalcul sans eux si l'itinéraire devient impossible) |
+| GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways,traffic` | compte obligatoire (401), restreint 403, limite du jour 429 ; ORS ou OSRM (`engine` : `ors`/`osrm`, `mapVersion` : date de carte ORS ou null) ; chaque réponse → `routing.route_log` ; `traffic` (ORS, anciennes versions des apps seulement : iOS et Android passent par `/api/route/faster`) contourne les bouchons signalés en direct (carré de 500 m autour de chacun, 100 max, sauf à moins de 500 m du départ ou de l'arrivée ; recalcul sans eux si l'itinéraire devient impossible) |
 | POST | `/api/route/faster {coordinates, avoid?, sinceRerouteS?}` | Bearer, mêmes refus que `/api/route` (sans compter de trajet) ; évitement intelligent des bouchons sur **le reste** du trajet (du conducteur à l'arrivée) : TomTom chronomètre le trajet avec le trafic, les ralentissements proches (< 1 km) forment un bouchon, gardé s'il coûte ≥ 60 s (ou route fermée) ; rien n'est cherché si leur total ne peut pas atteindre le gain minimum. Sinon **détour local** (limites ORS : alternatives ≤ 100 km, zones évitées ≤ 150 km) : bouchons commençant à ≤ 60 km, ORS trace des variantes du conducteur jusqu'à 5 km après le dernier (≤ 85 km le long du trajet ; cap conservé au départ et au point de retour) — autour de tous, autour du pire, ses alternatives —, suivies du même reste de trajet ; les doublons, celles qui traversent encore tous les bouchons (ou une fermeture) et celles plus lentes sans trafic que le trajet de plus que le retard des bouchons sont écartés ; TomTom chronomètre les 3 meilleures en entier. `better` (itinéraire au format `/api/route` : détour + reste recalculé par ORS, `durationS` = temps TomTom avec trafic, `gainS`, `closed`) seulement si le gain ≥ 3 min et ≥ 5 % du temps restant, ou toujours pour contourner une **route fermée** (la variante la plus rapide qui l'évite) ; aucune recherche < 5 min après un recalcul trafic, gain doublé jusqu'à 15 min (anti A→B→A). Sinon `better: null` et `reason`. 503 sans clé ORS ou TomTom |
+| POST | `/api/bugs {category, description, steps?, app, context?}` · GET/PATCH (admin) | « Signaler un bug » ; `context` (catégorie `navigation` : moteur, carte, trajet en cours ou dernier avec destination et route ≤ 600 points) ; corps ≤ 256 ko |
+| POST/GET | `/api/admin/bench/run?slot=` · `/api/admin/bench/runs?since=&limit=` | admin ; banc (§7 bis) |
 | GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm[&limit][&pool=1]` | plus proches d'abord (20, `pool=1` : 60) ; `hours` (état, créneaux du jour, prochain changement), `charging`, `parking`, `stars`, `brand` ; station : prix + horaires officiels |
 | POST | `/api/live/presence {inTrip}` | Bearer ; app ouverte (~30 s), compteur seulement. Anciennes apps : `/position` compte la présence (position ignorée), `/near` renvoie personne |
 | GET | `/api/signs/limit?lat&lon&bearing&way` | `{v, way}` |

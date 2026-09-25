@@ -295,7 +295,16 @@ accountRouter.get('/me/stats', (req, res) => {
   res.json({ ...stats, trust: trustOf(stats.totals) });
 });
 
-/** POST /api/accounts/me/trips  { id, startedAt, toLabel, distanceMeters, durationSeconds, alertsCount, topSpeedKmh, plannedSeconds?, stops?, stoppedSeconds?, events? } */
+/**
+ * POST /api/accounts/me/trips  { id, startedAt, toLabel, distanceMeters, durationSeconds, alertsCount, topSpeedKmh,
+ *   plannedSeconds?, stops?, stoppedSeconds?, events?,
+ *   arrived?, departedAt?, manualStart?, retargeted?, plannedMeters?, pausedSeconds?, uncertainSeconds?,
+ *   etaChecks?: [{ at: 0|25|50|75, shownAt, arrivalAt, pausedBefore, uncertainBefore }], recalcCount?, fasterCount?,
+ *   engines?, mapVersion?, appVersion?, platform?, etaMode?, trafficSources? }
+ * The second part is the ETA and routing measures (D1.7). An app before them sends none: its trip
+ * is kept as before. One of them sent, all are kept (a missing one at its default), checked, and
+ * come back in GET /me/stats; never a coordinate. See accounts/store.js (tripMeasuresShape).
+ */
 accountRouter.post('/me/trips', (req, res) => {
   const account = authAccount(req);
   if (!account) return res.status(401).json({ error: 'unauthorized' });

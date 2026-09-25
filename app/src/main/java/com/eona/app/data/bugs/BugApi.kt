@@ -2,12 +2,15 @@ package com.eona.app.data.bugs
 
 import android.os.Build
 import com.eona.app.BuildConfig
+import com.eona.app.core.geo.LineSimplifier
+import com.eona.app.core.model.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
@@ -57,14 +60,24 @@ class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
-    /** The account (from [token]) is the author: nothing else about the driver goes. */
-    suspend fun send(category: BugCategory, description: String, steps: String?, token: String?): BugSendOutcome = withContext(Dispatchers.IO) {
+    /**
+     * The account (from [token]) is the author: nothing else about the driver goes, but the
+     * trip's [context] of a navigation report.
+     */
+    suspend fun send(
+        category: BugCategory,
+        description: String,
+        steps: String?,
+        token: String?,
+        context: BugContext? = null,
+    ): BugSendOutcome = withContext(Dispatchers.IO) {
         val app = BugAppDetails.current()
         val body = JSONObject()
             .put("category", category.wire)
             .put("description", description)
             .put("app", JSONObject().put("platform", app.platform).put("version", app.version).put("os", app.os).put("model", app.model))
         if (!steps.isNullOrBlank()) body.put("steps", steps)
+        if (context != null) body.put("context", contextJson(context))
         runCatching {
             client.newCall(request("/api/bugs", token).post(body.toString().toRequestBody(JSON)).build()).execute().use { r ->
                 when {
@@ -96,6 +109,34 @@ class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         runCatching {
             client.newCall(request("/api/bugs/${URLEncoder.encode(id, "UTF-8")}", token).patch(body).build()).execute().use { it.isSuccessful }
         }.getOrDefault(false)
+    }
+
+    /** The context as the backend reads it: nulls said, the route thinned to [ROUTE_MAX_POINTS]. */
+    private fun contextJson(c: BugContext): JSONObject {
+        val trip = c.trip?.let { t ->
+            JSONObject()
+                .put("inProgress", t.inProgress)
+                .put("toLabel", t.toLabel ?: JSONObject.NULL)
+                .put("startedAt", t.startedAt ?: JSONObject.NULL)
+                .put("departedAt", t.departedAt ?: JSONObject.NULL)
+                .put("distanceMeters", t.distanceMeters ?: JSONObject.NULL)
+                .put("plannedMeters", t.plannedMeters ?: JSONObject.NULL)
+                .put("destination", t.destination?.let { JSONObject().put("lat", it.lat).put("lon", it.lon) } ?: JSONObject.NULL)
+                .put("route", t.route?.let(::routeJson) ?: JSONObject.NULL)
+        }
+        return JSONObject()
+            .put("engine", c.engine ?: JSONObject.NULL)
+            .put("mapVersion", c.mapVersion ?: JSONObject.NULL)
+            .put("trip", trip ?: JSONObject.NULL)
+    }
+
+    /** [lon, lat] pairs, to the metre: small enough to go whole with the report. */
+    private fun routeJson(points: List<GeoPoint>): JSONArray {
+        val pairs = JSONArray()
+        LineSimplifier.simplify(points, ROUTE_MAX_POINTS).forEach { p ->
+            pairs.put(JSONArray().put(Math.round(p.lon * 1e5) / 1e5).put(Math.round(p.lat * 1e5) / 1e5))
+        }
+        return pairs
     }
 
     private fun request(path: String, token: String?) = Request.Builder()
@@ -130,5 +171,7 @@ class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private companion object {
         val JSON = "application/json; charset=utf-8".toMediaType()
+        /** A navigation report's route goes with this many points at most (the backend's limit). */
+        const val ROUTE_MAX_POINTS = 600
     }
 }

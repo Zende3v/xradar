@@ -54,6 +54,30 @@ export const config = {
   orsKeyPauseMs: 60 * 1000,
   orsKeyBlockMs: 60 * MIN,
   orsUrl: process.env.ORS_URL || 'https://api.openrouteservice.org',
+  // What each ORS key spent today, kept on disk: a restart hands neither the day's calls nor a key
+  // set aside back to the budget.
+  orsUsageFile: process.env.ORS_USAGE_FILE || './data/ors-usage.json',
+  // An ORS or OSRM call still unanswered after this is dropped: the apps give up on a route after
+  // 15 s. 10 s for now, to calibrate in phase 2 (shadow mode, PLAN-VALHALLA.md).
+  orsTimeoutMs: 10 * 1000,
+  osrmTimeoutMs: 10 * 1000,
+
+  // The route log (schema routing, routing/log.js): one line per /api/route and /faster answer,
+  // no account, no coordinates, kept this many days.
+  routeLogKeepDays: 90,
+  // The bench (routing/bench.js, D1.7): fixed France trips (benchTripsFile), benchTripsPerRun per
+  // run, 4 runs a day (deploy/eona-bench.cron). A trip costs 2 TomTom requests; a run stops once
+  // the bench spent benchTomtomDailyMax of them today.
+  benchTripsFile: process.env.BENCH_TRIPS_FILE || './bench/trajets.json',
+  benchTripsPerRun: 6,
+  benchTomtomDailyMax: 50,
+  // Km per road class along a bench route: the road under a sample every benchRoadStepM metres
+  // (longer routes: benchRoadMaxSamples samples at most), found within signRoadMaxDistM.
+  benchRoadStepM: 50,
+  benchRoadMaxSamples: 20000,
+  // The OSM classes counted as minor roads (P1.3). The bench keeps km per class: this can change
+  // without measuring again.
+  benchMinorRoadClasses: ['unclassified', 'residential', 'living_street', 'service'],
 
   // TomTom Traffic on the route being followed (key from the service environment, never versioned).
   tomtomApiKey: process.env.TOMTOM_API_KEY || null,
@@ -65,6 +89,11 @@ export const config = {
   // Drivers on the same route share one answer this long.
   trafficCacheMs: 60 * 1000,
   trafficTimeoutMs: 12 * 1000,
+  // TomTom requests, counted per UTC day and by use (traffic/budget.js), kept on disk. The free
+  // plan allows about this many a day, every TomTom API together (tiles aside); when TomTom
+  // starts counting again is not documented (to check: TomTom console or support).
+  tomtomFreeDailyQuota: 2500,
+  tomtomUsageFile: process.env.TOMTOM_USAGE_FILE || './data/tomtom-usage.json',
   // Smart rerouting around traffic (POST /api/route/faster). A variant replaces the route only
   // when TomTom times it, with traffic, at least rerouteMinGainS and rerouteMinGainRatio of the
   // time left faster. No new route within rerouteCooldownS of the last one, and twice the gain

@@ -1,0 +1,9 @@
+# EONA banc (phase 1, D1.7) : 6 trajets par créneau, 4 créneaux par jour. PAS installé par défaut.
+# Installer : README.md, « Banc de routage ».
+# Horaires décidés par Arthur (P1.2) : matin 08:00, midi 12:30, soir 18:00, nuit 23:00. Rien entre
+# 03:00 et 05:00 (sauvegarde, reconstruction du dimanche). Ici seulement : l'heure est celle du
+# système (vérifier `timedatectl` : Europe/Paris).
+0 8 * * * root bash /opt/eona-backend/bin/eona-bench-run.sh matin >> /var/log/eona-bench.log 2>&1
+30 12 * * * root bash /opt/eona-backend/bin/eona-bench-run.sh midi >> /var/log/eona-bench.log 2>&1
+0 18 * * * root bash /opt/eona-backend/bin/eona-bench-run.sh soir >> /var/log/eona-bench.log 2>&1
+0 23 * * * root bash /opt/eona-backend/bin/eona-bench-run.sh nuit >> /var/log/eona-bench.log 2>&1

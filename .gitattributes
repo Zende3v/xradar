@@ -1,3 +1,4 @@
 *.sh text eol=lf
 *.sql text eol=lf
 *.lua text eol=lf
+*.cron text eol=lf

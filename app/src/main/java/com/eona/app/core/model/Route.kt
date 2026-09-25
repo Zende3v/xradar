@@ -6,4 +6,7 @@ data class Route(
     val distanceMeters: Int,
     val durationSeconds: Int,
     val steps: List<RouteStep> = emptyList(),
+    /** The engine that computed it ("ors", "osrm"…) and its map's date; null when the backend does not say. */
+    val engine: String? = null,
+    val mapVersion: String? = null,
 )

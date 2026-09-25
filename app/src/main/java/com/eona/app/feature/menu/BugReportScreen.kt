@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import com.eona.app.core.model.GpsSignal
 import com.eona.app.data.account.AccountRepository
 import com.eona.app.data.bugs.BugApi
 import com.eona.app.data.bugs.BugAppDetails
@@ -37,23 +39,30 @@ import com.eona.app.data.bugs.BugCategory
 import com.eona.app.data.bugs.BugReport
 import com.eona.app.data.bugs.BugSendOutcome
 import com.eona.app.data.bugs.BugStatus
+import com.eona.app.data.bugs.BugTripTrace
 import com.eona.app.designsystem.component.EonaButton
 import com.eona.app.designsystem.component.EonaChip
 import com.eona.app.designsystem.component.EonaDivider
 import com.eona.app.designsystem.component.EonaListGroup
+import com.eona.app.designsystem.component.EonaMessageState
 import com.eona.app.designsystem.component.EonaScreenScaffold
 import com.eona.app.designsystem.component.EonaText
+import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.designsystem.theme.EonaTheme
+import com.eona.app.location.LocationRepository
 import kotlinx.coroutines.launch
 
 private const val MIN_LENGTH = 10
 private const val MAX_LENGTH = 1000
 /** The backend's page (bugPage). */
 private const val PAGE_SIZE = 50
+/** The form opens below this speed only, in m/s: never while driving (D7.4). */
+private const val STOPPED_MPS = 1.5f
 
 /**
  * "Signaler un bug", like iOS: a category, what happened (required), how to see it again
- * (optional). The account is the author and the app adds its own details: nothing else is asked.
+ * (optional). The account is the author and the app adds its own details: nothing else is asked,
+ * and a "Navigation" report joins the trip ([BugTripTrace]). Only when the car is stopped.
  */
 @Composable
 fun BugReportRoute(onBack: () -> Unit) {
@@ -68,51 +77,67 @@ fun BugReportRoute(onBack: () -> Unit) {
     var steps by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    val fix by LocationRepository.location.collectAsState()
+    val signal by LocationRepository.signal.collectAsState()
+    // Driving: the form waits (what was typed stays) and opens by itself once the car stops. No
+    // fix, or no speed known: it opens.
+    val driving = signal != GpsSignal.Searching && signal != GpsSignal.Lost && (fix?.speedMps ?: 0f) >= STOPPED_MPS
 
     EonaScreenScaffold(title = "Signaler un bug", onBack = onBack) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(horizontal = spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(spacing.md),
-        ) {
-            Spacer(Modifier.height(spacing.xs))
-            Label("Catégorie")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(spacing.sm), verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                BugCategory.entries.forEach { c -> EonaChip(label = c.label, selected = c == category, onClick = { category = c }) }
-            }
-            Label("Que s'est-il passé ?")
-            Area(description, "Ce qui ne va pas, en quelques mots") { description = it }
-            Label("Comment le reproduire ?")
-            Area(steps, "Facultatif : ce que tu faisais juste avant") { steps = it }
-            EonaText(
-                "Envoyé avec ton compte et ${details.platform} ${details.os} · EONA ${details.version} · ${details.model}.",
-                style = EonaTheme.typography.footnote,
-                color = colors.textTertiary,
+        if (driving) {
+            EonaMessageState(
+                icon = EonaIcons.StopSign,
+                title = "Disponible à l'arrêt",
+                message = "Pour ta sécurité, le formulaire ne s'ouvre qu'à l'arrêt. Il s'affiche tout seul dès que la voiture s'arrête.",
             )
-            EonaButton(
-                text = if (sending) "Envoi…" else "Envoyer",
-                onClick = {
-                    sending = true
-                    message = null
-                    scope.launch {
-                        val outcome = api.send(category, description.trim(), steps.trim(), AccountRepository.token)
-                        sending = false
-                        when (outcome) {
-                            BugSendOutcome.Sent -> onBack()
-                            BugSendOutcome.TooMany -> message = "Beaucoup de rapports envoyés récemment : réessaie plus tard."
-                            BugSendOutcome.Failed -> message = "Envoi impossible pour l'instant. Vérifie ta connexion et réessaie."
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+                    .padding(horizontal = spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(spacing.md),
+            ) {
+                Spacer(Modifier.height(spacing.xs))
+                Label("Catégorie")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(spacing.sm), verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                    BugCategory.entries.forEach { c -> EonaChip(label = c.label, selected = c == category, onClick = { category = c }) }
+                }
+                Label("Que s'est-il passé ?")
+                Area(description, "Ce qui ne va pas, en quelques mots") { description = it }
+                Label("Comment le reproduire ?")
+                Area(steps, "Facultatif : ce que tu faisais juste avant") { steps = it }
+                EonaText(
+                    "Envoyé avec ton compte et ${details.platform} ${details.os} · EONA ${details.version} · ${details.model}." +
+                        if (category == BugCategory.Navigation) " Le trajet en cours (ou le dernier) et son itinéraire sont joints." else "",
+                    style = EonaTheme.typography.footnote,
+                    color = colors.textTertiary,
+                )
+                EonaButton(
+                    text = if (sending) "Envoi…" else "Envoyer",
+                    onClick = {
+                        sending = true
+                        message = null
+                        // Read here, where the trip is fed: the trip as it is at the moment of sending.
+                        val context = if (category == BugCategory.Navigation) BugTripTrace.context() else null
+                        scope.launch {
+                            val outcome = api.send(category, description.trim(), steps.trim(), AccountRepository.token, context)
+                            sending = false
+                            when (outcome) {
+                                BugSendOutcome.Sent -> onBack()
+                                BugSendOutcome.TooMany -> message = "Beaucoup de rapports envoyés récemment : réessaie plus tard."
+                                BugSendOutcome.Failed -> message = "Envoi impossible pour l'instant. Vérifie ta connexion et réessaie."
+                            }
                         }
-                    }
-                },
-                enabled = description.trim().length >= MIN_LENGTH && !sending,
-                loading = sending,
-                fillWidth = true,
-            )
-            message?.let { EonaText(it, style = EonaTheme.typography.footnote, color = colors.danger) }
-            Spacer(Modifier.height(spacing.xl))
+                    },
+                    enabled = description.trim().length >= MIN_LENGTH && !sending,
+                    loading = sending,
+                    fillWidth = true,
+                )
+                message?.let { EonaText(it, style = EonaTheme.typography.footnote, color = colors.danger) }
+                Spacer(Modifier.height(spacing.xl))
+            }
         }
     }
 }

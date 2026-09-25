@@ -77,6 +77,83 @@ function tripEventsShape(value) {
   return out;
 }
 
+// What a trip carries for the ETA and routing measures (D1.7, phase 1 of PLAN-VALHALLA.md). A
+// trip from an app before them has none of these keys and is kept as it always was.
+const TRIP_MEASURE_KEYS = ['arrived', 'departedAt', 'manualStart', 'retargeted', 'plannedMeters', 'pausedSeconds', 'uncertainSeconds',
+  'etaChecks', 'recalcCount', 'fasterCount', 'engines', 'mapVersion', 'appVersion', 'platform', 'etaMode', 'trafficSources'];
+const TRIP_ENGINES = ['ors', 'osrm', 'valhalla', 'unknown'];
+const TRIP_TRAFFIC_SOURCES = ['tomtom', 'crowd', 'datagouv', 'sytadin'];
+const TRIP_PLATFORMS = ['android', 'ios'];
+// The ETA is noted at departure and at 25, 50 and 75 % of the trip, once each.
+const TRIP_ETA_CHECKPOINTS = [0, 25, 50, 75];
+
+/** A whole number ≥ 0 when [value] is a finite number, [fallback] otherwise. */
+function wholeOr(value, fallback) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : fallback;
+}
+
+/** Short text (trimmed, 40 characters at most); null when not text or empty. */
+function shortText(value) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  return text ? text.slice(0, 40) : null;
+}
+
+/** The distinct words of [value] that [known] lists, in their order, 10 at most. */
+function knownWords(value, known) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((word) => known.includes(word)))].slice(0, 10);
+}
+
+/**
+ * The ETA shown along the trip: one complete snapshot per checkpoint (the first one given),
+ * in checkpoint order — { at, shownAt, arrivalAt, pausedBefore, uncertainBefore }.
+ */
+function etaChecksShape(value) {
+  const byAt = new Map();
+  for (const check of Array.isArray(value) ? value.slice(0, 10) : []) {
+    const at = check?.at;
+    if (!TRIP_ETA_CHECKPOINTS.includes(at) || byAt.has(at)) continue;
+    const shownAt = wholeOr(check.shownAt, 0);
+    const arrivalAt = wholeOr(check.arrivalAt, 0);
+    if (!shownAt || !arrivalAt) continue;
+    byAt.set(at, {
+      at,
+      shownAt,
+      arrivalAt,
+      pausedBefore: wholeOr(check.pausedBefore, 0),
+      uncertainBefore: wholeOr(check.uncertainBefore, 0),
+    });
+  }
+  return TRIP_ETA_CHECKPOINTS.filter((at) => byAt.has(at)).map((at) => byAt.get(at));
+}
+
+/** A trip's measures (D1.7), checked one by one; null for a trip from an app before them. */
+function tripMeasuresShape(trip) {
+  if (!TRIP_MEASURE_KEYS.some((key) => key in trip)) return null;
+  return {
+    // Ended at the destination (the auto-finish), not stopped by the driver.
+    arrived: trip.arrived === true,
+    // When the driver first joined the route (epoch ms).
+    departedAt: wholeOr(trip.departedAt, 0) || null,
+    manualStart: trip.manualStart === true,
+    retargeted: trip.retargeted === true,
+    plannedMeters: wholeOr(trip.plannedMeters, 0) || null,
+    // Long stops away from any known jam (pauses), and the ones the traffic could not tell.
+    pausedSeconds: wholeOr(trip.pausedSeconds, 0),
+    uncertainSeconds: wholeOr(trip.uncertainSeconds, 0),
+    etaChecks: etaChecksShape(trip.etaChecks),
+    recalcCount: Math.min(wholeOr(trip.recalcCount, 0), 10000),
+    fasterCount: Math.min(wholeOr(trip.fasterCount, 0), 10000),
+    engines: knownWords(trip.engines, TRIP_ENGINES),
+    mapVersion: shortText(trip.mapVersion),
+    appVersion: shortText(trip.appVersion),
+    platform: TRIP_PLATFORMS.includes(trip.platform) ? trip.platform : null,
+    etaMode: shortText(trip.etaMode),
+    trafficSources: knownWords(trip.trafficSources, TRIP_TRAFFIC_SOURCES),
+  };
+}
+
 function addMonths(iso, months) {
   const date = new Date(iso);
   date.setUTCMonth(date.getUTCMonth() + months);
@@ -406,6 +483,8 @@ class AccountStore {
       stops: Math.max(0, Math.round(Number(trip?.stops) || 0)),
       stoppedSeconds: Math.max(0, Math.round(Number(trip?.stoppedSeconds) || 0)),
       events: tripEventsShape(trip?.events),
+      // The ETA and routing measures, when the app sends them (tripMeasuresShape). No coordinates.
+      ...(trip && typeof trip === 'object' ? tripMeasuresShape(trip) : null),
     };
     account.trips.unshift(record);
     account.trips = account.trips.slice(0, config.accountTripHistoryMax);

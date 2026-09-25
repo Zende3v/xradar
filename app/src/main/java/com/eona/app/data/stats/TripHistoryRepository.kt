@@ -39,6 +39,7 @@ class TripHistoryRepository(context: Context) {
                     stoppedSeconds = o.optInt("stoppedSeconds"),
                     events = AccountApi.parseEvents(o.optJSONObject("events")),
                     group = o.optJSONObject("group")?.let(::parseGroup),
+                    measure = AccountApi.parseMeasure(o),
                 )
             }.sortedByDescending { it.startedAt }
         }.getOrDefault(emptyList())
@@ -77,6 +78,7 @@ class TripHistoryRepository(context: Context) {
                     put("stoppedSeconds", t.stoppedSeconds)
                     put("events", AccountApi.wireEvents(t))
                     t.group?.let { put("group", groupJson(it)) }
+                    t.measure?.let { AccountApi.putMeasure(this, it) }
                 },
             )
         }

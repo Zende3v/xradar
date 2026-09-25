@@ -4,7 +4,9 @@ import com.eona.app.BuildConfig
 import com.eona.app.core.model.Access
 import com.eona.app.core.model.Account
 import com.eona.app.core.model.DailyLimits
+import com.eona.app.core.model.EtaCheck
 import com.eona.app.core.model.Role
+import com.eona.app.core.model.TripMeasure
 import com.eona.app.core.model.TripRecord
 import com.eona.app.core.model.UsernameAvailability
 import com.eona.app.core.model.alertTypeFromWire
@@ -213,6 +215,7 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             .put("stoppedSeconds", trip.stoppedSeconds)
             .put("events", wireEvents(trip))
             .apply { trip.plannedSeconds?.let { put("plannedSeconds", it) } }
+            .apply { trip.measure?.let { putMeasure(this, it) } }
         authedPost(token, "/api/accounts/me/trips", body)
     }
 
@@ -285,6 +288,7 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                     stops = x.optInt("stops"),
                     stoppedSeconds = x.optInt("stoppedSeconds"),
                     events = parseEvents(x.optJSONObject("events")),
+                    measure = parseMeasure(x),
                 )
             },
         )
@@ -526,6 +530,77 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 val count = o.optInt(name)
                 if (count > 0) type to count else null
             }.toMap()
+        }
+
+        /**
+         * A trip's ETA and route measures, beside its other fields in [o] (the names the backend and
+         * iOS use). No coordinates.
+         */
+        fun putMeasure(o: JSONObject, m: TripMeasure) {
+            val checks = JSONArray()
+            m.etaChecks.forEach { c ->
+                checks.put(
+                    JSONObject()
+                        .put("at", c.at)
+                        .put("shownAt", c.shownAt)
+                        .put("arrivalAt", c.arrivalAt)
+                        .put("pausedBefore", c.pausedBefore)
+                        .put("uncertainBefore", c.uncertainBefore),
+                )
+            }
+            o.put("arrived", m.arrived)
+                .put("departedAt", m.departedAt ?: JSONObject.NULL)
+                .put("manualStart", m.manualStart)
+                .put("retargeted", m.retargeted)
+                .put("plannedMeters", m.plannedMeters ?: JSONObject.NULL)
+                .put("pausedSeconds", m.pausedSeconds)
+                .put("uncertainSeconds", m.uncertainSeconds)
+                .put("etaChecks", checks)
+                .put("recalcCount", m.recalcCount)
+                .put("fasterCount", m.fasterCount)
+                .put("engines", JSONArray(m.engines))
+                .put("mapVersion", m.mapVersion ?: JSONObject.NULL)
+                .put("appVersion", m.appVersion)
+                .put("platform", m.platform)
+                .put("etaMode", m.etaMode)
+                .put("trafficSources", JSONArray(m.trafficSources))
+        }
+
+        /** A trip's measures read back; null for a trip recorded before them. */
+        fun parseMeasure(o: JSONObject): TripMeasure? {
+            if (o.isNull("etaMode")) return null
+            val checks = o.optJSONArray("etaChecks") ?: JSONArray()
+            fun strings(name: String): List<String> {
+                val a = o.optJSONArray(name) ?: return emptyList()
+                return (0 until a.length()).mapNotNull { i -> a.optString(i).ifBlank { null } }
+            }
+            return TripMeasure(
+                arrived = o.optBoolean("arrived"),
+                departedAt = if (o.isNull("departedAt")) null else o.optLong("departedAt"),
+                manualStart = o.optBoolean("manualStart"),
+                retargeted = o.optBoolean("retargeted", false),
+                plannedMeters = if (o.isNull("plannedMeters")) null else o.optInt("plannedMeters"),
+                pausedSeconds = o.optInt("pausedSeconds"),
+                uncertainSeconds = o.optInt("uncertainSeconds"),
+                etaChecks = (0 until checks.length()).mapNotNull { i ->
+                    val c = checks.optJSONObject(i) ?: return@mapNotNull null
+                    EtaCheck(
+                        at = c.optInt("at"),
+                        shownAt = c.optLong("shownAt"),
+                        arrivalAt = c.optLong("arrivalAt"),
+                        pausedBefore = c.optInt("pausedBefore"),
+                        uncertainBefore = c.optInt("uncertainBefore"),
+                    )
+                },
+                recalcCount = o.optInt("recalcCount"),
+                fasterCount = o.optInt("fasterCount"),
+                engines = strings("engines"),
+                mapVersion = if (o.isNull("mapVersion")) null else o.optString("mapVersion").ifBlank { null },
+                appVersion = o.optString("appVersion"),
+                platform = o.optString("platform"),
+                etaMode = o.optString("etaMode"),
+                trafficSources = strings("trafficSources"),
+            )
         }
 
         /** A guest's daily limits, as `/me` sends them (and as the account is cached). */

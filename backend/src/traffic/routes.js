@@ -33,7 +33,7 @@ trafficRouter.post('/route', async (req, res) => {
   if (!points) return res.status(400).json({ error: 'coordinates [[lon,lat],...] required' });
   let traffic;
   try {
-    traffic = await trafficAlong(points);
+    traffic = await trafficAlong(points, { use: 'eta' });
   } catch (e) {
     console.warn('[traffic] unavailable —', String(e.message || e));
     return res.status(502).json({ error: 'traffic unavailable' });

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { haversine } from '../radars/geo.js';
+import { countTomtom } from './budget.js';
 
 // TomTom's own points farther than this from our route are on another road.
 const ON_ROUTE_M = 40;
@@ -97,9 +98,10 @@ function levelOf(section) {
  * The traffic TomTom sees on our own route: [points] ([lat, lon], the route the app follows)
  * go back to it as supporting points, so it rebuilds this very route rather than its own, and
  * its slowed stretches come back as metres along [points]. Only what lies on our road is kept.
- * Answers are cached a short while: several drivers on the same route share one request.
+ * Answers are cached a short while: several drivers on the same route share one request. A
+ * request really sent is counted for [use] (traffic/budget.js); a cached answer costs nothing.
  */
-export async function trafficAlong(points) {
+export async function trafficAlong(points, { use = 'other' } = {}) {
   const cum = cumulative(points);
   const support = supportingPoints(points, cum);
   const key = createHash('sha1').update(JSON.stringify(support.map(([lat, lon]) => [lat.toFixed(5), lon.toFixed(5)]))).digest('hex');
@@ -109,6 +111,7 @@ export async function trafficAlong(points) {
   const [from, to] = [support[0], support[support.length - 1]];
   const url = `${config.tomtomUrl.replace(/\/$/, '')}/routing/1/calculateRoute/${from[0]},${from[1]}:${to[0]},${to[1]}/json` +
     `?key=${encodeURIComponent(config.tomtomApiKey)}&traffic=true&sectionType=traffic&travelMode=car&routeType=fastest`;
+  countTomtom(use);
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -168,4 +171,29 @@ export async function trafficAlong(points) {
   cache.set(key, { at: Date.now(), value });
   if (cache.size > 200) cache.delete(cache.keys().next().value);
   return value;
+}
+
+/** The app's avoid options → TomTom's `avoid` values. */
+const TOMTOM_AVOID = { tolls: 'tollRoads', highways: 'motorways', ferries: 'ferries' };
+
+/**
+ * TomTom's own fastest route from [from] to [to] ({ lat, lon }) with today's traffic, the same
+ * roads avoided as ours ([avoid], the app's options): the bench's reference (routing/bench.js).
+ * No supporting points: TomTom picks its road. { distanceM, travelS, coordinates: [[lon, lat], …] }.
+ * Counted for [use] (traffic/budget.js).
+ */
+export async function bestRoute(from, to, { avoid = [], use = 'other' } = {}) {
+  const avoided = avoid.map((a) => TOMTOM_AVOID[a]).filter(Boolean).map((a) => `&avoid=${a}`).join('');
+  const url = `${config.tomtomUrl.replace(/\/$/, '')}/routing/1/calculateRoute/${from.lat},${from.lon}:${to.lat},${to.lon}/json` +
+    `?key=${encodeURIComponent(config.tomtomApiKey)}&traffic=true&travelMode=car&routeType=fastest${avoided}`;
+  countTomtom(use);
+  const res = await fetch(url, { signal: AbortSignal.timeout(config.trafficTimeoutMs) });
+  if (!res.ok) throw new Error(`TomTom ${res.status}`);
+  const route = (await res.json()).routes?.[0];
+  if (!route) throw new Error('TomTom: no route');
+  return {
+    distanceM: route.summary?.lengthInMeters ?? null,
+    travelS: route.summary?.travelTimeInSeconds ?? null,
+    coordinates: route.legs.flatMap((leg) => leg.points.map((p) => [p.longitude, p.latitude])),
+  };
 }

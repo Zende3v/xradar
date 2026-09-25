@@ -13,7 +13,7 @@ import { radarStore } from './radars/store.js';
 import { reportRouter } from './reports/routes.js';
 import { reportStore } from './reports/store.js';
 import { routeRouter } from './routing/routes.js';
-import { orsKeysMeta } from './routing/ors.js';
+import { orsKeysMeta, orsUsage } from './routing/ors.js';
 import { meta as signsMeta } from './signs/postgis.js';
 import { signRouter } from './signs/routes.js';
 import { speedLimitRouter } from './speedlimits/routes.js';
@@ -24,6 +24,7 @@ import { searchRouter } from './search/routes.js';
 import { shareStore } from './trips/shares.js';
 import { groupStore } from './trips/groups.js';
 import { groupPage, sharePage } from './trips/page.js';
+import { tomtomUsage } from './traffic/budget.js';
 import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
 
@@ -68,6 +69,8 @@ export function createApp() {
   app.use('/api/route/faster', express.json({ limit: '3mb' }));
   // A shared trip carries its route: a long one does not fit in the 16 kb of the rest.
   app.use('/api/trips', express.json({ limit: '1mb' }));
+  // A "navigation" bug report carries the trip's route too (600 points at most).
+  app.use('/api/bugs', express.json({ limit: '256kb' }));
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {
@@ -79,8 +82,9 @@ export function createApp() {
       reports: reportStore.meta,
       accounts: accountStore.meta,
       live: liveStore.meta,
-      routing: config.orsApiKey ? { provider: 'ors', ...orsKeysMeta() } : { provider: 'osrm' },
-      traffic: { provider: config.tomtomApiKey ? 'tomtom' : null, probes: probeStore.meta.count },
+      // What ORS and TomTom were asked today (UTC day), kept on disk across restarts.
+      routing: config.orsApiKey ? { provider: 'ors', ...orsKeysMeta(), usage: orsUsage() } : { provider: 'osrm' },
+      traffic: { provider: config.tomtomApiKey ? 'tomtom' : null, probes: probeStore.meta.count, tomtom: tomtomUsage() },
       trips: { ...shareStore.meta, ...groupStore.meta },
       signs: { published },
       speedLimits: speedLimitStore.meta,

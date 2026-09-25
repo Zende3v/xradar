@@ -87,7 +87,13 @@ class TrafficApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             val from = s.optDouble("fromM")
             val to = s.optDouble("toM")
             if (!(to > from)) return@mapNotNull null
-            TrafficStretch(from, to, level, if (s.isNull("delayS")) null else s.optInt("delayS"))
+            TrafficStretch(
+                from,
+                to,
+                level,
+                if (s.isNull("delayS")) null else s.optInt("delayS"),
+                source = if (s.isNull("source")) TrafficStretch.TOMTOM else s.optString("source").ifBlank { TrafficStretch.TOMTOM },
+            )
         }
         return RouteTraffic(o.optDouble("totalM", 0.0), stretches, o.optBoolean("check"))
     }

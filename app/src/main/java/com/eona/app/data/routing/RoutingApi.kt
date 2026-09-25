@@ -93,7 +93,15 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             GeoPoint(lat = pair.getDouble(1), lon = pair.getDouble(0))
         }
         if (points.size < 2) return null
-        return Route(points, obj.optInt("distanceM"), obj.optInt("durationS"), parseSteps(obj))
+        return Route(
+            points,
+            obj.optInt("distanceM"),
+            obj.optInt("durationS"),
+            parseSteps(obj),
+            // Absent from a backend older than the measures: null.
+            engine = if (obj.isNull("engine")) null else obj.optString("engine").ifBlank { null },
+            mapVersion = if (obj.isNull("mapVersion")) null else obj.optString("mapVersion").ifBlank { null },
+        )
     }
 
     private companion object {

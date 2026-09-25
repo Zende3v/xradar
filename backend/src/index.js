@@ -6,6 +6,7 @@ import { ensureCrowdSchema } from './crowd/schema.js';
 import { fuelStore } from './fuel/store.js';
 import { radarStore } from './radars/store.js';
 import { reportStore } from './reports/store.js';
+import { ensureRoutingSchema } from './routing/schema.js';
 import { speedLimitStore } from './speedlimits/store.js';
 
 // Opening hours are read on the French clock, whatever the host's timezone.
@@ -23,6 +24,8 @@ accountStore.start().catch((e) => console.error('[accounts] start failed:', e.me
 ensureCrowdSchema()
   .then(() => Promise.all([reportStore.start(), speedLimitStore.start()]))
   .catch((e) => console.error('[crowd] start failed:', e.message));
+// The route log and the bench (schema routing): measures only, nothing waits for them.
+ensureRoutingSchema().catch((e) => console.error('[routing] schema failed:', e.message));
 
 const app = createApp();
 app.listen(config.port, config.host, () => {
