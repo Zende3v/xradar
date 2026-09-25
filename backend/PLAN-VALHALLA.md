@@ -1,6 +1,8 @@
 # Plan : moteur de routage EONA sur Valhalla
 
 Plan en phases tiré de l'atelier du 24/09/2026. Chaque choix renvoie à sa décision dans
+
+État du chantier : [VALHALLA-ETAT.md](VALHALLA-ETAT.md).
 [VALHALLA-DECISIONS.md](VALHALLA-DECISIONS.md) (D1.1 à D8.4). **Aucun code avant qu'Arthur valide
 ce plan.**
 
