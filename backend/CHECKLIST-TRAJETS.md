@@ -5,6 +5,11 @@ ORS, l'ETA au prorata et les itinéraires actuels. Chaque phase met cette liste 
 
 ## Avant de partir
 
+**Reprise 26/09** : aucun trajet réel phase 1 exploitable enregistré à 15:10.
+Validation au prochain trajet Arthur ; préparation technique peut continuer avant.
+Finir trajet jusqu'à arrivée automatique, statistiques activées, puis vérifier présence mesures côté serveur.
+Version actuelle suffit : aucun nouvel APK ni IPA demandé pour cette validation.
+
 - App à jour (Android versionCode 4 et plus, iOS build de la phase 1).
 - Menu ▸ Confidentialité : « Statistiques de conduite » **activé**. Sinon aucun trajet envoyé.
 - Compte connecté. Destination choisie depuis sa position réelle (sauf test « départ à la main »).

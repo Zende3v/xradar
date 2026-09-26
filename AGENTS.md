@@ -11,6 +11,11 @@ Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'impor
   - build Android : le sandbox Codex bloque Gradle (verrou `.gradle`) ;
   - relectures indépendantes, en lecture seule, avec preuves `fichier:ligne` ;
   - gros chantiers parallélisables.
+- **Répartition réelle environ 50/50 par tâches** (Arthur, 26/09). Codex garde vision globale,
+  arbitrages et intégration. Claude prend aussi gros lots d'implémentation, pas seulement relectures.
+  Scopes disjoints, travail parallèle quand utile. Limiter lectures répétées et tests redondants.
+- Tests ciblés sur corrections et risques réels. Après réussite, relancer seulement si changement pertinent.
+  Arthur valide téléphone. Expliquer brièvement objectif, résultat et prochaine étape de chaque lot.
 - Revue croisée systématique : ce que l'un écrit, l'autre le relit.
 - Les deux : skill **caveman** à chaque réponse, en français. Commits et docs en caveman aussi.
 - Arthur ne travaille plus qu'à deux.

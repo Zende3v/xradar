@@ -1,0 +1,16 @@
+[Unit]
+Description=EONA alerte construction Valhalla
+ConditionPathExists=/etc/eona/notify.env
+
+[Service]
+Type=oneshot
+User=eona
+WorkingDirectory=/opt/eona-backend
+# Même SMTP que backend. Fichier root 0600, jamais versionné ni affiché.
+EnvironmentFile=/etc/eona/notify.env
+ExecStart=/usr/bin/node /opt/eona-backend/bin/eona-notify.js valhalla-build-failed
+TimeoutStartSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

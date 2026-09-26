@@ -518,6 +518,71 @@ coordonnée. 90 jours.
 
 ---
 
+## 6 quater. Valhalla : API préparée, non déployée au 26/09
+
+Contrat apps conservé. Après déploiement phase 2, `engine` vaut `ors` ou `valhalla` ; OSRM démo retiré.
+`mapVersion` Valhalla vient de `tileset_last_modified` : date des tuiles, pas date certaine des données OSM.
+
+Sans `VALHALLA_ENABLED=1`, aucun appel Valhalla, même pour `/status` ou mode ombre.
+Avec activation et `routingEngine=ors`, ORS sert apps, Valhalla calcule après réponse, hors cache.
+`admins` sert Valhalla aux admins ; `all` à tous. ORS reste secours.
+Passage admins/tous exige validation Arthur et critères phase 3 ; API seule ne constitue pas cette validation.
+
+### Administration
+
+Authentification admin section 1, commune à toutes routes suivantes. Aucune géométrie dans liste des mesures.
+
+| Appel | Résultat |
+|---|---|
+| `GET /api/admin/routing` | `routingEngine`, valeurs autorisées, santé moteur, état file ombre |
+| `PUT /api/admin/routing/engine` avec `{"engine":"ors"}` | règle `ors`, `admins` ou `all`, historisée ; effet requêtes suivantes |
+| `GET /api/admin/routing/shadow?since=&kind=&limit=` | mesures ; `kind=route` ou `faster`, limite 200, maximum 1000 |
+| `GET /api/admin/routing/shadow/summary?since=` | totaux par type, secours, divergences, erreurs, latences p50/p95 |
+| `GET /api/admin/routing/traces?before=&limit=` | traces admin divergentes, sans géométrie ; limite 50, maximum 200 |
+| `GET /api/admin/routing/traces/:id` | GeoJSON `FeatureCollection`, une ligne ORS et une ligne Valhalla ; 404 si absente |
+
+`since` et `before` acceptent ISO ou millisecondes Unix. Pagination traces : utiliser champ `next` comme `before`.
+Mesures conservées 90 jours, tracés 30 jours. Purge au démarrage puis chaque heure, même sans trajet et Valhalla désactivé.
+Lectures excluent immédiatement données périmées. Tracés enregistrés uniquement pour comptes admin au moment du calcul.
+Seuils initiaux D7.1 : écart durée >10 % ou portion commune <70 %. Aucun lien compte conservé dans tables ombre.
+Webapp peut dessiner GeoJSON ; interface carte correspondante reste à réaliser dans dépôt webapp.
+
+Ombre `/faster` compare candidats dessinés par autre moteur, sans nouvelle requête TomTom.
+Elle ne mesure donc pas gain trafic complet du détour concurrent. Latences reportées concernent calcul réellement exécuté.
+ORS en ombre suspendu quand budget disponible passe sous réserve configurée.
+`/faster` conserve ORS en mode `ors` ; après secours Valhalla → ORS, réponse `better:null, reason:"fallback"`.
+
+### Santé et paramètres
+
+`/health.routing` conserve champs ORS phase 1, ajoute `mode`, `valhalla`, `fallbacks` et `shadow`.
+`valhalla` expose `enabled`, `state`, `cause`, version, carte, `hasLiveTraffic`, `hasTiles`, date status,
+disjoncteur et état alerte. Sans activation : état `disabled`.
+`fallbacks` contient total, compteurs par cause et dernier secours depuis démarrage ; compteurs en mémoire.
+`shadow` décrit file bornée, travaux terminés, échecs et abandons quand pleine.
+
+Valeurs initiales **provisoires, non mesurées** :
+
+| Variable | Défaut local | Rôle |
+|---|---|---|
+| `VALHALLA_URL` | `http://127.0.0.1:8002` | service local |
+| `VALHALLA_TIMEOUT_MS` | 4000 | enveloppe essais Valhalla |
+| `ROUTE_DEADLINE_MS` | 13000 | total `/api/route`, secours inclus ; aussi applicable en mode ORS |
+| `ROUTE_JAMS_TIMEOUT_MS` | 2000 | recherche bouchons signalés |
+| `VALHALLA_SEARCH_CUTOFF_M` | 1000 | recherche route ; préparation infra propose explicitement 500 |
+| `VALHALLA_MAX_SNAP_M` | 350 | accroche acceptée ; préparation infra propose explicitement 250 |
+| `VALHALLA_BREAKER_FAILURES` | 5 | échecs avant ouverture disjoncteur |
+| `VALHALLA_BREAKER_OPEN_MS` | 60000 | attente après ouverture |
+| `VALHALLA_STATUS_EVERY_MS` | 60000 | lecture status hors requêtes apps |
+| `VALHALLA_ALERT_AFTER_MS` | 900000 | indisponibilité avant alerte |
+| `SHADOW_QUEUE_MAX` / `SHADOW_CONCURRENCY` | 100 / 2 | attente et travaux parallèles |
+| `SHADOW_ORS_MIN_BUDGET_LEFT` | 1000 | réserve ORS pour secours |
+| `ALERT_EMAILS` | vide | destinataires séparés par virgules ; vide = journal seulement |
+
+SMTP existant réutilisé. Aucune notification réelle vérifiée pendant préparation.
+Contrôle accroche ne garantit pas frontière exacte. SQL/PostGIS, moteur réel et impact p95 restent à vérifier avant activation.
+
+---
+
 ## 7. Ce qui manque encore
 
 Fait depuis la première version de cette doc : liste globale des signalements avec filtres,

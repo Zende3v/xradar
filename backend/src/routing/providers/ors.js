@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { config } from '../config.js';
-import { stateFile } from '../state-file.js';
+import { config } from '../../config.js';
+import { stateFile } from '../../state-file.js';
 
 /** The app's avoid options → ORS avoid_features. */
 export const ORS_AVOID = { tolls: 'tollways', highways: 'highways', ferries: 'ferries' };
@@ -95,14 +95,15 @@ function blockMs(status, detail) {
 
 /**
  * One call with one key. A refusal comes back readable, its body already in hand. Past
- * config.orsTimeoutMs (answer and body together) the call is dropped and this throws.
+ * config.orsTimeoutMs (answer and body together), or once the caller's [signal] fires (the
+ * routing façade's deadline, engine.js), the call is dropped and this throws.
  */
-async function send(key, body) {
+async function send(key, body, signal) {
   const r = await fetch(`${config.orsUrl.replace(/\/$/, '')}/v2/directions/driving-car/geojson`, {
     method: 'POST',
     headers: { Authorization: key, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(config.orsTimeoutMs),
+    signal: withTimeout(signal, config.orsTimeoutMs),
   });
   if (r.ok) return r;
   const detail = await r.text().catch(() => '');
@@ -152,14 +153,19 @@ export function orsBudgetLeft() {
   return orsKeysMeta().budgetLeft;
 }
 
-export async function postORS(body) {
+/**
+ * One ORS directions request, the next key taking over while ORS refuses one. [signal]
+ * (optional): the caller's deadline, for every key tried; once it fired, no other key is tried.
+ */
+export async function postORS(body, { signal = null } = {}) {
   let refusal = SPENT;
   for (;;) {
+    if (signal?.aborted) throw signal.reason ?? new Error('ORS: request aborted');
     const state = pick();
     if (!state) return refusal;
     state.used += 1;
     usage.touch();
-    const r = await send(state.key, body);
+    const r = await send(state.key, body, signal);
     if (r.ok) return r;
     const pause = blockMs(r.status, r.detail || '');
     if (!pause) return r; // the call itself went wrong: another key would fail the same way
@@ -170,6 +176,45 @@ export async function postORS(body) {
     );
     refusal = r;
   }
+}
+
+/** config.orsTimeoutMs, or sooner when the caller's [signal] fires. */
+function withTimeout(signal, ms) {
+  const timeout = AbortSignal.timeout(ms);
+  if (!signal) return timeout;
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([signal, timeout]);
+  const controller = new AbortController();
+  const stop = (s) => () => controller.abort(s.reason);
+  for (const s of [signal, timeout]) {
+    if (s.aborted) {
+      controller.abort(s.reason);
+      break;
+    }
+    s.addEventListener('abort', stop(s), { once: true });
+  }
+  return controller.signal;
+}
+
+/**
+ * The ORS directions body for [from] → [to] ({ lat, lon }): steps, full shape, the app's avoid
+ * options ([avoid]: tolls, highways, ferries; anything else is dropped), areas to keep off
+ * ([polygons]: a GeoJSON MultiPolygon), a heading per point ([bearings]: [[heading, tolerance],
+ * …]) and ORS's own alternatives ([alternatives]).
+ */
+export function orsBody({ from, to, avoid = [], polygons = null, bearings = null, alternatives = false }) {
+  const options = {};
+  const features = avoid.map((a) => ORS_AVOID[a]).filter(Boolean);
+  if (features.length) options.avoid_features = features;
+  if (polygons) options.avoid_polygons = polygons;
+  return {
+    coordinates: [[from.lon, from.lat], [to.lon, to.lat]],
+    ...(bearings ? { bearings } : {}),
+    instructions: true,
+    maneuvers: true,
+    geometry_simplify: false,
+    ...(Object.keys(options).length ? { options } : {}),
+    ...(alternatives ? { alternative_routes: { target_count: 3, weight_factor: 1.6, share_factor: 0.6 } } : {}),
+  };
 }
 
 /** A counter-clockwise square around a point, as one GeoJSON polygon ([lon, lat]) for avoid_polygons. */

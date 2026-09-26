@@ -1,0 +1,17 @@
+{
+  "mjolnir": {
+    "tile_dir": "/data/tiles",
+    "tile_extract": "/data/tiles.tar",
+    "admin": "/data/admin.sqlite",
+    "timezone": "/data/tz_world.sqlite",
+    "concurrency": 2
+  },
+  "loki": { "service_defaults": { "search_cutoff": 500 } },
+  "service_limits": {
+    "allow_hard_exclusions": true,
+    "max_exclude_polygons_length": 200000,
+    "max_exclude_polygons_vertices": 2000,
+    "max_alternates": 3,
+    "status": { "allow_verbose": true }
+  }
+}

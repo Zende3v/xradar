@@ -12,8 +12,9 @@ import { radarRouter } from './radars/routes.js';
 import { radarStore } from './radars/store.js';
 import { reportRouter } from './reports/routes.js';
 import { reportStore } from './reports/store.js';
+import { orsHealth, routing } from './routing/engine.js';
 import { routeRouter } from './routing/routes.js';
-import { orsKeysMeta, orsUsage } from './routing/ors.js';
+import { shadow } from './routing/shadow.js';
 import { meta as signsMeta } from './signs/postgis.js';
 import { signRouter } from './signs/routes.js';
 import { speedLimitRouter } from './speedlimits/routes.js';
@@ -39,6 +40,16 @@ function allowedOrigin(origin) {
     const pattern = allowed.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[a-z0-9-]+');
     return new RegExp(`^${pattern}$`, 'i').test(origin);
   });
+}
+
+/**
+ * /health's routing: the engine drivers get (`provider`) and routingEngine (`mode`), ORS's keys
+ * and today's use, Valhalla (state and cause, map version and date, has_live_traffic, breaker),
+ * the fallbacks to ORS by cause, and the shadow's queue.
+ */
+function routingHealth() {
+  const { provider, mode, valhalla, fallbacks } = routing.health();
+  return { provider, mode, ...orsHealth(), valhalla, fallbacks, shadow: shadow.stats() };
 }
 
 /** Builds the Express app (kept separate from bootstrap for testability). */
@@ -82,8 +93,9 @@ export function createApp() {
       reports: reportStore.meta,
       accounts: accountStore.meta,
       live: liveStore.meta,
-      // What ORS and TomTom were asked today (UTC day), kept on disk across restarts.
-      routing: config.orsApiKey ? { provider: 'ors', ...orsKeysMeta(), usage: orsUsage() } : { provider: 'osrm' },
+      // What ORS and TomTom were asked today (UTC day), kept on disk across restarts; Valhalla's
+      // state and map (read off the requests), the routes it left to ORS and why, the shadow.
+      routing: routingHealth(),
       traffic: { provider: config.tomtomApiKey ? 'tomtom' : null, probes: probeStore.meta.count, tomtom: tomtomUsage() },
       trips: { ...shareStore.meta, ...groupStore.meta },
       signs: { published },

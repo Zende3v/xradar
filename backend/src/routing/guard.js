@@ -11,9 +11,16 @@ import { haversine } from '../radars/geo.js';
 /** Recent answers, newest last. Small on purpose: it only catches a client asking again. */
 const recent = [];
 
-/** The answer given for the same trip a moment ago, or null. */
-export function cachedRoute(from, to, avoid) {
-  const key = avoid.slice().sort().join(',');
+/**
+ * An answer's key: the engine meant to serve it ([partition]: engine.js plan().primary) and the
+ * avoid options. An answer of one engine never serves a request meant for the other: an admin's
+ * Valhalla route never reaches a driver still on ORS, and none survives a change of routingEngine.
+ */
+const keyOf = (avoid, partition) => `${partition}|${avoid.slice().sort().join(',')}`;
+
+/** The answer given for the same trip a moment ago, for the same engine: { route, served }, or null. */
+export function cachedRoute(from, to, avoid, partition = '') {
+  const key = keyOf(avoid, partition);
   const fresh = Date.now() - config.routeCacheMs;
   for (let i = recent.length - 1; i >= 0; i -= 1) {
     const e = recent[i];
@@ -21,13 +28,14 @@ export function cachedRoute(from, to, avoid) {
     if (e.key !== key) continue;
     if (haversine(e.to.lat, e.to.lon, to.lat, to.lon) > config.routeCacheToM) continue;
     if (haversine(e.from.lat, e.from.lon, from.lat, from.lon) > config.routeCacheFromM) continue;
-    return e.route;
+    return { route: e.route, served: e.served };
   }
   return null;
 }
 
-export function keepRoute(from, to, avoid, route) {
-  recent.push({ at: Date.now(), key: avoid.slice().sort().join(','), from, to, route });
+/** Keeps [route] a moment, for requests meant for [partition]; [served]: who served it and how. */
+export function keepRoute(from, to, avoid, route, { partition = '', served = null } = {}) {
+  recent.push({ at: Date.now(), key: keyOf(avoid, partition), from, to, route, served });
   const fresh = Date.now() - config.routeCacheMs;
   while (recent.length && (recent[0].at < fresh || recent.length > config.routeCacheMax)) recent.shift();
 }

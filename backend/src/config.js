@@ -38,13 +38,9 @@ export const config = {
   // Per key: two keys give 3000 routes a day.
   orsDailyBudget: Number(process.env.ORS_DAILY_BUDGET) || 1500,
 
-  // Routing engine, proxied by /api/route. Defaults to the free public OSRM
-  // demo server (hosted, no self-host, no key). Override with OSRM_URL to point
-  // at a self-hosted OSRM or another OSRM-compatible endpoint later.
-  osrmUrl: process.env.OSRM_URL || 'https://router.project-osrm.org',
-
-  // OpenRouteService: preferred routing provider when a key is set (better quality,
-  // supports avoiding tolls/motorways). Falls back to OSRM when ORS_API_KEY is absent.
+  // OpenRouteService (routing/providers/ors.js): the engine /api/route serves with the setting
+  // routingEngine = ors (the default), and the fallback of Valhalla otherwise (D5.1). Without
+  // ORS_API_KEY, no ORS: the OSRM demo is gone (D5.3), a route ORS should draw fails (503).
   orsApiKey: process.env.ORS_API_KEY || null,
   // A spare key (ORS_API_KEY_2, then _3) takes over while the one before it is refused — its
   // quota spent for the day, or too many calls at once. Set in the service environment only.
@@ -57,10 +53,58 @@ export const config = {
   // What each ORS key spent today, kept on disk: a restart hands neither the day's calls nor a key
   // set aside back to the budget.
   orsUsageFile: process.env.ORS_USAGE_FILE || './data/ors-usage.json',
-  // An ORS or OSRM call still unanswered after this is dropped: the apps give up on a route after
+  // An ORS call still unanswered after this is dropped: the apps give up on a route after
   // 15 s. 10 s for now, to calibrate in phase 2 (shadow mode, PLAN-VALHALLA.md).
   orsTimeoutMs: 10 * 1000,
-  osrmTimeoutMs: 10 * 1000,
+
+  // Valhalla, EONA's own engine (phase 2 of PLAN-VALHALLA.md, routing/engine.js). Off unless
+  // VALHALLA_ENABLED=1: no call at all (no route, no shadow, no /status). The service listens on
+  // VALHALLA_URL (127.0.0.1:8002 on the VPS, D6.1). Its /status must allow verbose
+  // (has_live_traffic) and its service_limits allow_hard_exclusions (strict avoids, D4.2):
+  // without them, a route that avoids something fails and ORS serves it.
+  valhallaEnabled: /^(1|true)$/i.test(process.env.VALHALLA_ENABLED || ''),
+  valhallaUrl: process.env.VALHALLA_URL || 'http://127.0.0.1:8002',
+  // PROVISIONAL, none of them measured (D5.1, D6.4: calibrated in shadow mode, then written in
+  // VALHALLA-DECISIONS.md); each one can be set from the service environment meanwhile.
+  // - valhallaTimeoutMs: one Valhalla call, body included, and every Valhalla try of a route
+  //   together (the retry without the jams, D4.3); what is left of routeDeadlineMs goes to ORS.
+  // - routeDeadlineMs: Valhalla then ORS, the jams lookup included, under the apps' 15 s.
+  // - routeJamsTimeoutMs: the drivers' jams lookup (avoid=traffic); past it, the route ignores them.
+  // - valhallaSearchCutoffM: how far Valhalla looks for a road around a point (its default: 35 km).
+  // - valhallaMaxSnapM: farther than this from a road, a point is out of the map: ORS serves.
+  // - valhallaBreakerFailures / valhallaBreakerOpenMs: that many Valhalla outages in a row
+  //   (timeout, unreachable, unreadable answer) send everything to ORS that long.
+  // - valhallaStatusEveryMs: Valhalla's /status (map, has_live_traffic), read off the requests.
+  // - valhallaAlertAfterMs: Valhalla unusable that long: a mail to ALERT_EMAILS (D6.4).
+  valhallaTimeoutMs: Number(process.env.VALHALLA_TIMEOUT_MS) || 4000,
+  routeDeadlineMs: Number(process.env.ROUTE_DEADLINE_MS) || 13 * 1000,
+  routeJamsTimeoutMs: Number(process.env.ROUTE_JAMS_TIMEOUT_MS) || 2000,
+  valhallaSearchCutoffM: Number(process.env.VALHALLA_SEARCH_CUTOFF_M) || 1000,
+  valhallaMaxSnapM: Number(process.env.VALHALLA_MAX_SNAP_M) || 350,
+  valhallaBreakerFailures: Number(process.env.VALHALLA_BREAKER_FAILURES) || 5,
+  valhallaBreakerOpenMs: Number(process.env.VALHALLA_BREAKER_OPEN_MS) || 60 * 1000,
+  valhallaStatusEveryMs: Number(process.env.VALHALLA_STATUS_EVERY_MS) || 60 * 1000,
+  valhallaAlertAfterMs: Number(process.env.VALHALLA_ALERT_AFTER_MS) || 15 * MIN,
+  // Who gets the routing alerts (comma separated). Empty: no mail, the alert goes to the logs.
+  alertEmails: (process.env.ALERT_EMAILS || '').split(',').map((e) => e.trim()).filter(Boolean),
+  // A driver whose last route ORS served for a failing Valhalla gets no detour (/faster, D5.2)
+  // this long, or until their next route. PROVISIONAL: a trip's longest life (shareMaxMs).
+  fasterFallbackMemoryMs: 6 * H,
+
+  // Shadow mode (routing/shadow.js, D7.1): the engine that did not serve computes the same route
+  // after the answer. Measures only (no coordinates, no account), kept shadowKeepDays; both
+  // routes whole only for admin accounts when they diverge (duration apart by more than
+  // shadowTraceDurationRatio, or less than shadowTraceMinShare of common road: D7.1's starting
+  // values), kept shadowTraceKeepDays. PROVISIONAL: shadowQueueMax (a full queue drops the
+  // comparison), shadowConcurrency, and shadowOrsMinBudgetLeft (ORS in shadow only while the
+  // day's ORS routes left stay above it: the shadow never spends the fallback's budget).
+  shadowKeepDays: 90,
+  shadowTraceKeepDays: 30,
+  shadowTraceDurationRatio: 0.10,
+  shadowTraceMinShare: 0.70,
+  shadowQueueMax: Number(process.env.SHADOW_QUEUE_MAX) || 100,
+  shadowConcurrency: Number(process.env.SHADOW_CONCURRENCY) || 2,
+  shadowOrsMinBudgetLeft: Number(process.env.SHADOW_ORS_MIN_BUDGET_LEFT) || 1000,
 
   // The route log (schema routing, routing/log.js): one line per /api/route and /faster answer,
   // no account, no coordinates, kept this many days.

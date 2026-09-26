@@ -1,15 +1,19 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { adminActor } from '../accounts/auth.js';
+import { ROUTING_ENGINES, settingsStore } from '../accounts/settings.js';
 import { accountStore } from '../accounts/store.js';
 import { reportStore } from '../reports/store.js';
 import { BENCH_SLOTS, benchRuns, runBench } from '../routing/bench.js';
+import { routing } from '../routing/engine.js';
+import { shadow, shadowStore } from '../routing/shadow.js';
 import { adminAudit } from './audit.js';
 
 /**
  * The console's own routes (`/api/admin`): every report with its author, the journal of what
- * admins did, and the routing bench. An admin account signed in with its session, or the
- * ADMIN_TOKEN — nothing else gets in.
+ * admins did, the routing bench, and the routing engine (routingEngine, the shadow mode's
+ * measures and the admins' divergent routes). An admin account signed in with its session, or
+ * the ADMIN_TOKEN — nothing else gets in.
  */
 export const adminRouter = Router();
 
@@ -115,6 +119,68 @@ adminRouter.get('/bench/runs', guarded(async (req, res) => {
   const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 1000) : 200;
   const runs = await benchRuns({ since: moment(req.query.since), limit });
   res.json({ count: runs.length, runs });
+}));
+
+/**
+ * GET /api/admin/routing — which engine serves the routes (`routingEngine`: ors | admins | all,
+ * and the values it takes), what /health says of routing, and the shadow's queue.
+ */
+adminRouter.get('/routing', (req, res) => {
+  res.json({ routingEngine: settingsStore.routingEngine, routingEngines: ROUTING_ENGINES, ...routing.health(), shadow: shadow.stats() });
+});
+
+/**
+ * PUT /api/admin/routing/engine  { engine: "ors" | "admins" | "all" }
+ * Which engine serves the routes from the next request on, without a restart (D7.2): the way
+ * back is `ors`. Written to the settings' log and to the admins' journal. Without Valhalla
+ * (VALHALLA_ENABLED off), ORS keeps serving whatever the value: `valhalla.enabled` says so.
+ */
+adminRouter.put('/routing/engine', (req, res) => {
+  const engine = String(req.body?.engine ?? '');
+  if (!ROUTING_ENGINES.includes(engine)) return res.status(400).json({ error: `engine = ${ROUTING_ENGINES.join('|')}` });
+  const changed = settingsStore.setRoutingEngine(engine, req.actor.name);
+  adminAudit.log(req.actor, 'routing.engine', 'setting', 'routingEngine', changed);
+  res.json({ routingEngine: settingsStore.routingEngine, changed, valhalla: routing.health().valhalla });
+});
+
+/**
+ * GET /api/admin/routing/shadow?since=&kind=route|faster&limit= — the shadow mode's measures,
+ * newest first (no coordinates, no account): 200 by default, 1000 at most.
+ */
+adminRouter.get('/routing/shadow', guarded(async (req, res) => {
+  const kind = req.query.kind ? String(req.query.kind) : null;
+  if (kind && kind !== 'route' && kind !== 'faster') return res.status(400).json({ error: 'kind = route|faster' });
+  const n = Number(req.query.limit);
+  const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 1000) : 200;
+  const runs = await shadowStore.runs({ since: moment(req.query.since), kind, limit });
+  res.json({ count: runs.length, runs });
+}));
+
+/**
+ * GET /api/admin/routing/shadow/summary?since= — per kind: comparisons, fallbacks, divergences,
+ * and per engine: asked, answered, median and p95 latency, U-turns at the start; the errors by
+ * code. What the criteria of D7.3 are read on.
+ */
+adminRouter.get('/routing/shadow/summary', guarded(async (req, res) => {
+  res.json(await shadowStore.summary({ since: moment(req.query.since) }));
+}));
+
+/**
+ * GET /api/admin/routing/traces?before=&limit= — the divergent routes kept for admin accounts
+ * (30 days), newest first, without their lines. `before` = the `at` of the last one received.
+ */
+adminRouter.get('/routing/traces', guarded(async (req, res) => {
+  const limit = pageSize(req.query.limit);
+  const traces = await shadowStore.traces({ before: moment(req.query.before), limit });
+  res.json({ count: traces.length, next: traces.length === limit ? traces[traces.length - 1].at : null, traces });
+}));
+
+/** GET /api/admin/routing/traces/:id — one of them as GeoJSON: one line per engine, for a map. */
+adminRouter.get('/routing/traces/:id', guarded(async (req, res) => {
+  if (!/^\d{1,18}$/.test(req.params.id)) return res.status(404).json({ error: 'not found' });
+  const trace = await shadowStore.trace(req.params.id);
+  if (!trace) return res.status(404).json({ error: 'not found' });
+  res.json(trace);
 }));
 
 /** GET /api/admin/me — who the console is signed in as, to show it and check it is an admin. */

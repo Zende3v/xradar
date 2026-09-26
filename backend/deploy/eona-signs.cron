@@ -1,0 +1,3 @@
+# EONA : reconstruction hebdomadaire, dimanche 03:30, heure de Paris.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 3 * * 0 root bash /opt/eona-backend/signalisation/rebuild.sh >> /var/lib/eona-signs/rebuild.log 2>&1

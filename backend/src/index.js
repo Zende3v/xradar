@@ -6,7 +6,9 @@ import { ensureCrowdSchema } from './crowd/schema.js';
 import { fuelStore } from './fuel/store.js';
 import { radarStore } from './radars/store.js';
 import { reportStore } from './reports/store.js';
+import { routing } from './routing/engine.js';
 import { ensureRoutingSchema } from './routing/schema.js';
+import { shadowStore } from './routing/shadow.js';
 import { speedLimitStore } from './speedlimits/store.js';
 
 // Opening hours are read on the French clock, whatever the host's timezone.
@@ -24,8 +26,16 @@ accountStore.start().catch((e) => console.error('[accounts] start failed:', e.me
 ensureCrowdSchema()
   .then(() => Promise.all([reportStore.start(), speedLimitStore.start()]))
   .catch((e) => console.error('[crowd] start failed:', e.message));
-// The route log and the bench (schema routing): measures only, nothing waits for them.
-ensureRoutingSchema().catch((e) => console.error('[routing] schema failed:', e.message));
+// The route log, the bench and the shadow mode (schema routing): measures only, nothing waits
+// for them. Then the shadow's purges, schema there or not (a failed purge is tried again),
+// Valhalla on or off: now and every hour, trips or not (shadow.js).
+ensureRoutingSchema()
+  .catch((e) => console.error('[routing] schema failed:', e.message))
+  .then(() => shadowStore.start());
+// Valhalla's /status, read now and then off the requests (map, has_live_traffic, outage mail).
+// Nothing without VALHALLA_ENABLED: no call to Valhalla at all.
+routing.start();
+console.log(`[routing] Valhalla ${config.valhallaEnabled ? `on (${config.valhallaUrl})` : 'off'} — routingEngine read from the settings`);
 
 const app = createApp();
 app.listen(config.port, config.host, () => {

@@ -1,0 +1,6 @@
+# Scripts et unités déployés sur Linux : conserver LF même depuis Windows.
+*.sh text eol=lf
+*.cron text eol=lf
+*.container text eol=lf
+*.service text eol=lf
+valhalla/valhalla.env.example text eol=lf

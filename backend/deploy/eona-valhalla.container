@@ -1,0 +1,30 @@
+# Plafonds provisoires : 2 threads, 2 Gio RAM, 3 Gio RAM + swap. Aucun démarrage sans carte validée.
+[Unit]
+Description=EONA Valhalla France
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/valhalla/current/tiles.tar
+
+[Container]
+Image=ghcr.io/valhalla/valhalla:3.9.0@sha256:511c095b8caf393dccceb8b519ec96b6f85a0166b2288ba014a8a748acc5a63c
+Pull=never
+ContainerName=eona-valhalla
+PublishPort=127.0.0.1:8002:8002
+Volume=/var/lib/valhalla/current:/data:ro
+Exec=valhalla_service /data/valhalla.json 2
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=all
+PidsLimit=256
+PodmanArgs=--memory=2g --memory-swap=3g --cpus=2 --oom-score-adj=800
+
+[Service]
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=90
+TimeoutStopSec=40
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

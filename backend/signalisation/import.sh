@@ -7,6 +7,7 @@
 # Run as root:  bash import.sh [/path/to/france-latest.osm.pbf]
 #
 set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PBF="${1:-/opt/eona-backend/data/france-latest.osm.pbf}"

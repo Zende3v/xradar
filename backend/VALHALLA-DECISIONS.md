@@ -554,6 +554,37 @@ acceptation, au même moment que la politique.
 
 ---
 
+## Reprise : préparation phase 2 (26/09/2026)
+
+**R2.1 — Répartition.** Arthur demande environ 50/50 par tâches avec Claude via bridge.
+Codex garde vision globale, arbitrage et intégration. Revue croisée maintenue.
+
+**R2.2 — Correction exploitation autorisée.** Sauvegardes échouaient faute de PATH incluant `runuser`.
+PATH corrigé pour sauvegardes et signalisation. Dump inclut désormais schéma `routing`.
+Contrôle réel à 02:13 : dump 89 765 octets, données 36 427 octets, archives 0600, backend sans redémarrage.
+Restauration et copie hors VPS restent non validées.
+Cron réel 26/09 à 03:10:01 ensuite confirmé ; dump 89 765 octets, données 36 525 octets, intégrité vérifiée à 15:10.
+
+**R2.3 — Préparation seulement.** Image officielle Valhalla `3.9.0`, digest manifeste
+`sha256:511c095b8caf393dccceb8b519ec96b6f85a0166b2288ba014a8a748acc5a63c`.
+Vérifié sur [registre officiel](https://github.com/valhalla/valhalla/pkgs/container/valhalla).
+Aucun Podman, swap, service Valhalla ou backend phase 2 installé pendant reprise.
+
+**R2.4 — Valeurs initiales provisoires.** Backend : Valhalla 4 s, total route 13 s, lookup bouchons 2 s,
+disjoncteur 5 échecs / 60 s, status 60 s, alerte 15 min, file ombre 100 / concurrence 2, réserve ORS 1000.
+Infrastructure proposée : build 8 Gio RAM / 10 Gio RAM+swap, 2 CPU ; service 2 Gio / 3 Gio, 2 threads.
+Swap initial proposé 4 Gio, espace libre minimal build 40 Gio. Accroche proposée : recherche 500 m, acceptation 250 m.
+Ces nombres sont garde-fous de démarrage, **pas résultats mesurés ni cibles validées**. Calibrer en ombre puis consigner mesures.
+
+**R2.5 — Comparaison `/faster`.** Autre moteur dessine candidats après réponse ; aucune dépense TomTom supplémentaire.
+Mesures comparent candidats et géométrie, pas ETA trafic complète du détour concurrent.
+Mode ORS conserve recherche actuelle ; secours Valhalla → ORS coupe recherche de détour.
+
+**R2.6 — Limites d'acceptation.** Première construction France, frontières, évitements réels, SQL/PostGIS,
+charge, p95, purge réelle, notification et rollback restent à vérifier après accord d'installation.
+Champ `mapVersion` Valhalla décrit date tuiles ; ne pas l'appeler date OSM.
+Accroche proche frontière peut garder point étranger près d'une route France : validation terrain obligatoire avant phase 3.
+
 ## Phase 1 : choix d'Arthur (24/09/2026)
 
 **P1.1 — Heures de pointe (D1.6).** Heure de Paris. Lundi-vendredi 07:00-10:00 et 16:00-20:00,

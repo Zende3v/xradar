@@ -1,0 +1,3 @@
+# Remplace /etc/cron.d/eona-signs après installation Valhalla autorisée. Jamais deux crons.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 3 * * 0 root /bin/bash /opt/eona-backend/bin/eona-geodata-rebuild.sh >> /var/lib/eona-signs/rebuild.log 2>&1

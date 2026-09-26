@@ -330,14 +330,30 @@ Sans `ALTER`, la base ne touche jamais `crowd` : signalements et corrections sur
 | Ancien système (NDJSON, JSON d'avant PostGIS) | `data/archive/` | non (supprimable) |
 | Sauvegardes du code | `/opt/eona-backend-src-backup-*.tgz` | garder les 2-3 dernières |
 
-Sauvegarde manuelle :
+Sauvegarde quotidienne : **03:10**, cron `/etc/cron.d/eona-backup`, rétention **14 jours**.
+Script versionné : `backend/bin/eona-backup.sh`. Journal : `/var/log/eona-backup.log`.
+Archive `crowd-<date>.dump` : schémas **crowd et routing**. Archive `data-<date>.tgz` : comptes,
+essais par appareil, avatars, réglages et compteurs présents. Archives privées, vérifiées avant
+publication ; sauvegardes concurrentes refusées. Aucune copie hors VPS pour l'instant.
+
+Installation ou mise à jour, après accord d'Arthur :
 ```bash
-mkdir -p /var/backups/eona
-runuser -u postgres -- pg_dump -Fc -n crowd eona > /var/backups/eona/crowd-$(date +%F).dump
-tar czf /var/backups/eona/data-$(date +%F).tgz -C /opt/eona-backend/data accounts.json avatars
+cd /opt/eona-backend
+install -o root -g root -m 755 bin/eona-backup.sh /usr/local/bin/eona-backup.sh
+install -o root -g root -m 644 deploy/eona-backup.cron /etc/cron.d/eona-backup
+/usr/local/bin/eona-backup.sh
 ```
 
-Restauration :
+Le script fixe son `PATH` : cron ne fournit pas `/usr/sbin`, emplacement de `runuser` sur Debian.
+Même protection dans les scripts de signalisation et leur cron versionné.
+
+Contrôle des archives, sans restauration :
+```bash
+pg_restore --list /var/backups/eona/crowd-AAAA-MM-JJ.dump > /dev/null
+tar tzf /var/backups/eona/data-AAAA-MM-JJ.tgz > /dev/null
+```
+
+Restauration, après accord d'Arthur. Arrête le backend et remplace les données actuelles :
 ```bash
 systemctl stop eona-backend
 runuser -u postgres -- pg_restore -d eona --clean --if-exists < /var/backups/eona/crowd-AAAA-MM-JJ.dump
@@ -345,7 +361,9 @@ tar xzf /var/backups/eona/data-AAAA-MM-JJ.tgz -C /opt/eona-backend/data && chown
 systemctl start eona-backend
 ```
 
-Pas de sauvegarde automatique (choix assumé) : lancer la sauvegarde manuelle avant toute opération risquée (migration, restauration, gros déploiement).
+Lancer aussi une sauvegarde avant migration, restauration ou gros déploiement. Vérifier chaque
+matin présence des deux archives du jour. Archive lisible ne prouve pas restauration complète :
+test de restauration isolé reste à organiser.
 
 ---
 
@@ -449,6 +467,25 @@ node bin/eona-eta-report.js data/accounts.json --json   # JSON
 **Checklist de l'équipe** : `backend/CHECKLIST-TRAJETS.md`.
 
 ---
+
+## 7 ter. Valhalla : préparation locale phase 2
+
+État au 26/09 : backend production reste phase 1 ORS. Code Valhalla et scripts prêts pour validation locale,
+**sans installation Valhalla ni déploiement backend phase 2**. Procédure : [backend/valhalla/README.md](backend/valhalla/README.md).
+
+- ORS par défaut ; `VALHALLA_ENABLED=1` nécessaire pour toute requête Valhalla.
+- Réglage admin `routingEngine` : `ors`, `admins`, `all`. Retour immédiat via `PUT /api/admin/routing/engine`.
+- Ombre après réponse ; aucune coordonnée dans mesures 90 jours. Tracés divergents admin seulement, 30 jours.
+- `/faster` garde fonctionnement ORS actuel en mode `ors`. En secours Valhalla → ORS, détour coupé : `reason: "fallback"`.
+- `/health` enrichi avec moteur, carte, disjoncteur, compteurs de secours et file ombre. Champs phase 1 gardés.
+- API, variables et limites : [backend/API-WEBAPP.md](backend/API-WEBAPP.md), section routage.
+
+Script sauvegarde et correction PATH cron déjà installés le 26/09 à 02:13, sans redémarrage backend.
+Nouvelle chaîne dimanche `eona-geodata-rebuild.sh` reste locale. Cron production lance encore signalisation seule.
+Ne remplacer cron qu'après accord et premier build Valhalla validé ; conserver un seul lancement hebdomadaire.
+
+Tests locaux ne valident pas moteur réel, SQL/PostGIS, charge France, p95 ou frontière belge.
+Chaque installation et redémarrage VPS demande accord Arthur. Mesures réelles consignées dans journal avant bascule.
 
 ## 8. En cas de panne
 

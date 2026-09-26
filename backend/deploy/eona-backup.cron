@@ -1,0 +1,3 @@
+# EONA : sauvegarde quotidienne, 14 jours sur VPS.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+10 3 * * * root /usr/local/bin/eona-backup.sh >> /var/log/eona-backup.log 2>&1

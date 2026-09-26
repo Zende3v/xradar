@@ -1,6 +1,8 @@
--- EONA routing measures in PostGIS (phase 1 of PLAN-VALHALLA.md): the route log and the bench.
+-- EONA routing measures in PostGIS (phases 1 and 2 of PLAN-VALHALLA.md): the route log, the bench
+-- and the shadow mode.
 -- Applied at every backend start, so every statement is idempotent; never a DROP. Nothing here
--- says where a driver goes: no account, no coordinates, except the bench's fixed test trips.
+-- says where a driver goes: no account, no coordinates, except the bench's fixed test trips and
+-- the shadow's lines of admin accounts (30 days).
 
 CREATE SCHEMA IF NOT EXISTS routing;
 
@@ -13,7 +15,8 @@ CREATE TABLE IF NOT EXISTS routing.route_log (
     at timestamptz NOT NULL DEFAULT now(),
     -- route (/api/route) or faster (/api/route/faster).
     kind text NOT NULL,
-    -- The engine of the route answered (ors, osrm…; for faster, of the detour); null without one.
+    -- The engine of the route answered (ors, valhalla; osrm before phase 2; for faster, of the
+    -- detour); null without one.
     engine text,
     status integer,
     latency_ms integer,
@@ -73,3 +76,59 @@ CREATE TABLE IF NOT EXISTS routing.bench_run (
 );
 CREATE INDEX IF NOT EXISTS bench_run_at ON routing.bench_run (at DESC);
 CREATE INDEX IF NOT EXISTS bench_run_trip ON routing.bench_run (trip_id, at DESC);
+
+-- ---- Shadow mode (routing/shadow.js, phase 2, D7.1) ----------------------------------------
+
+-- One comparison of both engines: a computed /api/route answer (kind route) or a /faster check
+-- that asked an engine (kind faster). Measures only: no account, no coordinates. Per engine
+-- (ors_*, valhalla_*): asked and answered (ok: null = not asked, error then says why), the error
+-- code, latency, distance, duration, steps, a U-turn among the first 2. Kept
+-- config.shadowKeepDays, then purged.
+CREATE TABLE IF NOT EXISTS routing.shadow_run (
+    id bigserial PRIMARY KEY,
+    at timestamptz NOT NULL DEFAULT now(),
+    kind text NOT NULL,
+    -- routingEngine then: ors, admins or all.
+    mode text,
+    -- The engine whose answer the app got; null when none could.
+    served text,
+    -- ORS served (or tried) a route Valhalla should have served, and why (cause).
+    fallback boolean NOT NULL DEFAULT false,
+    cause text,
+    avoid text[],
+    ors_ok boolean,
+    ors_error text,
+    ors_latency_ms integer,
+    ors_distance_m integer,
+    ors_duration_s integer,
+    ors_steps integer,
+    ors_uturn_start boolean,
+    valhalla_ok boolean,
+    valhalla_error text,
+    valhalla_latency_ms integer,
+    valhalla_distance_m integer,
+    valhalla_duration_s integer,
+    valhalla_steps integer,
+    valhalla_uturn_start boolean,
+    -- Common road of both routes: ORS's share on Valhalla's, Valhalla's share on ORS's (0 to 1).
+    share_ors real,
+    share_valhalla real,
+    -- Past D7.1's gaps (duration, common road; for faster, the detour's).
+    divergent boolean,
+    -- faster: routes drawn, candidates and viable per engine, the detour's common road.
+    detail jsonb
+);
+CREATE INDEX IF NOT EXISTS shadow_run_at ON routing.shadow_run (at);
+
+-- Both lines of a divergent comparison, for admin accounts only (the team), to read on a map.
+-- Kept config.shadowTraceKeepDays, then purged.
+CREATE TABLE IF NOT EXISTS routing.shadow_trace (
+    id bigserial PRIMARY KEY,
+    at timestamptz NOT NULL DEFAULT now(),
+    run_id bigint NOT NULL REFERENCES routing.shadow_run (id) ON DELETE CASCADE,
+    kind text NOT NULL,
+    ors_geom geometry(LineString, 4326),
+    valhalla_geom geometry(LineString, 4326)
+);
+CREATE INDEX IF NOT EXISTS shadow_trace_at ON routing.shadow_trace (at);
+CREATE INDEX IF NOT EXISTS shadow_trace_run ON routing.shadow_trace (run_id);
