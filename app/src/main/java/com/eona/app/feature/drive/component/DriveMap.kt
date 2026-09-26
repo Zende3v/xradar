@@ -194,6 +194,9 @@ fun DriveMap(
     val settings by AppPreferences.settings.collectAsStateWithLifecycle()
     val accent = 0xFF000000.toInt() or settings.accent.rgb
     val accentState = rememberUpdatedState(accent)
+    // "Véhicule" (Mon compte): the drawing of the driver's position, in the same colour.
+    val vehicle = settings.vehicleType
+    val vehicleState = rememberUpdatedState(vehicle)
     // Where the drawn line starts along the route (the part driven is cut off), for its colours.
     val routeFrom = remember { DoubleArray(1) }
     val nav = remember { NavHolder() }
@@ -206,6 +209,8 @@ fun DriveMap(
     val markerPx = with(density) { 30.dp.roundToPx() }
     val clusterAlertPx = with(density) { 34.dp.roundToPx() }
     val clusterSignPx = with(density) { 30.dp.roundToPx() }
+    val cursorPx = with(density) { CURSOR_SIZE.roundToPx() }
+    val densityDpi = context.resources.displayMetrics.densityDpi
     val markerSpecs = listOf(
         Triple("RadarFixed", rememberVectorPainter(EonaIcons.Radar), colors.radarFixed),
         Triple("RadarMobile", rememberVectorPainter(EonaIcons.Radar), colors.radarMobile),
@@ -420,8 +425,8 @@ fun DriveMap(
                 ).also { it.setFilter(Expression.not(Expression.has(CLUSTER_COUNT))) },
             )
             addBadgeClusterLayer(style, REPORT_SOURCE, REPORT_CLUSTER, CLUSTER_ALERT_IMAGE, alertOffsetEm, darkMap)
-            // User position on top: a soft pulsing halo + a heading arrow.
-            style.addImage(ARROW_IMAGE, arrowBitmap(accent))
+            // User position on top: a soft pulsing halo + the vehicle, turned with the heading.
+            style.addImage(ARROW_IMAGE, vehicleCursorBitmap(vehicleState.value, accent, cursorPx, densityDpi))
             style.addSource(GeoJsonSource(POSITION_SOURCE))
             style.addLayer(
                 CircleLayer(POSITION_HALO, POSITION_SOURCE).withProperties(
@@ -452,6 +457,13 @@ fun DriveMap(
             applyTraffic(style, drawnPath, 0.0, traffic, accent)
             styleReady = true
         }
+    }
+
+    // Another vehicle picked: only the cursor's drawing changes, the style stays.
+    LaunchedEffect(map, styleReady, vehicle) {
+        val current = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        current.style?.addImage(ARROW_IMAGE, vehicleCursorBitmap(vehicle, accentState.value, cursorPx, densityDpi))
     }
 
     // Update radar markers when the list changes.
@@ -530,6 +542,9 @@ fun DriveMap(
         var arrowLat = locationState.value?.latitude ?: 0.0
         var arrowLon = locationState.value?.longitude ?: 0.0
         var arrowBearing = 0f
+        // The vehicle's own heading. At a stop the camera turns north-up, the vehicle keeps the
+        // course it had: it stays along its road.
+        var cursorBearing = locationState.value?.bearingDeg ?: 0f
         var lastRouteAt = 0L
         /** Where the drawn route was last cut (metres along it), -1 while it shows whole. */
         var trimmedAt = -1.0
@@ -570,6 +585,7 @@ fun DriveMap(
                     val (pt, tangent) = rp.poseAt(displayedAlong)
                     arrowLat = pt.lat; arrowLon = pt.lon
                     arrowBearing = lerpAngle(arrowBearing.toDouble(), tangent.toFloat(), TANGENT_LERP).toFloat()
+                    cursorBearing = arrowBearing
                     // The driven part is cut away by steps of a few dozen metres, hidden under the
                     // arrow: each cut redraws the whole line, so not at every frame.
                     if (drawn != null && now - lastRouteAt > ROUTE_TRIM_MS &&
@@ -602,6 +618,7 @@ fun DriveMap(
                     arrowLon += (tLon - arrowLon) * POS_LERP
                     // North-up when stopped (avoids a wrong compass heading), GPS course when moving.
                     arrowBearing = if (moving) (brg?.toFloat() ?: arrowBearing) else 0f
+                    if (moving && brg != null) cursorBearing = brg.toFloat()
                     if (drawn != null && now - lastRouteAt > ROUTE_TRIM_MS && (trimmedAt != -2.0 || appliedTraffic !== trafficState.value)) {
                         lastRouteAt = now
                         // The whole route until we're back on it: drawn once, not at every frame.
@@ -612,7 +629,7 @@ fun DriveMap(
                         appliedTraffic = trafficState.value
                     }
                 }
-                setArrow(style, arrowLat, arrowLon, arrowBearing)
+                setArrow(style, arrowLat, arrowLon, cursorBearing)
                 // The others of the group, where they were a few seconds ago.
                 val groupLayer = groupState.value
                 if (groupLayer != null) {
@@ -808,32 +825,6 @@ private val artworkMarkers = mapOf(
     "m-ControlZone" to R.drawable.ic_hud_zone_controle,
     JAM_MARKER to R.drawable.ic_hud_bouchon,
 )
-
-/** A crisp navigation chevron pointing up (north), in the accent ([color], ARGB). */
-private fun arrowBitmap(fillColor: Int): Bitmap {
-    val size = 84
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val path = Path().apply {
-        moveTo(size * 0.5f, size * 0.12f)   // tip
-        lineTo(size * 0.82f, size * 0.86f)  // bottom-right
-        lineTo(size * 0.5f, size * 0.68f)   // inner notch
-        lineTo(size * 0.18f, size * 0.86f)  // bottom-left
-        close()
-    }
-    // White halo/outline so the arrow reads on any basemap.
-    canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = size * 0.09f
-        strokeJoin = Paint.Join.ROUND
-        color = android.graphics.Color.WHITE
-    })
-    canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = fillColor
-    })
-    return bitmap
-}
 
 private fun setRadars(style: Style, radars: List<Radar>) {
     val features = radars.map {
@@ -1195,6 +1186,8 @@ private const val POSITION_SOURCE = "xr-position"
 private const val POSITION_HALO = "xr-position-halo"
 private const val POSITION_ARROW = "xr-position-arrow"
 private const val ARROW_IMAGE = "xr-arrow"
+/** The vehicle cursor's square, before the layer's icon size (0.85). */
+private val CURSOR_SIZE = 48.dp
 private const val CLUSTER_ALERT_IMAGE = "xr-cluster-alert"
 private const val CLUSTER_SIGN_IMAGE = "xr-cluster-sign"
 private const val RADAR_SOURCE = "xr-radars"

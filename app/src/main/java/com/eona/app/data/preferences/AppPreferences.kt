@@ -85,11 +85,29 @@ enum class AccentColor(val hex: String, val label: String) {
     }
 }
 
+/**
+ * "Véhicule", in Mon compte: the drawing of the driver's own position on the map, nothing else
+ * (no routing, speed, statistics or rights). Kept on the phone only, stored as [wire] ("car",
+ * "motorcycle", "taxi", "truck", as on iOS); anything else reads as a car.
+ */
+enum class VehicleType(val wire: String, val label: String) {
+    Car("car", "Voiture"),
+    Motorcycle("motorcycle", "Moto"),
+    Taxi("taxi", "Taxi"),
+    Truck("truck", "Camion");
+
+    companion object {
+        fun fromWire(wire: String?): VehicleType = entries.firstOrNull { it.wire == wire } ?: Car
+    }
+}
+
 /** Look-and-feel and routing choices (persisted), edited from Réglages and the Options dock. */
 data class AppSettings(
     val theme: AppTheme = AppTheme.Auto,
     /** "Couleur de l'app". */
     val accent: AccentColor = AccentColor.Cyan,
+    /** "Véhicule": the position cursor's drawing. */
+    val vehicleType: VehicleType = VehicleType.Car,
     /** Ask the router to keep the trip off toll roads. */
     val avoidTolls: Boolean = false,
     /** Ask the router to keep the trip off motorways. */
@@ -150,6 +168,7 @@ object AppPreferences {
         _settings.value = AppSettings(
             theme = enumOrDefault(p.getString("theme", null), legacyTheme(p)),
             accent = AccentColor.fromHex(p.getString("accent", null)),
+            vehicleType = VehicleType.fromWire(p.getString("vehicleType", null)),
             avoidTolls = p.getBoolean("avoidTolls", false),
             avoidHighways = p.getBoolean("avoidHighways", false),
             avoidTraffic = p.getBoolean("avoidTraffic", false),
@@ -221,6 +240,7 @@ object AppPreferences {
         prefs?.edit()?.apply {
             putString("theme", updated.theme.name)
             putString("accent", updated.accent.hex)
+            putString("vehicleType", updated.vehicleType.wire)
             // The app theme and the basemap of earlier builds, merged into [theme].
             remove("themeMode")
             remove("mapStyle")

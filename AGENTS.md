@@ -4,19 +4,19 @@ Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'impor
 
 ## Mode de travail (depuis le 25/09/2026)
 
-- **Codex (GPT-6-Astra) pilote tout.** Il découpe, décide du déroulé, code, intègre et répond à
-  Arthur.
+- **Codex (GPT-6-Astra) pilote.** Il cadre, découpe, arbitre et répond à Arthur.
+  Actions locales limitées : petites corrections, intégration, contrôles indispensables.
 - **Claude (Opus 5.5) est partenaire** via le MCP `bridge`. Codex lui délègue des sous-tâches
   bornées (scope disjoint, délai, livrable, critère de vérif) :
   - build Android : le sandbox Codex bloque Gradle (verrou `.gradle`) ;
   - relectures indépendantes, en lecture seule, avec preuves `fichier:ligne` ;
   - gros chantiers parallélisables.
-- **Répartition réelle environ 50/50 par tâches** (Arthur, 26/09). Codex garde vision globale,
-  arbitrages et intégration. Claude prend aussi gros lots d'implémentation, pas seulement relectures.
-  Scopes disjoints, travail parallèle quand utile. Limiter lectures répétées et tests redondants.
-- Tests ciblés sur corrections et risques réels. Après réussite, relancer seulement si changement pertinent.
-  Arthur valide téléphone. Expliquer brièvement objectif, résultat et prochaine étape de chaque lot.
-- Revue croisée systématique : ce que l'un écrit, l'autre le relit.
+- **Claude réalise majorité du travail ; Codex garde vision globale** (Arthur, 26/09, remplace règle 50/50).
+  Confier implémentation et diagnostics substantiels à Claude. Contrats courts, scopes disjoints, aucun travail dupliqué.
+- Tests automatiques uniquement indispensables à correction ou risque concret. Aucune campagne par défaut ni relance sans nécessité.
+  Arthur réalise validation fonctionnelle et téléphone. Ne pas ajouter tests pour changements mineurs.
+- Revue croisée ciblée : contrat, changements risqués, défauts concrets. Pas de double audit ni double campagne de tests.
+- Rapports ultra courts : résultat, blocage, prochaine étape. Conserver point de reprise précis après chaque lot.
 - Les deux : skill **caveman** à chaque réponse, en français. Commits et docs en caveman aussi.
 - Arthur ne travaille plus qu'à deux.
 
@@ -32,7 +32,8 @@ Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'impor
   5. `bridge_record_verification` pour les seules vérifs réellement lancées.
 - Tâche coupée ou bloquée : `bridge_resume_delegated_task` sur la tâche existante, jamais de
   tâche de remplacement.
-- Agent indisponible ou quota épuisé : le dire en une ligne, faire la tâche soi-même.
+- Agent indisponible ou quota épuisé : le dire en une ligne. Ne pas reprendre gros lot côté Codex sans accord Arthur.
+- Bridge bloqué : diagnostic borné, point de reprise conservé. Ne pas transformer incident en chantier prolongé par défaut.
 - Config : `.codex/config.toml` (Codex, `caller=codex`) et `.mcp.json` (Claude, `caller=claude`),
   locaux, non versionnés. Base partagée : `.bridge/bridge.db`.
 
@@ -46,13 +47,14 @@ Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'impor
 - Build Android dans `Bash` : `export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" &&
   ./gradlew :app:assembleRelease`.
 - Le livrable part tout seul à la fin de la tâche : le worker ne l'appelle pas lui-même.
-- Scopes : chemins relatifs à `x_radar`. Le repo iOS (`../xradar_ios`) est hors workspace : le
-  confier au worker seulement avec un scope explicite `../xradar_ios/**`, sinon le traiter
-  soi-même.
+- Inclure dans chaque contrat : français, caveman ultra, livrable bref, tests indispensables seulement.
+  Appliquer ces règles directement ; worker ne dispose pas d'outil skills.
+- Scopes relatifs au workspace du bridge. `../xradar_ios/**` est refusé (`INVALID_ARGUMENT`).
+  Pour iOS, ouvrir bridge sur `C:/Users/usr/Documents/xradar_ios`, puis déléguer avec scopes relatifs à ce repo.
 
 ### Caveman (Codex et Claude, toujours)
 
-Skill caveman niveau full, en français. Sans articles superflus, sans formules de politesse, sans
+Skill caveman niveau **ultra**, en français, pour Codex et Claude Opus 5.5. Sans articles superflus, sans formules de politesse, sans
 remplissage. Phrases courtes (20 mots max), une idée par phrase, voix active, impératif pour les
 consignes. Termes techniques, code, commandes et messages d'erreur exacts. Jamais d'abréviation
 inventée. Clarté d'abord : style normal pour les alertes de sécurité et les actions
@@ -90,7 +92,7 @@ irréversibles.
   - AGP 9 embarque Kotlin : **ne jamais** appliquer `org.jetbrains.kotlin.android`.
   - KGP 2.2.10 : aucune lib compilée avec Kotlin ≥ 2.4.
   - Pas de tests unitaires Android.
-- Version : 1.0.1 (versionCode 4). **Monter le `versionCode` à chaque nouvel APK.**
+- Version : 1.0.1 (versionCode 5). **Monter le `versionCode` à chaque nouvel APK.**
 
 ## iOS (`xradar_ios`)
 
@@ -98,7 +100,7 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 2. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 3. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 

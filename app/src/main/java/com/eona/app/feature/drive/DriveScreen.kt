@@ -368,8 +368,9 @@ fun DriveScreen(
             verticalArrangement = Arrangement.spacedBy(spacing.md),
         ) {
             // Alerts the driver swiped away stay off the HUD for a while (still live for the voice).
+            // An alert pops up only once close: its sound, beeps and voice keep their own distances.
             val shownAlerts = remember(state.alerts, dismissedAlerts) {
-                state.alerts.filter { it.key !in dismissedAlerts }
+                state.alerts.filter { it.key !in dismissedAlerts && it.distanceMeters <= ALERT_POPUP_M }
             }
             AnimatedVisibility(
                 visible = shownAlerts.isNotEmpty() && !restricted,
@@ -399,7 +400,7 @@ fun DriveScreen(
                 SlowdownPromptCard(onAnswer = onSlowdownAnswer)
             }
 
-            // Destination reached: the trip's figures, then the HUD is simply driving again.
+            // Destination reached: the trip's figures, until "Terminé" or another trip.
             val lastArrival = remember { mutableStateOf<TripArrival?>(null) }
             LaunchedEffect(state.arrival) { state.arrival?.let { lastArrival.value = it } }
             AnimatedVisibility(
@@ -410,9 +411,10 @@ fun DriveScreen(
                 lastArrival.value?.let { ArrivalCard(it, onDismiss = onDismissArrival) }
             }
 
-            // The group trip is over: its ranking, until the driver closes it.
+            // The group trip is over: its ranking, until the driver closes it. It waits for the
+            // arrival card to be closed: one card at a time.
             AnimatedVisibility(
-                visible = finishedGroup != null,
+                visible = finishedGroup != null && state.arrival == null,
                 enter = slideInVertically { it / 2 } + fadeIn(),
                 exit = slideOutVertically { it / 2 } + fadeOut(),
             ) {
@@ -776,6 +778,12 @@ private val MAP_CONTROL_SIZE = 56.dp
 /** A report closer than this shows "toujours là / plus là". */
 private const val VOTE_DISTANCE_M = 300
 
+/**
+ * Radars and road alerts pop up on the HUD this close only. Display alone: fetching, direction,
+ * voice and beeps keep their own distances (DriveViewModel).
+ */
+private const val ALERT_POPUP_M = 300
+
 @Composable
 private fun HudSearchBar(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = EonaTheme.colors
@@ -902,7 +910,7 @@ private fun FasterRouteBanner(notice: FasterRouteNotice, modifier: Modifier = Mo
 
 /**
  * The destination is reached: a round check that lands with a bounce, the place, and what the trip
- * came to. It goes on its own after a few seconds, or on "Terminé".
+ * came to. It stays until "Terminé" or another trip.
  */
 @Composable
 private fun ArrivalCard(arrival: TripArrival, onDismiss: () -> Unit, modifier: Modifier = Modifier) {

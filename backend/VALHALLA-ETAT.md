@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **26/09/2026**. État production vérifié à **15:10, Europe/Paris** ; préparation locale poursuivie ensuite.
+Mis à jour : **26/09/2026**. Exploitation vérifiée à **15:10**, collecte à **20:25, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -42,6 +42,7 @@ sont repris dans le journal.
 - **Passage automatique vérifié** : 25/09 à 23:00, créneau `nuit`, **6/6 OK**, curseur 12.
   Passages 26/09 à 08:00 et 12:30 : **6/6 OK chacun**, curseur 24.
   Total banc : **24 lignes réussies**, dont 18 automatiques. Log midi : 24 requêtes TomTom banc ce jour-là.
+  Contrôle 20:25 : passage 18:00 **6/6 OK** ; total **30 lignes réussies**, dont 24 automatiques.
 - **Android** 1.0.1 (4) et **iOS** 1.0.0 (2) : buildent et se lancent (Arthur, 25/09).
 - **Commits** : iOS `55c56c9` poussé. x_radar `b7759b0` phase 1, puis documentation jusqu'à
   `53a81c4`, sans push. Audit distant 25/09 : branche x_radar avait 9 commits locaux d'avance.
@@ -50,8 +51,13 @@ sont repris dans le journal.
 
 - `/health` local `ok`, public HTTP 200. Backend démarré depuis 25/09 19:34:38 ; aucun redémarrage pendant correction sauvegardes.
 - Avant préparation phase 2 : 62 fichiers backend suivis comparés au VPS, identiques après normalisation CRLF.
-- `routing.route_log` : **0 ligne**. Rapport ETA : **7 anciens trajets, 0 exploitable**, tous antérieurs aux mesures.
-  Aucun résultat terrain nouveau ; absence de trajet aujourd'hui ne bloque pas préparation technique.
+- À 15:10 : `routing.route_log` vide ; 7 anciens trajets, aucun exploitable.
+  À **20:25** : **22 lignes de routage**, **9 trajets enregistrés**, dont **2 nouveaux exploitables** sur iOS 1.0.0 (2).
+  Deux trajets courts, hors pointe, ORS ; arrivée reconnue, départ réel et relevés ETA présents.
+  **8 relevés exploitables sur 8**, tous dans tolérance prévue. Erreur absolue médiane : départ **90 s**, 25 % **23 s**, 50 % **24 s**, 75 % **12 s**.
+  Variantes avec/sans arrêts incertains identiques. Sept anciens trajets exclus normalement, faute de mesures phase 1.
+  Collecte bout en bout confirmée pour ces deux trajets iOS ; Android et précision générale restent à confirmer.
+  `/health` public HTTP 200. Vérification lecture seule ; aucun test, déploiement ni redémarrage.
 - Sauvegarde cassée confirmée : `runuser: command not found` sous PATH cron réduit.
   Correction autorisée par Arthur, installée **26/09 à 02:13** : PATH explicite, verrou, archives temporaires vérifiées.
 - Sauvegarde réelle exécutée avec `PATH=/usr/bin:/bin` : succès ; dump **89 765 octets**, archive **36 427 octets**, mode 0600.
@@ -68,7 +74,7 @@ sont repris dans le journal.
   Reprise renvoie `ILLEGAL_TRANSITION`. Correction bridge elle-même interrompue ; aucune correction timeout intégrée.
   Revue indépendante des scripts reste ouverte. Conserver mêmes tâches, aucun remplacement.
   Lot local livré sans prolonger dépannage bridge ; détails de reprise conservés dans `.bridge/tools/REPRISE-20260926.md`.
-- Arthur demande répartition **environ 50/50 par tâches**. Codex coordonne et intègre ; Claude implémente aussi lots importants.
+- Arthur demande désormais **majorité du travail chez Claude**. Codex cadre, intègre et relit risques ciblés ; français caveman ultra.
 
 ## Phase 2 : préparation locale
 
@@ -86,6 +92,12 @@ sont repris dans le journal.
   Ne pas valider passage admins/tous avant essais Belgique et cas proches frontière.
 
 ## Collecte en cours
+
+- Corrections mobiles préparées le 26/09 avec Claude Opus 5.5 : résumé arrivée conservé jusqu'à fermeture,
+  popups routiers limités à 300 m, véhicule local esthétique. Critère arrivée, champs/API collecte et backend inchangés.
+  Android **1.0.1 (5)** compilé ; iOS **1.0.0 (3)** prêt pour Codemagic, compilation non effectuée localement.
+  Versions Android (4) et iOS (2) continuent collecte ; aucune mise à jour obligatoire pour amis cette nuit.
+  Vérification téléphone reste à faire. Aucun test de trajet supplémentaire exigé avant installation facultative des nouvelles apps.
 
 - Durée : 2 à 3 semaines depuis le 25/09 (D1.3), donc un premier bilan entre le 09/10 et le 16/10.
 - Rapport ETA sur le VPS : `cd /opt/eona-backend && node bin/eona-eta-report.js data/accounts.json`.
@@ -106,7 +118,8 @@ beaucoup la durée (14 min annoncées contre 29 min pour TomTom). Toulouse (Capi
 - Revue Codex reprise : arrivée automatique, départ réel, pauses, relevés ETA, `retargeted`, sérialisation Android/iOS et filtre rapport.
   Contrôles exécutés : 14 assertions sur exclusions, pauses après relevé, variantes, tolérance et heures Paris, toutes réussies.
   Aucun défaut trouvé dans chaîne relue. Libellés historiques F1–F4 absents du dépôt : correspondance exacte non reconstructible.
-  Validation téléphone et collecte bout en bout restent nécessaires ; au prochain trajet d'Arthur.
+  Collecte bout en bout confirmée le 26/09 à 20:25 sur deux nouveaux trajets iOS après aller-retour signalé par Arthur.
+  Autres situations et Android restent à couvrir ; deux trajets ne suffisent pas pour bilan de précision.
 - Signalisation : première reconstruction automatique dimanche 27/09 à 03:30, à vérifier dans
   `/var/lib/eona-signs/rebuild.log`.
 - Sauvegardes uniquement sur le VPS, aucune copie ailleurs.
@@ -115,4 +128,4 @@ beaucoup la durée (14 min annoncées contre 29 min pour TomTom). Toulouse (Capi
 
 1. Clore revue indépendante des scripts avant installation ; reprendre tâche Claude existante quand bridge permet reprise stricte.
 2. Présenter lot VPS précis à Arthur : Podman, swap, service, premier build France et mesures. Accord requis avant intervention.
-3. Au prochain trajet : vérifier collecte bout en bout. Collecte phase 1 continue pendant préparation phase 2.
+3. Poursuivre trajets ordinaires et collecte phase 1 ; couvrir Android et situations variées avant bilan.

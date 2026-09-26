@@ -54,8 +54,8 @@ fun ProfileRoute(onBack: () -> Unit) {
 
 /**
  * "Mon compte": name, role and photo (members change it), "Changer de pseudo" (clients with
- * access), access status, email verification, the guest's trial note, the app version, and the
- * deletion of the account.
+ * access), access status, email verification, the guest's trial note, the vehicle drawn on the
+ * map, the app version, and the deletion of the account.
  */
 @Composable
 fun ProfileScreen(
@@ -116,6 +116,9 @@ fun ProfileScreen(
             if (account?.role == Role.Guest) {
                 GuestNote(account)
             }
+
+            // The drawing of my position on the map: a choice of this phone, never sent.
+            VehiclePicker()
 
             if (com.eona.app.data.account.GoogleAuth.isAvailable && account != null) {
                 val linked = "google" in account.providers

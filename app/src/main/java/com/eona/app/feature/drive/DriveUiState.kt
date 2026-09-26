@@ -25,8 +25,8 @@ data class FasterRouteNotice(
 )
 
 /**
- * The trip just reached its destination: what the arrival card shows, a few seconds, before the
- * HUD goes back to simply driving.
+ * The trip just reached its destination: what the arrival card shows, until the driver closes it or
+ * starts another trip.
  */
 data class TripArrival(
     val toLabel: String,
@@ -80,7 +80,7 @@ data class DriveUiState(
     val fasterNotice: FasterRouteNotice? = null,
     /** "Ralentissement du trafic ?", asked a few seconds about a slowdown nobody knows of yet. */
     val slowdownPrompt: SlowdownPrompt? = null,
-    /** Shown a few seconds once the destination is reached. */
+    /** Shown once the destination is reached, until closed or another trip starts. */
     val arrival: TripArrival? = null,
 ) {
     val speedStatus: SpeedStatus?

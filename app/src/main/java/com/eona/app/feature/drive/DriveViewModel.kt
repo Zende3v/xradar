@@ -839,6 +839,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
     /** A new destination starts a trip, or redirects the one running (a new estimate follows). */
     private fun startTrip(destination: Place) {
+        // Another trip: the last arrival card goes, never two at once.
+        arrival.value = null
         val current = trip
         if (current == null) trip = TripRecorder(destination.name, PLATFORM, APP_VERSION) else current.retarget(destination.name)
         // A navigation bug report joins this trip, to this destination, from now on.
@@ -886,19 +888,18 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { AccountRepository.postTrip(record) }
     }
 
-    /** The destination is reached: the card, with the trip's figures, for a few seconds. */
+    /**
+     * The destination is reached: the card, with the trip's figures, until the driver closes it or
+     * starts another trip. It no longer goes on its own: parking, the screen off or another app in
+     * front, a card gone after 15 s was never seen.
+     */
     private fun showArrival(finished: TripRecorder) {
-        val reached = TripArrival(
+        arrival.value = TripArrival(
             toLabel = finished.toLabel,
             distanceMeters = finished.distanceMeters.roundToInt(),
             durationSeconds = ((System.currentTimeMillis() - finished.startedAt) / 1000).toInt(),
             alertsCount = finished.alertsMet,
         )
-        arrival.value = reached
-        viewModelScope.launch {
-            delay(ARRIVAL_MS)
-            if (arrival.value == reached) arrival.value = null
-        }
     }
 
     /** The driver closed the arrival card. */
@@ -1486,8 +1487,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // "Ralentissement du trafic ?": asked this long; nothing in a trip's first or last metres;
         // not again this close to a "Non" for this long; a "Bouchon" this close is already known.
         const val SLOWDOWN_PROMPT_MS = 10_000L
-        /** How long the arrival card stays before going on its own. */
-        const val ARRIVAL_MS = 15_000L
         const val SLOWDOWN_TRIP_START_M = 300.0
         const val SLOWDOWN_TRIP_END_M = 500.0
         const val SLOWDOWN_DECLINE_MS = 900_000L
@@ -1506,7 +1505,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val DRIVE_MIN_SPEED_MS = 1.5f
         const val DRIVE_MAX_GAP_S = 10.0
         const val DRIVE_FLUSH_MS = 60_000L
-        /** How far ahead a radar or a report shows as an alert. */
+        /**
+         * How far ahead a radar or a report becomes a live alert: its sound, the beeps, the voice
+         * and the trip's count. The HUD pops it up closer only (ALERT_POPUP_M, DriveScreen).
+         */
         const val ALERT_DISTANCE_M = 700.0
         // The VMA sign shows while a speed radar is the active alert ahead. (Road-wide
         // limits everywhere need an OSM maxspeed source — planned separately.)
