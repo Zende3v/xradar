@@ -51,7 +51,9 @@ export const config = {
   // disabled, plan changed), this long. A spent quota waits for midnight UTC on its own.
   orsKeyPauseMs: 60 * 1000,
   orsKeyBlockMs: 60 * MIN,
-  orsUrl: process.env.ORS_URL || 'https://api.openrouteservice.org',
+  // api.openrouteservice.org is deprecated: 10 % of the quota since 27/08/2026, shut down on
+  // 28/09/2026. Same keys on the new address.
+  orsUrl: process.env.ORS_URL || 'https://api.heigit.org/openrouteservice',
   // What each ORS key spent today, kept on disk: a restart hands neither the day's calls nor a key
   // set aside back to the budget.
   orsUsageFile: process.env.ORS_USAGE_FILE || './data/ors-usage.json',

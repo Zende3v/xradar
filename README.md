@@ -171,7 +171,7 @@ systemctl daemon-reload && systemctl restart eona-backend
 |---|---|---|
 | `PORT` / `HOST` | écoute locale | `8090` / `127.0.0.1` (via le .service) |
 | `ADMIN_TOKEN` | API admin + CLI + modération | absent = API admin coupée |
-| `ORS_API_KEY` / `ORS_URL` | itinéraires OpenRouteService | absent = OSRM public |
+| `ORS_API_KEY` / `ORS_URL` | itinéraires OpenRouteService | clé absente = OSRM public ; URL défaut `https://api.heigit.org/openrouteservice` (ancienne `api.openrouteservice.org` coupée le 28/09/2026 ; prod : drop-in `ors-url.conf`) |
 | `ORS_API_KEY_2` (et `_3`) | clé de secours : elle prend le relais dès que la précédente est refusée (quota du jour épuisé, trop d'appels d'un coup), jusqu'à minuit UTC | — |
 | `ORS_DAILY_BUDGET` | appels ORS par clé et par jour, sous le quota du plan gratuit (2000) | `1500` |
 | `ORS_USAGE_FILE` | compteurs du jour des clés ORS (clé nommée par un hash court, jamais en clair) | `./data/ors-usage.json` |
