@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { db } from '../db.js';
 import { tomtomUsedFor } from '../traffic/budget.js';
 import { bestRoute, trafficAlong } from '../traffic/tomtom.js';
-import { computeRoute } from './engine.js';
+import { computeRoute, computeValhallaRoute } from './engine.js';
 import { measure } from './geometry.js';
 import { routeFacts } from './log.js';
 
@@ -17,8 +17,9 @@ import { routeFacts } from './log.js';
  */
 
 export const BENCH_SLOTS = ['matin', 'midi', 'soir', 'nuit'];
-// What one trip costs TomTom: our route timed, then its own best route.
-const TOMTOM_PER_TRIP = 2;
+// What one trip costs TomTom: our route timed, then its own best route; with Valhalla on, its
+// route timed too.
+const tomtomPerTrip = () => (config.valhallaEnabled ? 3 : 2);
 // A pause between TomTom requests: its free tier refuses bursts.
 const TOMTOM_GAP_MS = 250;
 
@@ -47,7 +48,7 @@ async function run(slot) {
   const results = [];
   let stopped = null;
   for (let i = 0; i < Math.min(config.benchTripsPerRun, trips.length); i++) {
-    if (tomtomUsedFor('bench') + TOMTOM_PER_TRIP > config.benchTomtomDailyMax) {
+    if (tomtomUsedFor('bench') + tomtomPerTrip() > config.benchTomtomDailyMax) {
       stopped = 'bench TomTom share spent';
       break;
     }
@@ -98,26 +99,69 @@ async function measureTrip(trip) {
   const startedAt = Date.now();
   const route = await computeRoute(from, to, trip.avoid).catch((e) => ({ error: String(e.message || e) }));
   const latencyMs = Date.now() - startedAt;
-  // No route of ours: nothing to compare, TomTom is not asked.
-  if (route.error) return { ok: false, error: `route: ${route.error}`, latencyMs };
+  // The same trip through Valhalla (phase 2), measured apart: its failure never spoils ours.
+  const valhalla = config.valhallaEnabled ? await measureValhalla(trip, from, to) : null;
+  // No route at all: nothing to compare, TomTom is not asked.
+  if (route.error && !valhalla?.route) return { ok: false, error: `route: ${route.error}`, latencyMs, valhalla };
 
-  const ourTomtom = await attempt('TomTom route', trafficAlong(route.coordinates.map(([lon, lat]) => [lat, lon]), { use: 'bench' }));
-  await new Promise((resolve) => setTimeout(resolve, TOMTOM_GAP_MS));
+  let ourTomtom = null;
+  let ourKm = null;
+  if (route.error) {
+    errors.push(`route: ${route.error}`);
+  } else {
+    await pause();
+    ourTomtom = await attempt('TomTom route', trafficAlong(toLatLon(route.coordinates), { use: 'bench' }));
+    ourKm = await attempt('roads', kmByClass(route.coordinates));
+  }
+  await pause();
   const best = await attempt('TomTom best', bestRoute(from, to, { avoid: trip.avoid, use: 'bench' }));
-  const ourKm = await attempt('roads', kmByClass(route.coordinates));
   const bestKm = best ? await attempt('roads best', kmByClass(best.coordinates)) : null;
   return {
     ok: errors.length === 0,
     error: errors.length ? errors.join('; ') : null,
     latencyMs,
-    route,
-    facts: routeFacts(route),
+    route: route.error ? null : route,
+    facts: route.error ? null : routeFacts(route),
     ourTomtomS: ourTomtom?.travelS ?? null,
     best,
     ourKm,
     bestKm,
+    valhalla,
   };
 }
+
+/**
+ * The trip through Valhalla alone: its route, TomTom's time for it with today's traffic and its
+ * km per road class. What failed is said in `error`.
+ */
+async function measureValhalla(trip, from, to) {
+  const startedAt = Date.now();
+  const route = await computeValhallaRoute(from, to, trip.avoid)
+    .catch((e) => ({ error: String(e?.code ?? e?.message ?? e) }));
+  const latencyMs = Date.now() - startedAt;
+  if (!route || route.error) return { route: null, latencyMs, error: `valhalla: ${route?.error ?? 'no route'}`.slice(0, 160) };
+  const errors = [];
+  await pause();
+  const tomtom = await trafficAlong(toLatLon(route.coordinates), { use: 'bench' }).catch((e) => {
+    errors.push(`TomTom valhalla: ${String(e.message || e).slice(0, 120)}`);
+    return null;
+  });
+  const km = await kmByClass(route.coordinates).catch((e) => {
+    errors.push(`roads valhalla: ${String(e.message || e).slice(0, 120)}`);
+    return null;
+  });
+  return {
+    route,
+    facts: routeFacts(route),
+    tomtomS: tomtom?.travelS ?? null,
+    km,
+    latencyMs,
+    error: errors.length ? errors.join('; ') : null,
+  };
+}
+
+const pause = () => new Promise((resolve) => setTimeout(resolve, TOMTOM_GAP_MS));
+const toLatLon = (coordinates) => coordinates.map(([lon, lat]) => [lat, lon]);
 
 // The road under each sample of a route: the nearest car road within reach (like the limits along
 // a route, signs/postgis.js), counted per OSM class. "none": no road there (a ferry, a gap).
@@ -165,17 +209,24 @@ export function minorKm(kmByClass) {
 }
 
 async function store(slot, trip, m) {
+  const v = m.valhalla;
   await db.query(
     `INSERT INTO routing.bench_run (slot, trip_id, engine, map_version, ok, error, latency_ms,
        our_distance_m, our_duration_s, our_tomtom_s, best_distance_m, best_tomtom_s,
-       our_km_by_class, best_km_by_class, uturn_start, steps, avoid, from_lat, from_lon, to_lat, to_lon)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+       our_km_by_class, best_km_by_class, uturn_start, steps, avoid, from_lat, from_lon, to_lat, to_lon,
+       valhalla_map_version, valhalla_error, valhalla_latency_ms, valhalla_distance_m, valhalla_duration_s,
+       valhalla_tomtom_s, valhalla_km_by_class, valhalla_uturn_start, valhalla_steps)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+       $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
     [
       slot, trip.id, m.facts?.engine ?? null, m.route?.mapVersion ?? null, m.ok, m.error, m.latencyMs,
       whole(m.facts?.distanceM), whole(m.facts?.durationS), whole(m.ourTomtomS), whole(m.best?.distanceM), whole(m.best?.travelS),
       m.ourKm ? JSON.stringify(m.ourKm) : null, m.bestKm ? JSON.stringify(m.bestKm) : null,
       m.facts?.uturnStart ?? null, m.facts?.steps ?? null, trip.avoid,
       trip.from.lat, trip.from.lon, trip.to.lat, trip.to.lon,
+      v?.route?.mapVersion ?? null, v?.error ?? null, v ? whole(v.latencyMs) : null,
+      whole(v?.facts?.distanceM), whole(v?.facts?.durationS), whole(v?.tomtomS),
+      v?.km ? JSON.stringify(v.km) : null, v?.facts?.uturnStart ?? null, v?.facts?.steps ?? null,
     ],
   );
 }
@@ -199,6 +250,24 @@ function summaryOf(trip, m) {
     ourMinorKm: minorKm(m.ourKm),
     bestMinorKm: minorKm(m.bestKm),
     uturnStart: m.facts?.uturnStart ?? null,
+    valhalla: valhallaSummary(m.valhalla, bestTomtomS),
+  };
+}
+
+/** Valhalla's side of a trip, null when Valhalla is off: its times, gap to TomTom's best, km. */
+function valhallaSummary(v, bestTomtomS) {
+  if (!v) return null;
+  const tomtomS = whole(v.tomtomS);
+  return {
+    ok: Boolean(v.route) && !v.error,
+    error: v.error ?? null,
+    latencyMs: whole(v.latencyMs),
+    durationS: whole(v.facts?.durationS),
+    tomtomS,
+    gapS: tomtomS != null && bestTomtomS != null ? tomtomS - bestTomtomS : null,
+    km: km(v.facts?.distanceM),
+    minorKm: minorKm(v.km),
+    uturnStart: v.facts?.uturnStart ?? null,
   };
 }
 
@@ -210,7 +279,9 @@ export async function benchRuns({ since = null, limit = 200 } = {}) {
   const { rows } = await db.query(
     `SELECT id, at, slot, trip_id, engine, map_version, ok, error, latency_ms, our_distance_m, our_duration_s,
             our_tomtom_s, best_distance_m, best_tomtom_s, our_km_by_class, best_km_by_class, uturn_start, steps,
-            avoid, from_lat, from_lon, to_lat, to_lon
+            avoid, from_lat, from_lon, to_lat, to_lon, valhalla_map_version, valhalla_error, valhalla_latency_ms,
+            valhalla_distance_m, valhalla_duration_s, valhalla_tomtom_s, valhalla_km_by_class,
+            valhalla_uturn_start, valhalla_steps
      FROM routing.bench_run
      WHERE ($1::timestamptz IS NULL OR at >= $1)
      ORDER BY at DESC
@@ -242,6 +313,20 @@ export async function benchRuns({ since = null, limit = 200 } = {}) {
     avoid: row.avoid ?? [],
     from: { lat: row.from_lat, lon: row.from_lon },
     to: { lat: row.to_lat, lon: row.to_lon },
+    // Null for runs from before phase 2, or with Valhalla off.
+    valhalla: row.valhalla_latency_ms == null ? null : {
+      mapVersion: row.valhalla_map_version,
+      error: row.valhalla_error,
+      latencyMs: row.valhalla_latency_ms,
+      distanceM: row.valhalla_distance_m,
+      durationS: row.valhalla_duration_s,
+      tomtomS: row.valhalla_tomtom_s,
+      gapS: row.valhalla_tomtom_s != null && row.best_tomtom_s != null ? row.valhalla_tomtom_s - row.best_tomtom_s : null,
+      kmByClass: row.valhalla_km_by_class,
+      minorKm: minorKm(row.valhalla_km_by_class),
+      uturnStart: row.valhalla_uturn_start,
+      steps: row.valhalla_steps,
+    },
   }));
 }
 

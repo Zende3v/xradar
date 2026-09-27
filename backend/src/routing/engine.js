@@ -562,6 +562,16 @@ export function orsHealth() {
 }
 
 /**
+ * The bench's Valhalla route (bench.js): Valhalla alone, whatever routingEngine says, with the
+ * same avoid options. Null when Valhalla is off. Throws its ValhallaError.
+ */
+export async function computeValhallaRoute(from, to, avoid = []) {
+  if (!valhallaSetup.client) return null;
+  const [route] = await valhallaSetup.client.routes(from, to, { avoid });
+  return route ?? null;
+}
+
+/**
  * The bench's route (bench.js): served as a driver's would be (not an admin's), with the same
  * keys and budget; a failure as { error, status, detail? }.
  */

@@ -76,6 +76,18 @@ CREATE TABLE IF NOT EXISTS routing.bench_run (
 );
 CREATE INDEX IF NOT EXISTS bench_run_at ON routing.bench_run (at DESC);
 CREATE INDEX IF NOT EXISTS bench_run_trip ON routing.bench_run (trip_id, at DESC);
+-- Phase 2 (27/09/2026): the same trip through Valhalla, measured beside the engine the apps use.
+-- Null on older rows or with Valhalla off.
+ALTER TABLE routing.bench_run
+    ADD COLUMN IF NOT EXISTS valhalla_map_version text,
+    ADD COLUMN IF NOT EXISTS valhalla_error text,
+    ADD COLUMN IF NOT EXISTS valhalla_latency_ms integer,
+    ADD COLUMN IF NOT EXISTS valhalla_distance_m integer,
+    ADD COLUMN IF NOT EXISTS valhalla_duration_s integer,
+    ADD COLUMN IF NOT EXISTS valhalla_tomtom_s integer,
+    ADD COLUMN IF NOT EXISTS valhalla_km_by_class jsonb,
+    ADD COLUMN IF NOT EXISTS valhalla_uturn_start boolean,
+    ADD COLUMN IF NOT EXISTS valhalla_steps integer;
 
 -- ---- Shadow mode (routing/shadow.js, phase 2, D7.1) ----------------------------------------
 

@@ -114,11 +114,11 @@ export const config = {
   // no account, no coordinates, kept this many days.
   routeLogKeepDays: 90,
   // The bench (routing/bench.js, D1.7): fixed France trips (benchTripsFile), benchTripsPerRun per
-  // run, 4 runs a day (deploy/eona-bench.cron). A trip costs 2 TomTom requests; a run stops once
-  // the bench spent benchTomtomDailyMax of them today.
+  // run, 4 runs a day (deploy/eona-bench.cron). A trip costs 2 TomTom requests, 3 with Valhalla on
+  // (its route timed too); a run stops once the bench spent benchTomtomDailyMax of them today.
   benchTripsFile: process.env.BENCH_TRIPS_FILE || './bench/trajets.json',
   benchTripsPerRun: 6,
-  benchTomtomDailyMax: 50,
+  benchTomtomDailyMax: 75,
   // Km per road class along a bench route: the road under a sample every benchRoadStepM metres
   // (longer routes: benchRoadMaxSamples samples at most), found within signRoadMaxDistM.
   benchRoadStepM: 50,

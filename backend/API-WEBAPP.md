@@ -501,17 +501,21 @@ coordonnée. 90 jours.
 | Lire les mesures | `GET /api/admin/bench/runs?since=<ISO ou ms>&limit=` (200 par défaut, 1000 max), du plus récent au plus ancien |
 
 - Passage : 6 trajets suivants de `bench/trajets.json` (curseur tournant en base), 2 requêtes
-  TomTom chacun ; arrêt anticipé quand le banc a dépensé 50 requêtes TomTom dans la journée. `409`
+  TomTom chacun, 3 avec Valhalla actif ; arrêt anticipé quand le banc a dépensé 75 requêtes TomTom dans la journée. `409`
   si un passage tourne déjà, `503` sans clé TomTom. Réponse à la fin du passage (durée à mesurer ;
   le script cron attend 15 min max).
 - Réponse du passage : `slot`, `startedAt`, `trips`, `ok`, `stopped` (raison d'arrêt ou `null`),
   `nextTrip`, `tomtom` `{bench, benchDailyMax}`, `results[]` : `id`, `ok`, `error`, `engine`,
   `latencyMs`, `ourDurationS` (moteur), `ourTomtomS` (TomTom, notre route), `bestTomtomS` (meilleure
-  route TomTom), `gapS` (écart), `ourKm`, `bestKm`, `ourMinorKm`, `bestMinorKm`, `uturnStart`.
+  route TomTom), `gapS` (écart), `ourKm`, `bestKm`, `ourMinorKm`, `bestMinorKm`, `uturnStart`, `valhalla`
+  (`null` si Valhalla coupé, sinon `ok`, `error`, `latencyMs`, `durationS`, `tomtomS`, `gapS` contre meilleure
+  route TomTom, `km`, `minorKm`, `uturnStart`).
 - Une mesure (`runs[]`) : `id`, `at`, `slot`, `tripId`, `engine`, `mapVersion`, `ok`, `error`,
   `latencyMs`, `ourDistanceM`, `ourDurationS`, `ourTomtomS`, `bestDistanceM`, `bestTomtomS`,
   `gapS`, `ourKmByClass` / `bestKmByClass` (km par classe OSM `highway`, `none` = pas de route
-  voiture : bac), `ourMinorKm` / `bestMinorKm`, `uturnStart`, `steps`, `avoid`, `from`, `to`.
+  voiture : bac), `ourMinorKm` / `bestMinorKm`, `uturnStart`, `steps`, `avoid`, `from`, `to`, `valhalla` (`null` avant phase 2 ou Valhalla
+  coupé ; sinon `mapVersion`, `error`, `latencyMs`, `distanceM`, `durationS`, `tomtomS`, `gapS`, `kmByClass`,
+  `minorKm`, `uturnStart`, `steps`). Même trajet calculé par Valhalla seul, chronométré par TomTom.
 - Petites routes (P1.3) : `unclassified`, `residential`, `living_street`, `service`. Calculées à
   la lecture depuis les km par classe : définition changeable sans refaire les mesures.
 - Coordonnées gardées : trajets de test fixes, personne derrière.
