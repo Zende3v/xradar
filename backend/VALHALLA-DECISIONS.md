@@ -626,3 +626,35 @@ exclut ces trajets, compte à part.
 
 **À trancher** : garder `BUILD_MEMORY=8g` (build OK au plafond) ou 10g pour marge ; supprimer
 `tiles/` après archive (gain 4,4 Go par carte).
+
+---
+
+## Phase 3 : Valhalla pour les admins (27/09/2026, 23:45)
+
+**Campagne banc intensive** (Arthur) : 23 passages de 20 trajets, 460 trajets, 1 445 requêtes TomTom.
+Total comparé : 472 mesures, 50 trajets, temps TomTom avec trafic du soir.
+
+| Critère (D7.3) | ORS | Valhalla |
+|---|---|---|
+| Erreurs | 7 (429, budget, indisponible) | **0** |
+| Écart au meilleur TomTom (total) | +12,1 % | **+6,0 %** |
+| Écart moyen / p90 | +461 s / +706 s | **+228 s / +335 s** |
+| Plus rapide (>30 s) sur même passage | 100 | **253** (112 égaux) |
+| Latence p50 / p95 | 76 / 171 ms | 52 / 173 ms |
+| Petites routes > meilleur TomTom + 1 km | 37 | **0** |
+| Autoroute sur trajets « sans autoroute » | **92 km** (Paris-Orléans) | 0 |
+| Demi-tour au départ | 0 | **19** |
+
+**Demi-tours Valhalla** : 2 trajets seulement (Annemasse, avenue de la Grande-Armée), départ
+accroché sur mauvaise chaussée d'une avenue à terre-plein, demi-tour après ~130 m. Correctif prévu :
+cap envoyé par les apps (D4.4, phase 4). Accepté pour admins.
+
+**ORS viole l'évitement strict** : trajet sans autoroute Paris-Orléans avec 92 km d'autoroute. Raison
+de plus pour Valhalla.
+
+**Frontières** : Belgique, Suisse, Italie `out_of_coverage`, Allemagne `no_route` : repli ORS (toute
+erreur Valhalla). Lille-Tourcoing et Bastia-Ajaccio servis par Valhalla.
+
+**Décision** : `routingEngine = admins` le 27/09 à 23:45 (Arthur). Retour : `PUT /api/admin/routing/engine`
+`{"engine":"ors"}`. Banc ensuite : 20 trajets par passage, part TomTom 300/jour (drop-in `bench.conf`).
+Péages : violation non mesurable par le banc (pas d'attribut péage dans `signs.road`).
