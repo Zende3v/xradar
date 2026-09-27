@@ -117,8 +117,8 @@ export const config = {
   // run, 4 runs a day (deploy/eona-bench.cron). A trip costs 2 TomTom requests, 3 with Valhalla on
   // (its route timed too); a run stops once the bench spent benchTomtomDailyMax of them today.
   benchTripsFile: process.env.BENCH_TRIPS_FILE || './bench/trajets.json',
-  benchTripsPerRun: 6,
-  benchTomtomDailyMax: 75,
+  benchTripsPerRun: Number(process.env.BENCH_TRIPS_PER_RUN) || 6,
+  benchTomtomDailyMax: Number(process.env.BENCH_TOMTOM_DAILY_MAX) || 75,
   // Km per road class along a bench route: the road under a sample every benchRoadStepM metres
   // (longer routes: benchRoadMaxSamples samples at most), found within signRoadMaxDistM.
   benchRoadStepM: 50,
