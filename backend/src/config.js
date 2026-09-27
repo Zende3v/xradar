@@ -2,6 +2,8 @@
 const MIN = 60 * 1000;
 const H = 60 * MIN;
 const D = 24 * H;
+// A count from the environment, 0 included (`Number(value) || fallback` would read 0 as unset).
+const count = (value, fallback) => (/^\d+$/.test(String(value ?? '').trim()) ? Number(String(value).trim()) : fallback);
 
 export const config = {
   port: Number(process.env.PORT) || 8080,
@@ -216,7 +218,8 @@ export const config = {
   placePoolLimit: 60,
   // Search (/api/search): what a driver types is rarely an address, so a place search
   // (Photon, OpenStreetMap) and the official address search (Base Adresse Nationale) answer
-  // together. Both are free and need no key; the answers are kept a few minutes.
+  // together, TomTom POI Search too once turned on (below). Photon and the BAN are free and need
+  // no key; their answers are kept a few minutes, a failed one is asked again.
   photonUrl: process.env.PHOTON_URL || 'https://photon.komoot.io',
   banUrl: process.env.BAN_URL || 'https://api-adresse.data.gouv.fr',
   searchMinChars: 2,
@@ -230,6 +233,24 @@ export const config = {
   // Same name, this close: one place with several entrances or buildings.
   searchSameNameM: 400,
   searchPerMinute: 40,
+  // TomTom POI Search (search/tomtom.js): the shops, gyms and the like OpenStreetMap misses
+  // ("leclerc orly"), asked for what is typed that is not plainly an address, from
+  // searchTomtomMinChars characters; its answers are never kept. Off unless
+  // SEARCH_TOMTOM_ENABLED=1: not one request otherwise. Key: SEARCH_TOMTOM_API_KEY, else the
+  // traffic's TOMTOM_API_KEY. Its own budget (search/budget.js), on disk apart from the traffic's:
+  // searchTomtomDailyMax requests a UTC day and searchTomtomMonthlyMax a UTC month at most
+  // (public pricing: 2500 free Search API requests a month, docs.tomtom.com/pricing), each
+  // counted before it leaves; a budget that cannot be read or saved sends none. After a failure
+  // TomTom rests searchTomtomPauseMs, after a refusal (key, rights, request) searchTomtomBlockMs;
+  // Photon and the BAN answer meanwhile.
+  searchTomtomEnabled: /^(1|true)$/i.test(process.env.SEARCH_TOMTOM_ENABLED || ''),
+  searchTomtomApiKey: process.env.SEARCH_TOMTOM_API_KEY || process.env.TOMTOM_API_KEY || null,
+  searchTomtomDailyMax: count(process.env.SEARCH_TOMTOM_DAILY_MAX, 100),
+  searchTomtomMonthlyMax: count(process.env.SEARCH_TOMTOM_MONTHLY_MAX, 2000),
+  searchTomtomUsageFile: process.env.SEARCH_TOMTOM_USAGE_FILE || './data/search-tomtom-usage.json',
+  searchTomtomMinChars: 4,
+  searchTomtomPauseMs: MIN,
+  searchTomtomBlockMs: 60 * MIN,
 
   // Identifies us to the open-data servers we download from.
   placeUserAgent: process.env.PLACE_USER_AGENT || 'EONA/1.0 (+https://api.lrda-mercuriale.uk)',

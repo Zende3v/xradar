@@ -61,15 +61,18 @@ ANALYZE signs_next.road;
 -- else the nearest car road within 20 m (a post beside the carriageway). Off-road ones go.
 CREATE UNLOGGED TABLE signs_next.candidate AS
 WITH node AS (
-    SELECT node_id, kind, value, direction, ST_Transform(geom, 2154) AS geom_m FROM osm.sign_nodes
+    SELECT node_id, kind, value, direction, ST_Transform(geom, 2154) AS geom_m,
+           -- Lights that stop both ways: a pedestrian crossing's, or tagged so.
+           kind = 'traffic_signals' AND (coalesce(tags ->> 'crossing', 'no') <> 'no' OR coalesce(direction, '') = 'both') AS both_ways
+    FROM osm.sign_nodes
 ),
 attached AS (
-    SELECT DISTINCT n.node_id, n.kind, n.value, n.direction, n.geom_m, ws.way_id, true AS on_way
+    SELECT DISTINCT n.node_id, n.kind, n.value, n.direction, n.both_ways, n.geom_m, ws.way_id, true AS on_way
     FROM node n
     JOIN osm.way_signs ws USING (node_id)
     JOIN signs_next.road r ON r.way_id = ws.way_id
     UNION ALL
-    SELECT n.node_id, n.kind, n.value, n.direction, n.geom_m, near.way_id, false AS on_way
+    SELECT n.node_id, n.kind, n.value, n.direction, n.both_ways, n.geom_m, near.way_id, false AS on_way
     FROM node n
     CROSS JOIN LATERAL (
         SELECT r.way_id FROM signs_next.road r
@@ -80,7 +83,7 @@ attached AS (
     WHERE NOT EXISTS (SELECT 1 FROM osm.way_signs ws WHERE ws.node_id = n.node_id)
 )
 SELECT row_number() OVER () AS cid,
-       a.node_id, a.kind, a.value, a.direction, a.on_way,
+       a.node_id, a.kind, a.value, a.direction, a.both_ways, a.on_way,
        (SELECT count(DISTINCT ws.way_id) FROM osm.way_signs ws WHERE ws.node_id = a.node_id) AS ways_here,
        a.way_id, r.oneway,
        ST_ClosestPoint(r.geom_m, a.geom_m) AS snap_m,
@@ -108,8 +111,16 @@ UPDATE signs_next.candidate SET course = CASE
 END
 WHERE kind NOT IN ('crossing', 'level_crossing', 'roundabout');
 
+-- A traffic light on a node several roads share stands at their junction: it is for everyone
+-- there, unless the node says which way it faces.
+UPDATE signs_next.candidate SET course = NULL
+WHERE kind = 'traffic_signals' AND ways_here >= 2
+  AND NOT coalesce(direction ~ '^[0-9]+(\.[0-9]+)?$', false)
+  AND signs_next.cardinal(direction) IS NULL;
+
 -- A stop, a give-way or a traffic light nobody oriented is for the traffic heading to the
--- nearest junction along its road; right at the junction it is for everyone.
+-- nearest junction along its road; right at the junction it is for everyone. A traffic light
+-- that stops both ways, or stands away from any junction (a crossing mid-street), stays so.
 WITH junction AS (
     SELECT c.cid, j.frac AS junction_frac
     FROM signs_next.candidate c
@@ -125,11 +136,12 @@ WITH junction AS (
         LIMIT 1
     ) j
     WHERE c.course IS NULL AND c.oneway = 0 AND c.ways_here <= 1
-      AND c.kind IN ('stop', 'give_way', 'traffic_signals')
+      AND c.kind IN ('stop', 'give_way', 'traffic_signals') AND NOT c.both_ways
 )
 UPDATE signs_next.candidate c
 SET course = CASE
     WHEN abs(j.junction_frac - c.frac) * c.road_len < 2 THEN NULL
+    WHEN c.kind = 'traffic_signals' AND abs(j.junction_frac - c.frac) * c.road_len > 25 THEN NULL
     WHEN j.junction_frac > c.frac THEN c.road_course
     ELSE signs_next.norm(c.road_course + 180)
 END
@@ -154,48 +166,69 @@ ANALYZE signs_next.candidate;
 
 -- Same kind (and value) within a distance of its own: one place, never wider than max_span.
 -- Signs for the traffic of one way stay apart from those for another (a stop on each approach
--- of a junction).
-CREATE UNLOGGED TABLE signs_next.rule (kind text PRIMARY KEY, eps double precision, max_span double precision, by_course boolean);
+-- of a junction). By approach: nothing merges across roads, so each light stays on the road it
+-- stops, one per way along it; one for everyone stays on its node (a junction's, a crossing's).
+-- The rules stay with the build: checks.sql compares them with the published ones.
+CREATE TABLE signs_next.rule (kind text PRIMARY KEY, eps double precision, max_span double precision, by_course boolean,
+                              by_approach boolean);
 INSERT INTO signs_next.rule VALUES
-    ('traffic_signals', 25, 80, false),
-    ('crossing', 12, 20, false),
-    ('level_crossing', 30, 50, false),
-    ('roundabout', 30, 60, false),
-    ('stop', 20, 30, true),
-    ('give_way', 20, 30, true),
-    ('no_entry', 15, 30, true),
-    ('speed_sign', 30, 50, true);
+    ('traffic_signals', 25, 80, true, true),
+    ('crossing', 12, 20, false, NULL),
+    ('level_crossing', 30, 50, false, NULL),
+    ('roundabout', 30, 60, false, NULL),
+    ('stop', 20, 30, true, NULL),
+    ('give_way', 20, 30, true, NULL),
+    ('no_entry', 15, 30, true, NULL),
+    ('speed_sign', 30, 50, true, NULL);
 
 CREATE UNLOGGED TABLE signs_next.clustered AS
-SELECT c.*, 0 AS place, 0 AS subplace FROM signs_next.candidate c WITH NO DATA;
+SELECT c.*, ''::text AS approach, 0 AS place, 0 AS subplace FROM signs_next.candidate c WITH NO DATA;
 
 DO $$
 DECLARE r record;
 BEGIN
-    FOR r IN SELECT kind, eps FROM signs_next.rule LOOP
-        INSERT INTO signs_next.clustered
-        SELECT c.*, ST_ClusterDBSCAN(c.snap_m, r.eps, 1) OVER (PARTITION BY c.value), 0
-        FROM signs_next.candidate c
-        WHERE c.kind = r.kind;
+    FOR r IN SELECT kind, eps, by_approach FROM signs_next.rule LOOP
+        IF r.by_approach THEN
+            -- A node shared by several roads counts once (it is the same point on each).
+            INSERT INTO signs_next.clustered
+            SELECT a.*, ST_ClusterDBSCAN(a.snap_m, r.eps, 1) OVER (PARTITION BY a.value, a.approach), 0
+            FROM (
+                SELECT DISTINCT ON (c.node_id) c.*,
+                       CASE
+                           WHEN c.course IS NULL THEN 'node ' || c.node_id
+                           WHEN signs_next.angle_diff(c.course, c.road_course) <= 90 THEN 'way ' || c.way_id || ' along'
+                           ELSE 'way ' || c.way_id || ' against'
+                       END AS approach
+                FROM signs_next.candidate c
+                WHERE c.kind = r.kind
+                ORDER BY c.node_id, c.way_id
+            ) a;
+        ELSE
+            INSERT INTO signs_next.clustered
+            SELECT c.*, '', ST_ClusterDBSCAN(c.snap_m, r.eps, 1) OVER (PARTITION BY c.value), 0
+            FROM signs_next.candidate c
+            WHERE c.kind = r.kind;
+        END IF;
     END LOOP;
 END $$;
 
 -- Nearby signs chain up (a row of stops across a car park, crossings all along a street):
 -- a place wider than its kind allows is split into parts about half that size.
 WITH span AS (
-    SELECT kind, value, place, count(*) AS n, ST_Length(ST_BoundingDiagonal(ST_Collect(snap_m))) AS span
+    SELECT kind, value, approach, place, count(*) AS n, ST_Length(ST_BoundingDiagonal(ST_Collect(snap_m))) AS span
     FROM signs_next.clustered
-    GROUP BY kind, value, place
+    GROUP BY kind, value, approach, place
 ),
 too_wide AS (
-    SELECT s.kind, s.value, s.place, least(s.n, ceil(s.span / (r.max_span / 2)))::int AS parts
+    SELECT s.kind, s.value, s.approach, s.place, least(s.n, ceil(s.span / (r.max_span / 2)))::int AS parts
     FROM span s JOIN signs_next.rule r USING (kind)
     WHERE s.span > r.max_span
 ),
 split AS (
-    SELECT c.cid, ST_ClusterKMeans(c.snap_m, t.parts) OVER (PARTITION BY c.kind, c.value, c.place) AS part
+    SELECT c.cid, ST_ClusterKMeans(c.snap_m, t.parts) OVER (PARTITION BY c.kind, c.value, c.approach, c.place) AS part
     FROM signs_next.clustered c
-    JOIN too_wide t ON t.kind = c.kind AND t.value IS NOT DISTINCT FROM c.value AND t.place = c.place
+    JOIN too_wide t ON t.kind = c.kind AND t.value IS NOT DISTINCT FROM c.value AND t.approach = c.approach
+                   AND t.place = c.place
 )
 UPDATE signs_next.clustered c SET subplace = split.part FROM split WHERE split.cid = c.cid;
 
@@ -206,19 +239,19 @@ WITH broken AS (
            CASE WHEN rule.by_course AND c.course - lag(c.course) OVER w > 45 THEN 1 ELSE 0 END AS starts_group
     FROM signs_next.clustered c
     JOIN signs_next.rule rule USING (kind)
-    WINDOW w AS (PARTITION BY c.kind, c.value, c.place, c.subplace ORDER BY c.course NULLS FIRST)
+    WINDOW w AS (PARTITION BY c.kind, c.value, c.approach, c.place, c.subplace ORDER BY c.course NULLS FIRST)
 ),
 numbered AS (
     SELECT b.*,
-           sum(starts_group) OVER (PARTITION BY kind, value, place, subplace ORDER BY course NULLS FIRST ROWS UNBOUNDED PRECEDING) AS grp,
-           min(course) OVER (PARTITION BY kind, value, place, subplace) AS first_course,
-           max(course) OVER (PARTITION BY kind, value, place, subplace) AS last_course
+           sum(starts_group) OVER (PARTITION BY kind, value, approach, place, subplace ORDER BY course NULLS FIRST ROWS UNBOUNDED PRECEDING) AS grp,
+           min(course) OVER (PARTITION BY kind, value, approach, place, subplace) AS first_course,
+           max(course) OVER (PARTITION BY kind, value, approach, place, subplace) AS last_course
     FROM broken b
 )
 SELECT n.*,
        CASE
            WHEN by_course AND grp > 0 AND first_course + 360 - last_course <= 45
-                AND grp = max(grp) OVER (PARTITION BY kind, value, place, subplace) THEN 0
+                AND grp = max(grp) OVER (PARTITION BY kind, value, approach, place, subplace) THEN 0
            ELSE grp
        END AS sign_group
 FROM numbered n;
@@ -237,7 +270,7 @@ WITH g AS (
                    signs_next.norm(degrees(atan2(avg(sin(radians(course))), avg(cos(radians(course))))))
            END AS course
     FROM signs_next.grouped
-    GROUP BY kind, value, place, subplace, sign_group
+    GROUP BY kind, value, approach, place, subplace, sign_group
 ),
 placed AS (
     SELECT g.kind, g.value, g.course, g.way_id, g.sources, g.node_ids,

@@ -1,11 +1,12 @@
 /**
- * Ranking what the two sources answered. A driver types a few letters, often with the accents
+ * Ranking what the sources answered. A driver types a few letters, often with the accents
  * missing and a word forgotten, and expects the place they have in mind — usually one close by.
  * Four things decide, in this order:
  *
- *   1. how close it is to them;
+ *   1. how close it is to them — or whether it is in the town they typed ("leclerc orly");
  *   2. how well the name matches what they typed;
- *   3. what kind of place it is (a school beats a bus stop);
+ *   3. what kind of place it is (a school beats a bus stop; a street loses to a shop when a
+ *      place's name is typed, not an address);
  *   4. how well the source itself ranked it, which carries the place's own standing.
  *
  * No search engine here: a score between 0 and 1 per criterion, weighted and added.
@@ -53,6 +54,29 @@ const KIND_SCORE = new Map(Object.entries({
 const KIND_DEFAULT = 0.65;
 /** An address (Base Adresse Nationale): exactly what is asked when a number is typed. */
 const ADDRESS_SCORE = 0.8;
+/** A street or a door while a place's name is typed: "leclerc orly" is not the Rue du Général-Leclerc. */
+const STREET_FOR_PLACE = 0.35;
+/** What the Base Adresse Nationale calls a street or a door (not a town, not a lieu-dit). */
+const BAN_STREETS = new Set(['street', 'housenumber']);
+/**
+ * A town the driver typed ("leclerc orly") matters more than being close: whatever is in it
+ * scores at least this for its distance (as if about 3 km away).
+ */
+const TOWN_DISTANCE = 0.8;
+
+/** Street words that seldom name a place: an address wherever they are typed. */
+const STREET_WORDS = new Set([
+  'rue', 'ruelle', 'avenue', 'av', 'boulevard', 'bd', 'bld', 'blvd', 'allee', 'allees', 'impasse', 'imp',
+  'chemin', 'quai', 'chaussee', 'faubourg', 'fbg', 'lotissement',
+]);
+/** Street words some places' names hold too: an address only first, or after a house number. */
+const LEADING_STREET_WORDS = new Set(['place', 'pl', 'route', 'rte', 'passage', 'sentier', 'voie', 'rond', 'cours']);
+/** A house number: "8", "8bis", "12b". */
+const HOUSE_NUMBER = /^\d{1,4}(bis|ter|quater|[a-z])?$/;
+/** Short words that make a town part of a name: "gare de lyon", "porte d'orléans". */
+const OF = new Set(['de', 'd', 'du', 'des']);
+/** Words too common in towns' names to tell one ("saint", "sur"). */
+const TOWN_FILLER = new Set(['saint', 'sainte', 'sur', 'sous', 'les', 'lez', 'aux', 'des']);
 
 /** Lowercase, no accents, no punctuation: "Lycée Adolphe Chérioux" → "lycee adolphe cherioux". */
 export function fold(text) {
@@ -72,10 +96,39 @@ function words(text) {
 }
 
 /**
- * How well [name] (plus what places it) answers [query], between 0 and 1. A word typed in full
- * counts more than one merely begun, and a word the driver did not type costs nothing.
+ * Whether [query] is plainly an address: a street's name ("rue …", "place …"), after a house
+ * number or not, or numbers only (a postcode). Anything else may be a place's name.
  */
-function nameScore(query, name, context) {
+export function looksLikeAddress(query) {
+  const typed = fold(query).split(' ').filter(Boolean);
+  if (!typed.length) return false;
+  if (typed.every((word) => /^\d+$/.test(word))) return true;
+  return typed.some((word, i) => STREET_WORDS.has(word) || (LEADING_STREET_WORDS.has(word) && (
+    i === 0
+    || HOUSE_NUMBER.test(typed[i - 1])
+    // "8 bis place …", "12 b rue …"
+    || (i >= 2 && /^(bis|ter|quater|[a-z])$/.test(typed[i - 1]) && HOUSE_NUMBER.test(typed[i - 2])))));
+}
+
+/**
+ * The words of [query] naming [item]'s town or postcode ("leclerc orly": orly) — none when the
+ * town is part of a name ("gare de lyon", "porte de versailles"), nor when only the town is
+ * typed ("orly", "vitry sur seine"): then the town itself is looked for, not a place in it.
+ */
+function townWords(query, item) {
+  const town = new Set(fold(item.city).split(' ').filter((word) => word.length > 2 && !TOWN_FILLER.has(word)));
+  if (item.postcode) town.add(fold(item.postcode));
+  if (!words(query).some((word) => !town.has(word) && !TOWN_FILLER.has(word))) return new Set();
+  const typed = fold(query).split(' ');
+  return new Set(typed.filter((word, i) => town.has(word) && !OF.has(typed[i - 1])));
+}
+
+/**
+ * How well [name] (plus what places it) answers [query], between 0 and 1. A word typed in full
+ * counts more than one merely begun, and a word the driver did not type costs nothing. A word
+ * naming the place's town ([town]) counts in full.
+ */
+function nameScore(query, name, context, town) {
   const asked = words(query);
   if (!asked.length) return 0;
   const target = fold(name);
@@ -87,6 +140,8 @@ function nameScore(query, name, context) {
   for (const word of asked) {
     if (target === word || target.startsWith(`${word} `) || target.includes(` ${word} `) || target.endsWith(` ${word}`)) {
       hit += 1;
+    } else if (town.has(word)) {
+      hit += 1; // the town typed after the name: "orly" in "leclerc orly"
     } else if (target.includes(word)) {
       hit += 0.85; // inside a longer word: "cherioux" in "cherioux-vitry"
     } else if (word.length >= 4 && target.split(' ').some((part) => part.startsWith(word.slice(0, -1)))) {
@@ -111,19 +166,30 @@ function rankScore(index, total) {
   return total <= 1 ? 1 : 1 - index / total;
 }
 
-/** What kind of place this is, between 0 and 1. */
-export function kindScore(item) {
-  if (item.source === 'ban') return ADDRESS_SCORE;
-  if (!item.osmKey || !item.osmValue) return KIND_DEFAULT;
-  return KIND_SCORE.get(`${item.osmKey}:${item.osmValue}`) ?? KIND_DEFAULT;
+/**
+ * What kind of place this is, between 0 and 1. [address]: whether an address was typed — if
+ * not, a street or a door is not what is looked for.
+ */
+export function kindScore(item, { address = true } = {}) {
+  // TomTom's places bring their own, from their POI types (search/tomtom.js).
+  if (Number.isFinite(item.kind)) return item.kind;
+  if (item.source === 'ban') return !address && BAN_STREETS.has(item.banType) ? STREET_FOR_PLACE : ADDRESS_SCORE;
+  // Photon without a name: a door ("8 rue …").
+  if (!address && item.named === false) return STREET_FOR_PLACE;
+  const known = item.osmKey && item.osmValue ? KIND_SCORE.get(`${item.osmKey}:${item.osmValue}`) : undefined;
+  if (known != null) return known;
+  if (!address && item.osmKey === 'highway') return STREET_FOR_PLACE;
+  return KIND_DEFAULT;
 }
 
 /** The score of one answer, and the parts that made it (handy when tuning). */
 export function score(item, { query, index, total }) {
+  const town = townWords(query, item);
+  const near = distanceScore(item.distanceM);
   const parts = {
-    distance: distanceScore(item.distanceM),
-    name: nameScore(query, item.name, item.subtitle ?? ''),
-    kind: kindScore(item),
+    distance: town.size ? Math.max(near, TOWN_DISTANCE) : near,
+    name: nameScore(query, item.name, item.subtitle ?? '', town),
+    kind: kindScore(item, { address: looksLikeAddress(query) }),
     rank: rankScore(index, total),
   };
   const total01 = Object.entries(WEIGHT).reduce((sum, [key, weight]) => sum + weight * parts[key], 0);

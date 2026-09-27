@@ -21,6 +21,13 @@ const SAME_ROAD_BONUS_M = 6;
 const UNORIENTED_MAX_OFF_M = 6;
 /** Along a route, a sign facing more than this away from the route's course is for other traffic. */
 const ROUTE_COURSE_MAX_DEG = 60;
+/**
+ * Kinds built on the road they are for, one per approach (signalisation/build.sql): a route meets
+ * only those on its own road, oriented or not — a cross street's lights are never for it.
+ */
+const ON_ROAD_KINDS = new Set(['traffic_signals']);
+/** Traffic lights this close after the one met along a route are its junction's (build.sql's eps). */
+const SAME_JUNCTION_M = 25;
 /** Kinds never shown as signs: speed signs only feed the limits. */
 const HIDDEN_KINDS = new Set(['speed_sign']);
 
@@ -117,10 +124,10 @@ const ROUTE_SIGNS_SQL = `
     FROM piece JOIN signs.sign s ON ST_DWithin(s.geom_m, piece.g, $2)
   )
   SELECT h.id, h.kind, h.value, h.course, ST_Y(h.geom) AS lat, ST_X(h.geom) AS lon,
-         ST_LineLocatePoint(line.g, h.geom_m) AS frac,
+         f.frac, f.frac * ST_Length(line.g) AS at_m,
          ST_Distance(line.g, h.geom_m) AS off_m,
-         signs.course_at(line.g, ST_LineLocatePoint(line.g, h.geom_m)) AS route_course
-  FROM hit h, line`;
+         signs.course_at(line.g, f.frac) AS route_course
+  FROM hit h, line, LATERAL (SELECT ST_LineLocatePoint(line.g, h.geom_m) AS frac) f`;
 
 const ROUTE_ROADS_SQL = `
   WITH line AS (SELECT ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 2154) AS g),
@@ -163,19 +170,36 @@ export async function route(coords) {
     db.query(ROUTE_ROADS_SQL, [json, config.signRouteLimitStepM, config.signRoadMaxDistM]),
   ]);
 
-  const out = [];
-  for (const s of signs.rows) {
-    if (HIDDEN_KINDS.has(s.kind)) continue;
-    const forThisWay = s.course == null
-      ? s.off_m <= UNORIENTED_MAX_OFF_M
-      : s.route_course == null || angleBetween(s.course, s.route_course) <= ROUTE_COURSE_MAX_DEG;
-    if (!forThisWay) continue;
-    out.push({ at: s.frac, sign: { id: s.id, type: s.kind, lat: s.lat, lon: s.lon, course: s.course } });
-  }
+  const out = signsAlong(signs.rows);
   for (const change of limitChanges(roads.rows)) out.push(change);
 
   out.sort((a, b) => a.at - b.at);
   return out.slice(0, config.signMaxElements).map((entry) => entry.sign);
+}
+
+/**
+ * The signs a driver meets among the rows of ROUTE_SIGNS_SQL, in route order as { at, sign }:
+ * those for the traffic going that way, and one traffic light per junction.
+ */
+export function signsAlong(rows) {
+  const out = [];
+  let lightAt = null;
+  for (const s of [...rows].sort((a, b) => a.frac - b.frac)) {
+    if (HIDDEN_KINDS.has(s.kind) || !forThisWay(s)) continue;
+    if (s.kind === 'traffic_signals') {
+      if (lightAt != null && s.at_m - lightAt < SAME_JUNCTION_M) continue;
+      lightAt = s.at_m;
+    }
+    out.push({ at: s.frac, sign: { id: s.id, type: s.kind, lat: s.lat, lon: s.lon, course: s.course } });
+  }
+  return out;
+}
+
+function forThisWay(s) {
+  const onRoad = s.off_m <= UNORIENTED_MAX_OFF_M;
+  if (s.course == null) return onRoad;
+  if (ON_ROAD_KINDS.has(s.kind) && !onRoad) return false;
+  return s.route_course == null || angleBetween(s.course, s.route_course) <= ROUTE_COURSE_MAX_DEG;
 }
 
 /**
