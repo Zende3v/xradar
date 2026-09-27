@@ -608,3 +608,21 @@ comme `versionCode` Android.
 exclut ces trajets, compte à part.
 
 **P1.7 — Résultats du banc.** Gardés pour toujours, aucune purge (pas de donnée personnelle).
+
+---
+
+## Phase 2 : premier build France (27/09/2026)
+
+**Mesures réelles** (carte `20260927T180134Z-717bad2d052c`, Valhalla 3.9.0, PBF Geofabrik du 27/09) :
+- durée 36 min (2 173 s) : admins 187 s, tuiles 1 948 s, archive 33 s ;
+- pic cgroup 8 Gio = plafond `BUILD_MEMORY` atteint ; `ru_maxrss` 13,3 Gio (compte pages mappées) ;
+  swap utilisé ~10 Mio ; aucun OOM noyau ; PostgreSQL et backend actifs tout du long ;
+- taille : `tiles.tar` 4,4 Go, dossier candidat 8,9 Go (dossier `tiles/` en double de l'archive) ;
+- test 50 trajets du banc sur instance temporaire puis service : 50/50, 378 ms max.
+- Erreurs `admin_access` pour pays hors France : normales avec extrait France seule.
+
+**Incidents corrigés** : ORS sur ancienne URL (10 % du quota, fermeture 28/09) → `api.heigit.org`
+(`301a1bb`) ; build sans Internet (ufw FORWARD DROP) → build en `--network=host` (`9944e10`).
+
+**À trancher** : garder `BUILD_MEMORY=8g` (build OK au plafond) ou 10g pour marge ; supprimer
+`tiles/` après archive (gain 4,4 Go par carte).
