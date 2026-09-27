@@ -24,7 +24,7 @@ sont repris dans le journal.
 |---|---|---|
 | 1 | Mesurer l'existant | **en service depuis le 25/09**, collecte en cours |
 | 2 | Valhalla installé, en mode ombre | **en ombre depuis 27/09 20:54** : backend phase 2, Podman, swap 4 Go, carte France (36 min, 50/50), `VALHALLA_ENABLED=1`, `routingEngine=ors`, cron dimanche = signalisation + Valhalla ; banc ORS + Valhalla (3c1bd99), build 11 Gio, alertes mail build/panne vers Arthur |
-| 3 | Valhalla pour les admins, puis pour tous | **admins sur Valhalla depuis 27/09 23:45** (banc 472 mesures : Valhalla +6 % vs meilleur TomTom, ORS +12 %) ; tous : à décider |
+| 3 | Valhalla pour les admins, puis pour tous | **admins sur Valhalla depuis 27/09 23:45** (banc 472 mesures : Valhalla +6 % vs meilleur TomTom, ORS +12 %) ; cap envoyé par les apps (Android 6, iOS 4) contre demi-tours ; **28/09 : trajets admins** ; tous : à décider |
 | 4 | ETA dynamique, data.gouv, cap, ferries | à faire |
 | 5 | Politique de confidentialité et CGU | à faire |
 | 6 | Trafic dans Valhalla : fermetures et travaux | à faire |

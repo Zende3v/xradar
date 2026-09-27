@@ -474,13 +474,13 @@ export function createShadow({
    * After a computed /api/route answer ([res]): [plan] and [outcome] from the façade, the trip
    * asked, and whether the account is an admin ([admin]: only then are lines kept).
    */
-  function afterRoute(res, { plan, outcome, from, to, avoid, admin }) {
+  function afterRoute(res, { plan, outcome, from, to, avoid, heading = null, admin }) {
     // Valhalla off: nothing to compare with.
     if (!plan?.shadow || !outcome) return;
     queue.after(res, async () => {
       const attempts = { ...outcome.attempts };
       if (!attempts[plan.shadow]) {
-        attempts[plan.shadow] = await routing.shadowRoute(plan.shadow, from, to, avoid, outcome.polygons ?? null);
+        attempts[plan.shadow] = await routing.shadowRoute(plan.shadow, from, to, avoid, outcome.polygons ?? null, heading);
       }
       const line = routeLine({
         mode: plan.mode,

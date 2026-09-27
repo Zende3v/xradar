@@ -658,3 +658,7 @@ erreur Valhalla). Lille-Tourcoing et Bastia-Ajaccio servis par Valhalla.
 **Décision** : `routingEngine = admins` le 27/09 à 23:45 (Arthur). Retour : `PUT /api/admin/routing/engine`
 `{"engine":"ors"}`. Banc ensuite : 20 trajets par passage, part TomTom 300/jour (drop-in `bench.conf`).
 Péages : violation non mesurable par le banc (pas d'attribut péage dans `signs.road`).
+
+**D4.4 fait (27/09, 23:55)** : apps Android 1.0.1 (6) et iOS 1.0.0 (4) envoient `heading` à partir de 1,5 m/s ; backend : Valhalla `heading` ±45° + `radius` 50 m au départ (sans rayon, le cap est ignoré : seule la route la plus proche est candidate), ORS `bearings`. Vérifié : Grande-Armée cap 116° et Annemasse cap 346° sans demi-tour ; cap opposé garde le demi-tour (voiture dans le mauvais sens). Départ à l'arrêt : sans cap, demi-tour possible (sens inconnu).
+
+**28/09** : trajets réels des admins prévus (Arthur).

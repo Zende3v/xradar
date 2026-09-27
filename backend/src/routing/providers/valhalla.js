@@ -328,8 +328,21 @@ function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, 
   return body;
 }
 
+/**
+ * With a course, the roads this close all compete: the one running the way the car points wins.
+ * With radius 0 (Valhalla's default) only the nearest road is a candidate, and a course it does
+ * not match is ignored: on an avenue with a central reservation the route then starts the wrong
+ * way and turns back (bench, 27/09/2026: no U-turn left from 30 m, 50 m for margin).
+ */
+const HEADING_RADIUS_M = 50;
+
 function location(point, heading, searchCutoffM) {
-  return { lat: point.lat, lon: point.lon, search_cutoff: searchCutoffM, ...heading };
+  return {
+    lat: point.lat,
+    lon: point.lon,
+    search_cutoff: searchCutoffM,
+    ...(heading ? { ...heading, radius: HEADING_RADIUS_M } : {}),
+  };
 }
 
 function checkedOptions(options) {

@@ -37,10 +37,13 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         from: GeoPoint,
         to: GeoPoint,
         avoid: List<String> = emptyList(),
+        heading: Double? = null,
     ): Route? = withContext(Dispatchers.IO) {
         val url = "${baseUrl.trimEnd('/')}/api/route" +
             "?from=${from.lat},${from.lon}&to=${to.lat},${to.lon}" +
-            if (avoid.isEmpty()) "" else "&avoid=${avoid.joinToString(",")}"
+            (if (avoid.isEmpty()) "" else "&avoid=${avoid.joinToString(",")}") +
+            // The car's course while it moves (D4.4): the route starts the way it points, no U-turn.
+            (heading?.let { "&heading=${Math.round(it) % 360}" } ?: "")
         // The backend refuses routing to a restricted account — it needs to know who asks.
         val request = Request.Builder().url(url).apply {
             com.eona.app.data.account.AccountRepository.token?.let { header("Authorization", "Bearer $it") }

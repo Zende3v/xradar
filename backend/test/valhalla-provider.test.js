@@ -278,14 +278,14 @@ describe('request sent to Valhalla', () => {
     await valhalla.routes(FROM, TO, { bearings: [null, [180, 30]] });
     await valhalla.routes(FROM, TO, { bearings: [[12.3, 45]] });
     assert.deepEqual(calls[0].body.locations, [
-      { lat: FROM.lat, lon: FROM.lon, search_cutoff: 1500, heading: 0, heading_tolerance: 45 },
-      { lat: TO.lat, lon: TO.lon, search_cutoff: 1500, heading: 90, heading_tolerance: 45 },
+      { lat: FROM.lat, lon: FROM.lon, search_cutoff: 1500, heading: 0, heading_tolerance: 45, radius: 50 },
+      { lat: TO.lat, lon: TO.lon, search_cutoff: 1500, heading: 90, heading_tolerance: 45, radius: 50 },
     ]);
     assert.deepEqual(calls[1].body.locations, [
       { lat: FROM.lat, lon: FROM.lon, search_cutoff: 1500 },
-      { lat: TO.lat, lon: TO.lon, search_cutoff: 1500, heading: 180, heading_tolerance: 30 },
+      { lat: TO.lat, lon: TO.lon, search_cutoff: 1500, heading: 180, heading_tolerance: 30, radius: 50 },
     ]);
-    assert.deepEqual(calls[2].body.locations[0], { lat: FROM.lat, lon: FROM.lon, search_cutoff: 1500, heading: 12, heading_tolerance: 45 });
+    assert.deepEqual(calls[2].body.locations[0], { lat: FROM.lat, lon: FROM.lon, search_cutoff: 1500, heading: 12, heading_tolerance: 45, radius: 50 });
     assert.equal('heading' in calls[2].body.locations[1], false);
   });
 

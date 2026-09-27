@@ -65,7 +65,10 @@ export function createRouteRouter({
     const plan = routing.plan(account);
     // The same trip asked again within the minute costs nothing: an app looping on a recalculation
     // (a driver still off the road, a retry that keeps failing) never spends the day's routes.
-    const known = guard.cachedRoute(from, to, avoid, plan.primary);
+    // The driver's course (D4.4), sent by the apps while moving: no U-turn at the start. A route asked
+    // with it skips the cache, which knows nothing of the way the car points.
+    const heading = parseHeading(req.query.heading);
+    const known = heading == null ? guard.cachedRoute(from, to, avoid, plan.primary) : null;
     if (known) {
       if (trip.isNew) accounts.countTrip(account, to);
       routing.noteServed(account.id, known.served);
@@ -79,7 +82,7 @@ export function createRouteRouter({
 
     let outcome;
     try {
-      outcome = await routing.route(from, to, avoid, { plan });
+      outcome = await routing.route(from, to, avoid, { plan, heading });
     } catch (e) {
       // The façade answers its failures; this is a bug, still answered like one.
       console.warn('[route] unavailable —', String(e.message || e));
@@ -100,7 +103,7 @@ export function createRouteRouter({
       answer(outcome.status || 502, { error: outcome.error });
     }
     // Only once the answer is sent (shadow.js queues it on the response's end).
-    shadow.afterRoute(res, { plan, outcome, from, to, avoid, admin: account.role === 'admin' });
+    shadow.afterRoute(res, { plan, outcome, from, to, avoid, heading, admin: account.role === 'admin' });
   });
 
   /**
@@ -187,6 +190,13 @@ function parseCoord(value) {
   const parts = String(value || '').split(',').map(Number);
   if (parts.length !== 2 || parts.some((n) => !Number.isFinite(n))) return null;
   return { lat: parts[0], lon: parts[1] };
+}
+
+/** The driver's course in degrees (0 to 360, from north), or null when absent or unreadable. */
+function parseHeading(value) {
+  if (value == null || value === '') return null;
+  const heading = Number(value);
+  return Number.isFinite(heading) && heading >= 0 && heading <= 360 ? heading : null;
 }
 
 export const routeRouter = createRouteRouter();

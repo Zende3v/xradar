@@ -16,8 +16,8 @@ sealed interface RouteAnswer {
 }
 
 class RoutingRepository(private val api: RoutingApi = RoutingApi()) {
-    suspend fun route(from: GeoPoint, to: GeoPoint, avoid: List<String> = emptyList()): RouteAnswer = try {
-        api.route(from, to, avoid)?.let { RouteAnswer.Found(it) } ?: RouteAnswer.Failed
+    suspend fun route(from: GeoPoint, to: GeoPoint, avoid: List<String> = emptyList(), heading: Double? = null): RouteAnswer = try {
+        api.route(from, to, avoid, heading)?.let { RouteAnswer.Found(it) } ?: RouteAnswer.Failed
     } catch (e: AccessDeniedException) {
         RouteAnswer.Denied(e.denial)
     } catch (e: CancellationException) {

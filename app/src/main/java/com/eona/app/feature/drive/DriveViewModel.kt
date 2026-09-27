@@ -469,6 +469,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         GeoPoint(fix.latitude, fix.longitude),
                         GeoPoint(destination.lat, destination.lon),
                         avoidOptions(),
+                        headingOf(fix),
                     ).routeOrNull?.let { ActiveTripRepository.setRoute(it) }
                 }
         }
@@ -498,6 +499,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     from,
                     GeoPoint(destination.lat, destination.lon),
                     avoidOptions(),
+                    if (simulated == null) headingOf(fix) else null,
                 )
                 for (wait in ROUTE_RETRY_MS) {
                     if (answer !is RouteAnswer.Failed) break
@@ -511,6 +513,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         again,
                         GeoPoint(destination.lat, destination.lon),
                         avoidOptions(),
+                        if (simulated == null) headingOf(LocationRepository.location.value) else null,
                     )
                 }
                 if (ActiveTripRepository.destination.value != destination) return@collect
@@ -636,6 +639,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     GeoPoint(sample.latitude, sample.longitude),
                     GeoPoint(destination.lat, destination.lon),
                     avoidOptions(),
+                    headingOf(sample),
                 ).routeOrNull
                 if (fresh != null) {
                     recalcWaitMs = RECALC_COOLDOWN_MS
@@ -1103,6 +1107,16 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val fix = LocationRepository.location.value ?: return null
         val match = path?.match(fix.latitude, fix.longitude) ?: return null
         return match.takeIf { it.offRouteMeters <= OFF_ROUTE_M }
+    }
+
+    /**
+     * The car's course for a route asked from [fix] (D4.4): only while it really drives. Standing
+     * still, the GPS course means nothing and the backend picks the way itself.
+     */
+    private fun headingOf(fix: LocationSample?): Double? {
+        val sample = fix ?: return null
+        if ((sample.speedMps ?: 0f) < DRIVE_MIN_SPEED_MS) return null
+        return sample.bearingDeg?.toDouble()?.takeIf { it.isFinite() && it in 0.0..360.0 }
     }
 
     /** Route constraints the driver asked for, as the backend expects them. */

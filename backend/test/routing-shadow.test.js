@@ -274,12 +274,12 @@ describe('shadow', () => {
   const outcome = (attempts, extra = {}) => ({ engine: 'ors', primary: 'ors', fallback: false, cause: null, attempts, polygons: null, ...extra });
   const plan = { mode: 'ors', primary: 'ors', shadow: 'valhalla' };
 
-  it('asks the other engine the same trip, with the same jams, and keeps the measures', async () => {
+  it('asks the other engine the same trip, with the same jams and course, and keeps the measures', async () => {
     const s = setup();
     const jams = { type: 'MultiPolygon', coordinates: [] };
-    s.shadow.afterRoute(s.res, { plan, outcome: outcome({ ors: ok('ors', ROUTE) }, { polygons: jams }), from: PARIS, to: ETOILE, avoid: ['traffic'], admin: false });
+    s.shadow.afterRoute(s.res, { plan, outcome: outcome({ ors: ok('ors', ROUTE) }, { polygons: jams }), from: PARIS, to: ETOILE, avoid: ['traffic'], heading: 270, admin: false });
     await s.queue.idle();
-    assert.deepEqual(s.asked, [['valhalla', PARIS, ETOILE, ['traffic'], jams]]);
+    assert.deepEqual(s.asked, [['valhalla', PARIS, ETOILE, ['traffic'], jams, 270]]);
     assert.equal(s.db.queries.filter((q) => q.sql.includes('INSERT INTO routing.shadow_run')).length, 1);
     assert.equal(s.db.queries.filter((q) => q.sql.includes('shadow_trace') && q.sql.startsWith('INSERT')).length, 0);
   });

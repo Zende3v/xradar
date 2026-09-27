@@ -42,6 +42,14 @@ const OUTAGES = new Set([VALHALLA_ERROR.TIMEOUT, VALHALLA_ERROR.UNAVAILABLE, VAL
 /** A route impossible around the jams, or the jams refused: Valhalla tries again without them (D4.3). */
 const WITHOUT_JAMS = new Set([VALHALLA_ERROR.NO_ROUTE, VALHALLA_ERROR.POLYGONS_REJECTED]);
 const KNOWN_ERRORS = new Set(Object.values(VALHALLA_ERROR));
+/** How far off the driver's course the start may leave (D4.4, same as /faster). */
+const HEADING_TOLERANCE_DEG = 45;
+
+/** The driver's course as bearings for the start only ([[heading, tolerance]]); null without one. */
+function headingBearings(heading) {
+  if (!Number.isFinite(heading)) return null;
+  return [[((Math.round(heading) % 360) + 360) % 360, HEADING_TOLERANCE_DEG]];
+}
 
 /** The façade's own deadline, past which an answer is dropped. */
 class DeadlineError extends Error {
@@ -191,7 +199,7 @@ export function createRoutingEngine({
    * Valhalla's route within [ms], the jams avoided first then not ([polygons], D4.3):
    * { ok, route, latencyMs } or { ok: false, error, latencyMs, skipped? }.
    */
-  async function valhallaRoute(from, to, exclusions, polygons, ms) {
+  async function valhallaRoute(from, to, exclusions, polygons, ms, bearings = null) {
     const blocked = valhallaBlocked();
     if (blocked) return { ok: false, error: blocked, skipped: true, latencyMs: null };
     // No time left for it (the jams took it): not asked, and not Valhalla's fault.
@@ -201,6 +209,7 @@ export function createRoutingEngine({
     const ask = (areas) => askValhalla(() => within(until - Date.now(), (signal) => valhalla.routes(from, to, {
       avoid: exclusions,
       polygons: areas,
+      bearings,
       signal,
     })));
     let result = await ask(polygons);
@@ -213,15 +222,15 @@ export function createRoutingEngine({
    * ORS's route within [ms], the jams avoided first then not, as before phase 2:
    * { ok, route, latencyMs } or { ok: false, error, status, message, detail, thrown, latencyMs }.
    */
-  async function orsRoute(from, to, avoid, polygons, ms) {
+  async function orsRoute(from, to, avoid, polygons, ms, bearings = null) {
     if (!ors.configured()) {
       return { ok: false, error: 'not_configured', skipped: true, status: 503, message: 'routing unavailable', latencyMs: null };
     }
     const startedAt = Date.now();
     try {
       const out = await within(ms, async (signal) => {
-        const body = orsBody({ from, to, avoid });
-        let r = await ors.post(polygons ? orsBody({ from, to, avoid, polygons }) : body, { signal });
+        const body = orsBody({ from, to, avoid, bearings });
+        let r = await ors.post(polygons ? orsBody({ from, to, avoid, polygons, bearings }) : body, { signal });
         // A route squeezed out by the reported jams can be impossible: the trip matters more.
         if (!r.ok && polygons) r = await ors.post(body, { signal });
         if (r.budgetSpent) return { ok: false, error: 'budget', status: 503, message: 'routing budget reached' };
@@ -275,9 +284,10 @@ export function createRoutingEngine({
    * traffic), served as [plan] says. Never throws: { route, engine, primary, fallback, cause,
    * attempts, polygons } — route null with { status, error, detail, thrown } when nobody could.
    */
-  async function route(from, to, avoid = [], { plan: chosen = plan(null) } = {}) {
+  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null } = {}) {
     const until = Date.now() + s.deadlineMs;
     const wanted = [...new Set(avoid)];
+    const bearings = headingBearings(heading);
     const polygons = wanted.includes('traffic')
       ? await jamsWithin(from, to, Math.min(s.jamsTimeoutMs, until - Date.now()))
       : null;
@@ -285,7 +295,7 @@ export function createRoutingEngine({
     let cause = null;
     if (chosen.primary === 'valhalla') {
       const exclusions = wanted.filter((a) => EXCLUSIONS.has(a));
-      const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()));
+      const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()), bearings);
       attempts.valhalla = tried;
       if (tried.ok) {
         return { route: tried.route, engine: 'valhalla', primary: 'valhalla', fallback: false, cause: null, attempts, polygons };
@@ -293,7 +303,7 @@ export function createRoutingEngine({
       cause = tried.error;
       noteFallback(cause);
     }
-    const tried = await orsRoute(from, to, wanted, polygons, until - Date.now());
+    const tried = await orsRoute(from, to, wanted, polygons, until - Date.now(), bearings);
     attempts.ors = tried;
     const outcome = { primary: chosen.primary, fallback: cause != null, cause, attempts, polygons };
     if (tried.ok) return { ...outcome, route: tried.route, engine: 'ors' };
@@ -312,14 +322,15 @@ export function createRoutingEngine({
    * [engine]'s route for the shadow mode (shadow.js): no fallback, no count; Valhalla skipped
    * while unusable, ORS while its day's routes left are under shadowOrsMinBudgetLeft.
    */
-  async function shadowRoute(engine, from, to, avoid = [], polygons = null) {
+  async function shadowRoute(engine, from, to, avoid = [], polygons = null, heading = null) {
     const wanted = [...new Set(avoid)];
+    const bearings = headingBearings(heading);
     if (engine === 'valhalla') {
-      return valhallaRoute(from, to, wanted.filter((a) => EXCLUSIONS.has(a)), polygons, Math.min(s.valhallaTimeoutMs, s.deadlineMs));
+      return valhallaRoute(from, to, wanted.filter((a) => EXCLUSIONS.has(a)), polygons, Math.min(s.valhallaTimeoutMs, s.deadlineMs), bearings);
     }
     const blocked = orsShadowBlocked();
     if (blocked) return { ok: false, error: blocked, skipped: true, latencyMs: null };
-    return orsRoute(from, to, wanted, polygons, s.deadlineMs);
+    return orsRoute(from, to, wanted, polygons, s.deadlineMs, bearings);
   }
 
   function orsShadowBlocked() {
