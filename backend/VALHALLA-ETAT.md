@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **26/09/2026**. Exploitation vérifiée à **15:10**, collecte à **20:25, Europe/Paris**.
+Mis à jour : **27/09/2026**. Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -93,6 +93,10 @@ sont repris dans le journal.
 
 ## Collecte en cours
 
+- Contrôle **27/09 02:43** : **10 trajets enregistrés**, dont **3 exploitables** sur iOS 1.0.0 (2).
+  Un trajet supplémentaire depuis contrôle 26/09 20:25 ; quatre relevés ETA présents pour chacun des trois trajets.
+  Sept anciens trajets restent exclus faute de mesures. `routing.route_log` : **363 lignes** ; ce nombre ne compte pas trajets terminés.
+  `/health` public HTTP 200. Aucune conclusion sur trajets non reçus ; nombre attendu inconnu.
 - Corrections mobiles préparées le 26/09 avec Claude Opus 5.5 : résumé arrivée conservé jusqu'à fermeture,
   popups routiers limités à 300 m, véhicule local esthétique. Critère arrivée, champs/API collecte et backend inchangés.
   Android **1.0.1 (5)** compilé ; iOS **1.0.0 (3)** prêt pour Codemagic, compilation non effectuée localement.
@@ -120,8 +124,12 @@ beaucoup la durée (14 min annoncées contre 29 min pour TomTom). Toulouse (Capi
   Aucun défaut trouvé dans chaîne relue. Libellés historiques F1–F4 absents du dépôt : correspondance exacte non reconstructible.
   Collecte bout en bout confirmée le 26/09 à 20:25 sur deux nouveaux trajets iOS après aller-retour signalé par Arthur.
   Autres situations et Android restent à couvrir ; deux trajets ne suffisent pas pour bilan de précision.
-- Signalisation : première reconstruction automatique dimanche 27/09 à 03:30, à vérifier dans
-  `/var/lib/eona-signs/rebuild.log`.
+- Signalisation : reconstruction automatique 27/09 03:30–03:46 réussie.
+  Puis lot recherche + feux `620462b` déployé 27/09 18:13 (accord Arthur), hors Valhalla : voir `REPRISE-RECHERCHE-SIGNALISATION.md`.
+  Sauvegarde `/opt/eona-backend-src-backup-20260927-175606.tgz`. Backend redémarré 18:12:58 ; `/health` local et public `ok`.
+  `rebuild.sh`/`import.sh` production inchangés ; chaîne Valhalla toujours locale.
+- **Banc 27/09 18:00 : 0/6**, erreur `routing budget reached`, avant début déploiement.
+  `/health` 17:52 : ORS 2 clés bloquées jusqu'au 28/09 00:00 UTC (201 et 45 appels), `budgetLeft` 0. Cause à diagnostiquer.
 - Sauvegardes uniquement sur le VPS, aucune copie ailleurs.
 
 ## Prochaine étape
