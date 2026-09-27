@@ -46,7 +46,9 @@ CANDIDATE="$ROOT/graphs/$ID"
 mkdir "$CANDIDATE"
 printf '%s\n' "$HASH" > "$CANDIDATE/pbf.sha256"
 TEST_NAME="eona-valhalla-test-$ID"
-nice -n 15 ionice -c 3 podman run --rm --pull=never --name "eona-valhalla-build-$ID" \
+# Build seul sur réseau hôte : ufw bloque transfert (FORWARD DROP), valhalla_build_timezones télécharge
+# fuseaux sur GitHub. Aucun port publié. Service et test restent sur réseau podman.
+nice -n 15 ionice -c 3 podman run --rm --pull=never --network=host --name "eona-valhalla-build-$ID" \
   --memory="$BUILD_MEMORY" --memory-swap="$BUILD_MEMORY_SWAP" --cpus="$BUILD_CPUS" \
   --pids-limit=512 --oom-score-adj=900 --cap-drop=all --security-opt=no-new-privileges \
   -v "$CANDIDATE:/data:rw" -v "$PBF:/input/france.osm.pbf:ro" -v "$HERE:/tools:ro" \
