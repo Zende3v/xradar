@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **27/09/2026**. Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **27/09/2026 20:55** (Claude : ORS `api.heigit.org`, phase 2 installée, ombre active). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -23,7 +23,7 @@ sont repris dans le journal.
 | Phase | Contenu | État |
 |---|---|---|
 | 1 | Mesurer l'existant | **en service depuis le 25/09**, collecte en cours |
-| 2 | Valhalla installé, en mode ombre | code et scripts préparés localement ; installation et validation réelle restent à faire |
+| 2 | Valhalla installé, en mode ombre | **en ombre depuis 27/09 20:54** : backend phase 2, Podman, swap 4 Go, carte France (36 min, 50/50), `VALHALLA_ENABLED=1`, `routingEngine=ors`, cron dimanche = signalisation + Valhalla |
 | 3 | Valhalla pour les admins, puis pour tous | à faire |
 | 4 | ETA dynamique, data.gouv, cap, ferries | à faire |
 | 5 | Politique de confidentialité et CGU | à faire |
