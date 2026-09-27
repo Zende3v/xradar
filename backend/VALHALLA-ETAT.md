@@ -23,7 +23,7 @@ sont repris dans le journal.
 | Phase | Contenu | État |
 |---|---|---|
 | 1 | Mesurer l'existant | **en service depuis le 25/09**, collecte en cours |
-| 2 | Valhalla installé, en mode ombre | **en ombre depuis 27/09 20:54** : backend phase 2, Podman, swap 4 Go, carte France (36 min, 50/50), `VALHALLA_ENABLED=1`, `routingEngine=ors`, cron dimanche = signalisation + Valhalla |
+| 2 | Valhalla installé, en mode ombre | **en ombre depuis 27/09 20:54** : backend phase 2, Podman, swap 4 Go, carte France (36 min, 50/50), `VALHALLA_ENABLED=1`, `routingEngine=ors`, cron dimanche = signalisation + Valhalla ; banc ORS + Valhalla (3c1bd99), build 11 Gio, alertes mail build/panne vers Arthur |
 | 3 | Valhalla pour les admins, puis pour tous | à faire |
 | 4 | ETA dynamique, data.gouv, cap, ferries | à faire |
 | 5 | Politique de confidentialité et CGU | à faire |
