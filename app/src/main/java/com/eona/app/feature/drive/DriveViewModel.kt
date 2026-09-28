@@ -85,6 +85,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val speedLimitRepository = SpeedLimitRepository()
     private val tripHistory = TripHistoryRepository(application)
     private val radars = MutableStateFlow<List<Radar>>(emptyList())
+    /** The radars this driver said "Pas dans mon sens" for, and their course then. */
+    private val radarsQuietForMe = java.util.concurrent.ConcurrentHashMap<String, Double>()
     private val reports = MutableStateFlow<List<UserReport>>(emptyList())
     private val zones = MutableStateFlow<List<RadarZone>>(emptyList())
     private val signApi = com.eona.app.data.signs.SignApi()
@@ -1313,6 +1315,31 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * "Pas dans mon sens" on a radar's alert: off the HUD now, and the backend hears it with the
+     * driver's course; once enough drivers agree, the radar keeps quiet that way for everyone.
+     */
+    fun radarNotMyWay(alert: RoadAlert) {
+        val id = alert.id ?: return
+        dismissAlert(alert.key)
+        val fix = LocationRepository.location.value ?: return
+        val course = fix.bearingDeg?.toDouble()?.takeIf { (fix.speedMps ?: 0f) >= DRIVE_MIN_SPEED_MS } ?: return
+        // Quiet at once for this driver, this way, while the app runs; for all once others agree.
+        radarsQuietForMe[id] = course
+        val token = AccountRepository.token ?: return
+        viewModelScope.launch {
+            radarRepository.notMyWay(id, course, token).onSuccess { quiet ->
+                radars.value = radars.value.map { if (it.id == id) it.copy(quietCourse = quiet) else it }
+            }
+        }
+    }
+
+    /** False when this driver said the radar is not for the way they go now. */
+    private fun quietForMe(radarId: String, heading: Double?): Boolean {
+        val course = radarsQuietForMe[radarId] ?: return true
+        return heading == null || Geo.angularDiff(heading, course) > Radar.QUIET_DEG
+    }
+
     /** The HUD's music button, the banner's controls and its empty states. */
     fun onMusic(action: MusicAction) {
         when (action) {
@@ -1459,6 +1486,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val heading = sample.bearingDeg?.toDouble()
 
         val ahead = radarList
+            // The way it controls, when known: a radar for the other side stays quiet (28/09).
+            .filter { radar -> radar.controls(heading) && quietForMe(radar.id, heading) }
             .map { radar -> radar to Geo.haversine(sample.latitude, sample.longitude, radar.lat, radar.lon) }
             .filter { (radar, _) ->
                 heading == null || Geo.angularDiff(

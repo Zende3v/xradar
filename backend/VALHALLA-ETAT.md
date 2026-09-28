@@ -161,12 +161,17 @@ Revue des autres aspirateurs, décisions d'Arthur :
 - **3.4 Arrêter le trajet** : résumé affiché (« Trajet terminé ») et trajet enregistré, comme à l'arrivée.
   Groupe et partage : inchangés (pas de « arrivé » annoncé à tort). Mesure ETA : trajet toujours `arrived: false`.
 - **Déployé 28/09 21:17** : sauvegarde `/opt/eona-backend-src-backup-20260928-2117.tgz`, `/health` ok ; vérifié Paris-Évry : sortie 8, N 104, Sénart.
-- **3.1 Sens des radars** : aucune source fiable. Données ouvertes sans sens. Site officiel : texte « X vers Y »,
-  robots refusés. OSM `direction` : 1 660 caméras, sens ambigu (8 opposés sur 46 même loin de toute voie inverse).
-  Déduction par chaussée à sens unique : accord OSM 250 sur 416 sous 20 m d'écart. À trancher par Arthur.
+- **3.1 Sens des radars** (Arthur : options 1 et 2, sinon deux sens) :
+  - sens officiel : texte du site radars (1 page/s, identifié EONA), villes par la BAN, route PostGIS ;
+    sens retenu seulement si la route va dans le sens du texte à 60° près. Essai 40 radars : 31 sens ;
+    sur routes à sens unique, 22 d'accord, 2 opposés vérifiés justes (radar placé près de l'autre chaussée) ;
+  - « Pas dans mon sens » sur l'alerte radar : 2 votes à moins de 45° = radar muet dans ce sens pour tous ;
+    muet tout de suite pour le votant ;
+  - app : radar muet si le cap est à plus de 120° du sens officiel ; sans sens connu, sonne dans les deux sens ;
+  - collecte complète lancée le 28/09 à 21:34 (`eona-radar-directions-first`), puis cron lundi 04:30.
 
 ## Prochaine étape
 
-1. Arthur : tests Android 1.0.1 (10) et iOS 1.0.0 (8) ; choix pour le sens des radars (3.1).
+1. Arthur : tests Android 1.0.1 (11) et iOS 1.0.0 (9).
 2. Retest bugs graphiques (tracé saccadé, signalisation groupée, longs trajets) après fin des recalculs.
 3. Décider `routingEngine=all`, puis phase 4 (ETA dynamique, trafic : TomTom réactivé sur événement).

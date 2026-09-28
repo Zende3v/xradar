@@ -35,7 +35,7 @@ export const config = {
   radarSiteUserAgent: 'EONA/1.0 (+https://api.lrda-mercuriale.uk)',
   radarSiteGapMs: 1000,
   radarSiteRefetchDays: 180,
-  radarRoadMaxM: 40,
+  radarRoadMaxM: 60,
   // A town farther than this from its radar is another town of the same name.
   radarTownMaxM: 400_000,
   // "Pas dans mon sens" (crowd.radar_vote): drivers saying a radar does not control their way.

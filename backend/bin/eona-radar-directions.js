@@ -27,6 +27,8 @@ import { haversine } from '../src/radars/geo.js';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BAN_GAP_MS = 150;
 const SAVE_EVERY = 100;
+/** The road the site names is looked for this far from the radar (its coordinates can be rough). */
+const ROAD_REF_MAX_M = 100;
 const ROAD_KINDS_SKIPPED = ['service', 'footway', 'cycleway', 'path', 'track', 'pedestrian', 'steps', 'bridleway'];
 
 const maxPagesArg = process.argv.indexOf('--max-pages');
@@ -68,28 +70,48 @@ async function town(query, radar) {
   return haversine(radar.lat, radar.lon, lat, lon) <= config.radarTownMaxM ? { lat, lon } : null;
 }
 
-/** Each radar's road: its course at the radar (either way) and its one-way flag, when one is near. */
-async function roads(radars) {
+/** The official road's number as OSM writes it without spaces: "RN123" → "N123", "RD368 (…)" → "D368". */
+function roadRef(text) {
+  const m = /^(A|RN|RD|RT|RC|N|D|T|M)\s?(\d+[A-Z]?)\b/i.exec(String(text ?? '').trim());
+  if (!m) return null;
+  const prefix = { RN: 'N', RD: 'D', RT: 'T', RC: 'C' }[m[1].toUpperCase()] ?? m[1].toUpperCase();
+  return prefix + m[2].toUpperCase();
+}
+
+/**
+ * Each radar's road: its course at the radar (either way), its one-way flag, and whether it is
+ * the road the site names ([refs]: the road carrying that number within ROAD_REF_MAX_M wins over
+ * a nearer one), when one is near.
+ */
+async function roads(radars, refs) {
   const { rows } = await db.query(
     `WITH r AS (
-       SELECT id, ST_Transform(ST_SetSRID(ST_MakePoint(lon, lat), 4326), 2154) AS g
-       FROM unnest($1::text[], $2::float8[], $3::float8[]) AS t(id, lon, lat)
+       SELECT id, ref, ST_Transform(ST_SetSRID(ST_MakePoint(lon, lat), 4326), 2154) AS g
+       FROM unnest($1::text[], $2::float8[], $3::float8[], $6::text[]) AS t(id, lon, lat, ref)
      )
-     SELECT r.id, q.oneway,
+     SELECT r.id, q.oneway, q.matched,
        degrees(ST_Azimuth(
          ST_LineInterpolatePoint(q.geom_m, greatest(0, q.f - q.step)),
          ST_LineInterpolatePoint(q.geom_m, least(1, q.f + q.step)))) AS course
      FROM r CROSS JOIN LATERAL (
-       SELECT geom_m, oneway, ST_LineLocatePoint(geom_m, r.g) AS f,
+       SELECT geom_m, oneway, matched, ST_LineLocatePoint(geom_m, r.g) AS f,
          least(0.5, 10 / greatest(ST_Length(geom_m), 1)) AS step
-       FROM signs.road
-       WHERE ST_DWithin(geom_m, r.g, $4) AND highway <> ALL($5::text[])
-       ORDER BY geom_m <-> r.g
+       FROM (
+         SELECT geom_m, oneway, ST_Distance(geom_m, r.g) AS d,
+           r.ref IS NOT NULL AND ';' || regexp_replace(upper(coalesce(ref, '')), '[^A-Z0-9;]', '', 'g') || ';' LIKE '%;' || r.ref || ';%' AS matched
+         FROM signs.road
+         WHERE ST_DWithin(geom_m, r.g, $7) AND highway <> ALL($5::text[])
+       ) c
+       WHERE matched OR d <= $4
+       ORDER BY matched DESC, d
        LIMIT 1
      ) q`,
-    [radars.map((r) => r.id), radars.map((r) => r.lon), radars.map((r) => r.lat), config.radarRoadMaxM, ROAD_KINDS_SKIPPED],
+    [
+      radars.map((r) => r.id), radars.map((r) => r.lon), radars.map((r) => r.lat),
+      config.radarRoadMaxM, ROAD_KINDS_SKIPPED, radars.map((r) => refs.get(r.id) ?? null), ROAD_REF_MAX_M,
+    ],
   );
-  return new Map(rows.map((row) => [row.id, { course: Number(row.course), oneway: row.oneway }]));
+  return new Map(rows.map((row) => [row.id, { course: Number(row.course), oneway: row.oneway, matched: row.matched }]));
 }
 
 async function main() {
@@ -133,9 +155,9 @@ async function main() {
   }
 
   // 2 and 3. The towns, the road, the course of every radar with a text.
-  const road = await roads(radars);
+  const road = await roads(radars, new Map(radars.map((r) => [r.id, roadRef(state.radars[r.id]?.road)])));
   const counts = { radars: radars.length, texts: 0, courses: 0, noReading: 0, noTown: 0, noRoad: 0, across: 0 };
-  const check = { same: 0, opposite: 0 };
+  const check = { same: 0, opposite: 0, ids: [] };
   for (const radar of radars) {
     const entry = state.radars[radar.id];
     if (!entry?.text) continue;
@@ -172,13 +194,16 @@ async function main() {
       const roadWay = onRoad.oneway === -1 ? (onRoad.course + 180) % 360 : onRoad.course;
       const off = Math.abs(((entry.course - roadWay) % 360 + 540) % 360 - 180);
       if (off <= 45) check.same += 1;
-      else if (off >= 135) check.opposite += 1;
+      else if (off >= 135) {
+        check.opposite += 1;
+        if (check.ids.length < 20) check.ids.push(radar.id);
+      }
     }
   }
   await save(state);
   console.log(`[radar-directions] ${pages} pages read${refused ? `, stopped: site answered ${refused}` : ''}`);
   console.log(`[radar-directions] ${JSON.stringify(counts)}`);
-  console.log(`[radar-directions] one-way roads: ${check.same} same way, ${check.opposite} opposite`);
+  console.log(`[radar-directions] one-way roads: ${check.same} same way, ${check.opposite} opposite ${check.ids.join(' ')}`);
 }
 
 main()

@@ -127,6 +127,7 @@ fun DriveRoute(
         onReportSpeedLimit = viewModel::reportSpeedLimit,
         votedReports = votedReports,
         onVote = viewModel::vote,
+        onRadarNotMyWay = viewModel::radarNotMyWay,
         onSlowdownAnswer = viewModel::answerSlowdown,
         onDismissArrival = viewModel::dismissArrival,
         group = viewModel.group,
@@ -169,6 +170,7 @@ fun DriveScreen(
     /** Reports the driver already voted on, and the vote itself ("toujours là" = true). */
     votedReports: Set<String> = emptySet(),
     onVote: (String, Boolean) -> Unit = { _, _ -> },
+    onRadarNotMyWay: (com.eona.app.core.model.RoadAlert) -> Unit = {},
     /** "Ralentissement du trafic ?" answered: yes or no. */
     onSlowdownAnswer: (Boolean) -> Unit = {},
     /** The driver closed the arrival card. */
@@ -389,6 +391,13 @@ fun DriveScreen(
                             alert.distanceMeters <= VOTE_DISTANCE_M
                     },
                     onVote = { alert, confirm -> alert.id?.let { onVote(it, confirm) } },
+                    // A fixed radar, while the car moves (its course is the vote).
+                    canSayNotMyWay = { alert ->
+                        alert.id != null && alert.lastReportedLabel == null && state.speedKmh >= NOT_MY_WAY_MIN_KMH &&
+                            (alert.type == com.eona.app.core.model.AlertType.RadarFixed ||
+                                alert.type == com.eona.app.core.model.AlertType.Camera)
+                    },
+                    onNotMyWay = onRadarNotMyWay,
                 )
             }
 
@@ -777,6 +786,8 @@ private val MAP_CONTROL_SIZE = 56.dp
 
 /** A report closer than this shows "toujours là / plus là". */
 private const val VOTE_DISTANCE_M = 300
+/** "Pas dans mon sens" needs the car moving: its course is the vote (1,5 m/s). */
+private const val NOT_MY_WAY_MIN_KMH = 6
 
 /**
  * Radars and road alerts pop up on the HUD this close only. Display alone: fetching, direction,

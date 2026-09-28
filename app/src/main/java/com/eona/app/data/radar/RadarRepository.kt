@@ -14,4 +14,7 @@ class RadarRepository(private val api: RadarApi = RadarApi()) {
     /** Radars along the trip's route; null when the backend could not answer. */
     suspend fun route(points: List<GeoPoint>): List<Radar>? =
         runCatching { api.route(points) }.getOrNull()
+
+    /** "Pas dans mon sens" on radar [id]; the radar's quiet course now, failure aside. */
+    suspend fun notMyWay(id: String, course: Double, token: String): Result<Double?> = api.notMyWay(id, course, token)
 }

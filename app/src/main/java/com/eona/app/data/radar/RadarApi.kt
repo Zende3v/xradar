@@ -50,6 +50,24 @@ class RadarApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }
     }
 
+    /**
+     * "Pas dans mon sens": radar [id] does not control the way the driver goes ([course]).
+     * The radar's quiet course now (null while the votes are too few); a failed [Result] when
+     * the request failed.
+     */
+    suspend fun notMyWay(id: String, course: Double, token: String): Result<Double?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = JSONObject().put("course", Math.round(course) % 360).toString().toRequestBody(JSON)
+            val url = "${baseUrl.trimEnd('/')}/api/radars/${java.net.URLEncoder.encode(id, "UTF-8")}/not-my-way"
+            val request = Request.Builder().url(url).header("Authorization", "Bearer $token").post(body).build()
+            client.newCall(request).execute().use { response ->
+                check(response.isSuccessful) { "HTTP ${response.code}" }
+                val o = JSONObject(response.body?.string() ?: "{}")
+                if (o.isNull("quietCourse")) null else o.optDouble("quietCourse").takeIf { it.isFinite() }
+            }
+        }
+    }
+
     private fun parse(json: String): List<Radar> {
         val array = JSONObject(json).optJSONArray("radars") ?: return emptyList()
         return (0 until array.length()).mapNotNull { i ->
@@ -60,6 +78,9 @@ class RadarApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 vma = if (o.isNull("vma")) null else o.optInt("vma"),
                 lat = o.optDouble("lat"),
                 lon = o.optDouble("lon"),
+                // The way it controls: absent from an older backend.
+                course = if (o.isNull("course")) null else o.optDouble("course").takeIf { it.isFinite() },
+                quietCourse = if (o.isNull("quietCourse")) null else o.optDouble("quietCourse").takeIf { it.isFinite() },
             )
         }
     }

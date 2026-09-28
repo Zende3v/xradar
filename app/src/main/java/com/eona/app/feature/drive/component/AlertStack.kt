@@ -77,6 +77,9 @@ fun AlertStack(
     /** Whether the driver can still say if this alert is there ("toujours là / plus là"). */
     canVote: (RoadAlert) -> Boolean = { false },
     onVote: (RoadAlert, Boolean) -> Unit = { _, _ -> },
+    /** "Pas dans mon sens", on a fixed radar's alert. */
+    canSayNotMyWay: (RoadAlert) -> Boolean = { false },
+    onNotMyWay: (RoadAlert) -> Unit = {},
 ) {
     if (alerts.isEmpty()) return
     val colors = EonaTheme.colors
@@ -148,6 +151,15 @@ fun AlertStack(
             if (canVote(focus)) {
                 Spacer(Modifier.height(spacing.sm))
                 VoteRow(onVote = { confirm -> onVote(focus, confirm) })
+            }
+
+            if (canSayNotMyWay(focus)) {
+                Spacer(Modifier.height(spacing.sm))
+                Row {
+                    VoteButton("Pas dans mon sens", EonaIcons.ManeuverUturn, colors.textSecondary, Modifier.weight(1f)) {
+                        onNotMyWay(focus)
+                    }
+                }
             }
 
             if (others.isNotEmpty()) {
