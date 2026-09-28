@@ -128,6 +128,7 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 name = s.optString("name", ""),
                 distanceMeters = s.optInt("distanceM"),
                 exit = if (s.isNull("exit")) null else s.optInt("exit"),
+                durationSeconds = s.optInt("durationS"),
                 // The motorway signs: absent from ORS and from an older backend.
                 exitNumber = if (s.isNull("exitNumber")) null else s.optString("exitNumber").ifBlank { null },
                 towardRefs = strings(s.optJSONArray("towardRefs")),

@@ -11,6 +11,8 @@ data class RouteStep(
     val name: String,
     val distanceMeters: Int,
     val exit: Int?,
+    /** The engine's time for this step, in seconds (0 when the backend does not say). */
+    val durationSeconds: Int = 0,
     /** The motorway exit's number ("8", "12a"), when the signs give one. */
     val exitNumber: String? = null,
     /** The roads the branch leads to, as the signs say them ("N 104", "A 4"). */

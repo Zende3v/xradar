@@ -21,35 +21,37 @@ const PROBES_AUTHOR = 'system:traffic';
  * own jams where they cost more than TomTom says (`source: "crowd"`, the extra time only), with
  * `totalM` its length and `travelS` / `delayS` TomTom's time for it with traffic and the part
  * lost to traffic. With `aheadM` (the driver's metres along it), `check` says whether a
- * faster-route check (/api/route/faster) is worth asking. 503 without a TomTom key, 502 when
- * TomTom does not answer.
+ * faster-route check (/api/route/faster) is worth asking. Every section says who reports it
+ * (`source`: tomtom | crowd, D2.7). Without TomTom (TOMTOM_ENABLED off) the drivers' jams come
+ * alone, `travelS` and `delayS` null, `check` false; 502 when TomTom does not answer.
  */
 trafficRouter.post('/route', async (req, res) => {
   const account = authAccount(req);
   if (!account) return res.status(401).json({ error: 'account required' });
   if (account.banned) return res.status(403).json({ error: 'banned' });
-  if (!config.tomtomApiKey) return res.status(503).json({ error: 'traffic unavailable' });
   const points = pointsOf(req.body?.coordinates);
   if (!points) return res.status(400).json({ error: 'coordinates [[lon,lat],...] required' });
-  let traffic;
-  try {
-    traffic = await trafficAlong(points, { use: 'eta' });
-  } catch (e) {
-    console.warn('[traffic] unavailable —', String(e.message || e));
-    return res.status(502).json({ error: 'traffic unavailable' });
-  }
   const path = measure(points);
+  let traffic = { totalM: Math.round(path.total), travelS: null, delayS: null, updatedAt: new Date().toISOString(), sections: [] };
+  if (config.tomtomApiKey) {
+    try {
+      traffic = await trafficAlong(points, { use: 'eta' });
+    } catch (e) {
+      console.warn('[traffic] unavailable —', String(e.message || e));
+      return res.status(502).json({ error: 'traffic unavailable' });
+    }
+  }
   // The drivers' jams add to TomTom; without them (database down) TomTom's alone still count.
   const crowd = await crowdAlong(path).catch((e) => {
     console.warn('[traffic] drivers\' jams unavailable —', String(e.message || e));
     return [];
   });
-  const sections = withCrowd(traffic.sections, crowd);
+  const sections = withCrowd(traffic.sections.map((s) => ({ ...s, source: s.source ?? 'tomtom' })), crowd);
   const aheadM = Number(req.body?.aheadM);
   res.json({
     ...traffic,
     sections,
-    ...(Number.isFinite(aheadM) ? { check: worthChecking(sections, path.total, aheadM) } : {}),
+    ...(Number.isFinite(aheadM) ? { check: Boolean(config.tomtomApiKey) && worthChecking(sections, path.total, aheadM) } : {}),
   });
 });
 

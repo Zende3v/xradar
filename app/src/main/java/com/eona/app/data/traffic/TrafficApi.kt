@@ -95,7 +95,12 @@ class TrafficApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 source = if (s.isNull("source")) TrafficStretch.TOMTOM else s.optString("source").ifBlank { TrafficStretch.TOMTOM },
             )
         }
-        return RouteTraffic(o.optDouble("totalM", 0.0), stretches, o.optBoolean("check"))
+        return RouteTraffic(
+            o.optDouble("totalM", 0.0),
+            stretches,
+            o.optBoolean("check"),
+            travelSeconds = if (o.isNull("travelS")) null else o.optInt("travelS").takeIf { it > 0 },
+        )
     }
 
     private companion object {

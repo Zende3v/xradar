@@ -1,6 +1,5 @@
 package com.eona.app.core.drive
 
-import com.eona.app.core.model.Route
 import com.eona.app.core.model.TripInfo
 import java.time.Instant
 import java.time.ZoneId
@@ -15,26 +14,23 @@ import kotlin.math.roundToInt
 object TripProgress {
 
     /**
-     * [remainingShare] is the part of [route] still ahead of the driver (1 before they are on it,
-     * 0 at the destination): the route's own time and distance shrink with it, the same way the
-     * shared trip and the group count what is left.
+     * [metersLeft] of the route, and the arrival shown ([arrivalMillis], EtaEstimator and
+     * ArrivalClock): the time left is counted to it, so the two always agree.
      */
     fun info(
-        route: Route,
-        remainingShare: Double = 1.0,
+        metersLeft: Double,
+        arrivalMillis: Long,
         nowMillis: Long = System.currentTimeMillis(),
         zone: ZoneId = ZoneId.systemDefault(),
     ): TripInfo {
-        val share = remainingShare.coerceIn(0.0, 1.0)
-        val seconds = route.durationSeconds * share
+        val seconds = ((arrivalMillis - nowMillis) / 1000.0).coerceAtLeast(0.0)
         // Still on the way, never "0 min": the last minute shows as one.
-        val minutes = if (share > 0) (seconds / 60.0).roundToInt().coerceAtLeast(1) else 0
+        val minutes = if (metersLeft > 0) (seconds / 60.0).roundToInt().coerceAtLeast(1) else 0
         val remaining = if (minutes >= 60) "${minutes / 60} h ${(minutes % 60).toString().padStart(2, '0')}" else "$minutes min"
-        val arrival = Instant.ofEpochMilli(nowMillis + (seconds * 1000).toLong()).atZone(zone).format(HHMM)
         return TripInfo(
             remainingLabel = remaining,
-            distanceLabel = distanceLabel(route.distanceMeters * share),
-            arrivalLabel = arrival,
+            distanceLabel = distanceLabel(metersLeft),
+            arrivalLabel = Instant.ofEpochMilli(arrivalMillis).atZone(zone).format(HHMM),
         )
     }
 

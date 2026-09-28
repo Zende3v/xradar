@@ -43,6 +43,8 @@ data class RouteTraffic(
     val totalMeters: Double,
     val stretches: List<TrafficStretch>,
     val worthChecking: Boolean = false,
+    /** TomTom's time for the whole route with today's traffic; null without TomTom. */
+    val travelSeconds: Int? = null,
 ) {
     /** Whether a slowed stretch covers [meters] along the route ([routeMeters], the app's own
      *  length of it: the backend's measure is scaled to it). */

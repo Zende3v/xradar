@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.eona.app.BuildConfig
 import com.eona.app.core.drive.AlertBeeps
+import com.eona.app.core.drive.EtaEstimator
 import com.eona.app.core.drive.StopTraffic
 import com.eona.app.core.drive.TripProgress
 import com.eona.app.core.drive.TripRecorder
@@ -141,6 +142,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** Radars + reports + radar-car zones, pre-combined so the main combine stays ≤5 flows. */
     private val roadObjects = combine(radars, reports, zones) { r, rep, z -> Triple(r, rep, z) }
 
+    /** The arrival shown on the dock (D2.4), kept for the trip. */
+    private val arrivalClock = com.eona.app.core.drive.ArrivalClock()
     /** The trip ends because the driver stopped it, not by the arrival or a refusal. */
     private var stoppedByDriver = false
     private var lastFetchLat = Double.NaN
@@ -212,6 +215,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 return rp to match
             }
             override val drivenMeters: Int? get() = trip?.distanceMeters?.roundToInt()
+            override fun secondsLeft(): Double? = ActiveTripRepository.route.value?.let { this@DriveViewModel.secondsLeft(it) }
             override fun setDestination(place: Place) = ActiveTripRepository.setDestination(place)
             override fun attachGroupResult(result: TripGroupResult, tripId: String) = tripHistory.attach(result, tripId)
         },
@@ -264,7 +268,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             speedKmh = speedKmh,
             speedLimitKmh = limit,
             speedLimitSource = if (limit != null) SpeedLimitSource.Radar else null,
-            trip = route?.let { TripProgress.info(it, remainingShare(it)) },
+            trip = route?.let { r -> TripProgress.info(r.distanceMeters * remainingShare(r), shownArrival(r)) },
             alert = alerts.firstOrNull(),
             gpsSignal = signal,
             alerts = alerts,
@@ -547,7 +551,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 current.add(sample) { stopTraffic(sample) }
                 // The arrival the dock announces, kept at 25, 50 and 75 % of the way (D1.1).
                 if (current.awaitsCheckpoint) {
-                    ActiveTripRepository.route.value?.let { route -> current.checkpoint(route, remainingShare(route)) }
+                    ActiveTripRepository.route.value?.let { route -> current.checkpoint(route, remainingShare(route), shownArrival(route)) }
                 }
                 // Auto-finish when we reach the destination.
                 ActiveTripRepository.destination.value?.let { dest ->
@@ -867,7 +871,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val route = ActiveTripRepository.route.value
         trip?.depart(
             route = route,
-            remainingShare = route?.let { remainingShare(it) } ?: 1.0,
+            arrivalAt = route?.let { shownArrival(it) },
             manualStart = ActiveTripRepository.start.value != null,
         )
     }
@@ -876,6 +880,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private fun finalizeTrip() {
         val finished = trip ?: return
         trip = null
+        arrivalClock.reset()
         BugTripTrace.ended()
         // Arrived, or stopped by the driver once under way: the HUD shows the trip's summary
         // before going back to simply driving (a stop counts as a finished trip, 28/09).
@@ -1468,6 +1473,17 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
      * go. Off the route for a moment (a detour before the recalculation), the last place known on it
      * holds; a new route starts whole again.
      */
+    /** Seconds left on [route] for the driver now: the dynamic ETA (EtaEstimator, D2.1). */
+    private fun secondsLeft(route: Route): Double {
+        val rp = path?.takeIf { it.points === route.points && it.totalMeters > 0 }
+        val routeMeters = rp?.totalMeters ?: route.distanceMeters.toDouble()
+        return EtaEstimator.secondsLeft(route, routeMeters, routeMeters * (1 - remainingShare(route)), traffic.value)
+    }
+
+    /** The arrival the dock shows for [route] now: it moves only by a minute or more (D2.4). */
+    private fun shownArrival(route: Route, now: Long = System.currentTimeMillis()): Long =
+        arrivalClock.shown(now + (secondsLeft(route) * 1000).toLong())
+
     private fun remainingShare(route: Route): Double {
         // The measured path must be this route's (the route flow and this one may cross).
         val rp = path?.takeIf { it.points === route.points && it.totalMeters > 0 } ?: return 1.0

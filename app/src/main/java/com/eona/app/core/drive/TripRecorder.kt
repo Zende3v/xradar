@@ -121,43 +121,43 @@ class TripRecorder(
     /**
      * The real departure, once per trip: the driver joins the route (a trip started by hand,
      * [manualStart]: its first fix). [route], then in force, gives the planned distance and the
-     * map, and the ETA the dock shows ([remainingShare] of it) is the 0 % checkpoint; none without
-     * a route yet.
+     * map, and the arrival the dock shows ([arrivalAt]) is the 0 % checkpoint; none without a
+     * route yet.
      */
-    fun depart(route: Route?, remainingShare: Double, manualStart: Boolean, now: Long = System.currentTimeMillis()) {
+    fun depart(route: Route?, arrivalAt: Long?, manualStart: Boolean, now: Long = System.currentTimeMillis()) {
         if (departedAt != null) return
         departedAt = now
         departedMeters = distanceMeters
         this.manualStart = manualStart
         plannedMeters = route?.distanceMeters
         mapVersion = route?.mapVersion
-        if (route != null) keepEta(0, route, remainingShare, now)
+        if (route != null && arrivalAt != null) keepEta(0, arrivalAt, now)
     }
 
     /**
-     * After the departure, at each fix: the ETA the dock shows now ([route]'s time pro rata of
-     * [remainingShare]) is kept the first time the trip is 25, 50 and 75 % done, each once (all
-     * those passed at once on a jump). Done: the metres driven since the departure, over those
-     * plus the metres of [route] left.
+     * After the departure, at each fix: the arrival the dock shows now ([arrivalAt]) is kept the
+     * first time the trip is 25, 50 and 75 % done, each once (all those passed at once on a jump).
+     * Done: the metres driven since the departure, over those plus the metres of [route] left
+     * ([remainingShare] of it).
      */
-    fun checkpoint(route: Route, remainingShare: Double, now: Long = System.currentTimeMillis()) {
+    fun checkpoint(route: Route, remainingShare: Double, arrivalAt: Long, now: Long = System.currentTimeMillis()) {
         if (!awaitsCheckpoint) return
         val driven = distanceMeters - departedMeters
         val total = driven + route.distanceMeters * remainingShare.coerceIn(0.0, 1.0)
         if (total <= 0) return
         val done = driven / total
         while (checkpointsPassed < CHECKPOINTS.size && done >= CHECKPOINTS[checkpointsPassed] / 100.0) {
-            keepEta(CHECKPOINTS[checkpointsPassed], route, remainingShare, now)
+            keepEta(CHECKPOINTS[checkpointsPassed], arrivalAt, now)
             checkpointsPassed++
         }
     }
 
     /** The arrival the dock announces now, and the pauses and uncertain stops already over. */
-    private fun keepEta(at: Int, route: Route, remainingShare: Double, now: Long) {
+    private fun keepEta(at: Int, arrivalAt: Long, now: Long) {
         etaChecks += EtaCheck(
             at = at,
             shownAt = now,
-            arrivalAt = now + (route.durationSeconds * remainingShare.coerceIn(0.0, 1.0)).roundToLong() * 1000,
+            arrivalAt = arrivalAt,
             pausedBefore = pausedSeconds.roundToInt(),
             uncertainBefore = uncertainSeconds.roundToInt(),
         )
@@ -270,7 +270,7 @@ class TripRecorder(
         /** After the departure (0 %), the ETA is kept at these percentages of the way. */
         private val CHECKPOINTS = intArrayOf(25, 50, 75)
         /** The dock's ETA: the route's time pro rata of what is left of it (TripProgress). */
-        const val ETA_MODE = "proportional"
+        const val ETA_MODE = EtaEstimator.MODE
         /** The engine of a route that does not say. */
         private const val UNKNOWN_ENGINE = "unknown"
     }

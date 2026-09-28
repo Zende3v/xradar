@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **29/09/2026** (Claude : curseur flèche, point Valhalla : 136 routes admins, 0 erreur, 0 repli). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **29/09/2026** (Claude : `all` actif, phase 4 lot 1 ETA dynamique). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -179,8 +179,23 @@ Revue des autres aspirateurs, décisions d'Arthur :
     Vérifications Codex : test ciblé votes réussi (1/1), différences Git sans erreur, fichiers déployés identiques par SHA-256.
     Relecture Claude indisponible : quota mensuel atteint. Aucun nouveau chantier repris.
 
+## Phase 3 finie, phase 4 commencée (29/09)
+
+- **`routingEngine=all`** le 29/09 (Arthur) : tout le monde sur Valhalla, ORS en secours et en ombre.
+  Avant : admins seuls, 136 routes, 0 erreur, 0 repli, 16 ms en moyenne.
+- **Phase 4, lot 1 : ETA dynamique** (D2.1, D2.4), sans TomTom (coupé) :
+  - apps : `EtaEstimator` (Kotlin `core/drive`, Swift `EonaCore/Drive`, 4 tests Swift) ;
+    temps restant = base du moteur répartie par durées d'étapes + bouchons encore devant ;
+    avec TomTom plus tard : base = temps TomTom moins ses bouchons listés ;
+  - arrivée affichée bouge seulement de 1 min ou plus (`ArrivalClock`) ; HUD, partage, groupe et
+    mesures (`etaChecks`) sur la même ETA ; mode d'ETA enregistré `dynamic` ;
+  - backend : `/api/traffic/route` sans TomTom rend les bouchons EONA (plus de 503), `source` sur chaque section ;
+  - Android 1.0.1 (14), iOS 1.0.0 (12).
+- Lots suivants : 2) recalage TomTom sur événement (D2.2, D3.1), accord Arthur pour rallumer TomTom ;
+  3) data.gouv derrière interrupteur, deux ETA (D2.6, D3.2) ; 4) option ferries, « À propos ».
+
 ## Prochaine étape
 
-1. Arthur : lancer Codemagic sur `main` (`e826474`), puis tests téléphone iOS 1.0.0 (11) et Android 1.0.1 (13) (curseur flèche par défaut).
-2. Retest bugs graphiques (tracé saccadé, signalisation groupée, longs trajets) après fin des recalculs.
-3. Décider `routingEngine=all`, puis phase 4 (ETA dynamique, trafic : TomTom réactivé sur événement).
+1. Arthur : trajets avec Android 1.0.1 (14) et iOS 1.0.0 (12) ; l'ETA doit baisser régulièrement.
+2. Déployer le backend du lot 1 (bouchons EONA sans TomTom), accord Arthur.
+3. Lot 2 : recalage TomTom sur événement, TomTom rallumé (accord Arthur).

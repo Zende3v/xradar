@@ -58,6 +58,8 @@ interface TripContext {
     val routeVersion: Int
     /** The route followed and where the driver is along it; null off it. */
     fun progress(): Pair<RoutePath, RoutePath.Match>?
+    /** Seconds left to the destination, the HUD's own ETA (EtaEstimator); null without a route. */
+    fun secondsLeft(): Double?
     /** Metres driven in this trip so far. */
     val drivenMeters: Int?
     fun setDestination(place: Place)
@@ -189,7 +191,9 @@ class GroupSession(private val scope: CoroutineScope, private val trip: TripCont
         val (path, match) = trip.progress() ?: return null
         val left = (path.totalMeters - match.alongMeters).coerceAtLeast(0.0)
         val part = if (path.totalMeters > 0) left / path.totalMeters else 0.0
-        return left.roundToInt() to (route.durationSeconds * part).roundToInt()
+        // The HUD's ETA: the one formula for the dock, the link and the group (D2.4).
+        val seconds = trip.secondsLeft() ?: (route.durationSeconds * part)
+        return left.roundToInt() to seconds.roundToInt()
     }
 
     // ---- Group: the driver's actions ----
