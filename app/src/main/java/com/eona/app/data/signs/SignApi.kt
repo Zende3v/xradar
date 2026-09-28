@@ -25,13 +25,6 @@ class SignApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         .readTimeout(25, TimeUnit.SECONDS)
         .build()
 
-    suspend fun near(lat: Double, lon: Double, radiusM: Int): List<RoadSign> = withContext(Dispatchers.IO) {
-        val url = "${baseUrl.trimEnd('/')}/api/signs/near?lat=$lat&lon=$lon&radius=$radiusM"
-        runCatching {
-            client.newCall(Request.Builder().url(url).build()).execute().use { r -> parse(r.body?.string()) }
-        }.getOrDefault(emptyList())
-    }
-
     /** All signs along the whole route ([points] as the polyline); null when the request failed. */
     suspend fun route(points: List<GeoPoint>): List<RoadSign>? = withContext(Dispatchers.IO) {
         if (points.size < 2) return@withContext emptyList()

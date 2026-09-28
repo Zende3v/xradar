@@ -29,9 +29,11 @@ class LiveApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         position: GeoPoint? = null,
         speedKmh: Int? = null,
         countTime: Boolean = false,
+        closing: Boolean = false,
     ): Boolean = withContext(Dispatchers.IO) {
         val json = JSONObject().put("inTrip", inTrip)
         if (countTime) json.put("session", true)
+        if (closing) json.put("closing", true)
         if (position != null) {
             json.put("lat", position.lat).put("lon", position.lon)
             speedKmh?.let { json.put("speedKmh", it) }

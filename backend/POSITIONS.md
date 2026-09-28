@@ -21,8 +21,9 @@ condition `privacy.presence || privacy.usageTime` avant l'envoi, côté iOS comm
 
 ## 2. Ce que l'app envoie
 
-Une seule requête, toutes les 30 secondes, tant que l'app tourne (écran éteint compris, le suivi
-GPS étant déjà actif pour les alertes) :
+Depuis le 28/09 (Android 1.0.1 (8), iOS 1.0.0 (6)) : une requête toutes les 30 secondes quand
+l'app est à l'écran, ou pendant un trajet (arrière-plan compris). Hors trajet en arrière-plan :
+rien. Plus une dernière requête `closing` quand on quitte l'app hors trajet.
 
 ```
 POST /api/live/presence
@@ -31,9 +32,10 @@ Authorization: Bearer <jeton de session>
 ```
 
 - `inTrip` : un trajet est en cours ou non. Toujours envoyé.
-- `lat`, `lon`, `speedKmh` : **seulement** si « Présence et position » est actif. Sinon les champs
-  sont absents, pas à zéro.
+- `lat`, `lon`, `speedKmh` : **seulement** si « Présence et position » est actif, **et** seulement
+  pendant un trajet ou dans la requête `closing`. Sinon les champs sont absents, pas à zéro.
 - `session: true` : **seulement** si « Temps d'utilisation » est actif.
+- `closing: true` : l'app est quittée hors trajet. Dernière position connue, où l'app a servi.
 
 L'app n'envoie jamais un champ que le conducteur n'a pas autorisé. C'est décidé au moment de
 construire le corps de la requête, pas filtré plus loin.
@@ -46,13 +48,15 @@ Dans l'ordre, dans `src/live/routes.js` :
 
 1. **Le décompte** (`liveStore.touch`) : en mémoire, jamais sur disque. Un compte est « en ligne »
    90 secondes après son dernier signe de vie. C'est ce qui alimente `live.online` et
-   `live.inTrip` dans `/health`.
+   `live.inTrip` dans `/health`. `closing: true` le retire tout de suite.
 2. **Le temps passé** (`accountStore.recordActivity`) : l'écart entre deux pings s'ajoute à
    `stats.appDurationSeconds` du compte, **si** `session: true`. Un écart de plus de 90 secondes
    ne compte pas : c'est une nouvelle session, pas du temps passé. La date de dernière activité
    (`lastActiveAt`), elle, est toujours mise à jour — elle sert à la gestion des comptes.
 3. **La position** (`positionStore.add`) : une ligne dans `crowd.position`, seulement si `lat` et
-   `lon` sont là et valides.
+   `lon` sont là et valides, **et** si `inTrip` ou `closing`. Les anciennes apps envoient une
+   position à chaque ping : hors trajet, le serveur la jette. Une ligne `in_trip = false` est donc
+   une fermeture d'app : la dernière position connue du compte.
 
 ```sql
 CREATE TABLE crowd.position (
@@ -118,7 +122,8 @@ DELETE FROM crowd.position WHERE account_id = '<id>';
 
 ## 6. Combien ça pèse
 
-Un ping toutes les 30 secondes, soit **120 lignes par heure et par conducteur**, environ
+Un ping toutes les 30 secondes **en trajet seulement** (plus une ligne par fermeture d'app), soit
+au plus **120 lignes par heure de trajet et par conducteur**, environ
 200 octets avec les index.
 
 | Usage | Par jour | En régime stable (30 jours) |

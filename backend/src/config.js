@@ -4,6 +4,9 @@ const H = 60 * MIN;
 const D = 24 * H;
 // A count from the environment, 0 included (`Number(value) || fallback` would read 0 as unset).
 const count = (value, fallback) => (/^\d+$/.test(String(value ?? '').trim()) ? Number(String(value).trim()) : fallback);
+// Every TomTom use (traffic, /faster, bench, search) waits for TOMTOM_ENABLED=1 (28/09: all cut
+// until the dynamic ETA). Off, the keys read as absent: not one request, whatever the apps ask.
+const TOMTOM_ON = /^(1|true)$/i.test(process.env.TOMTOM_ENABLED || '');
 
 export const config = {
   port: Number(process.env.PORT) || 8080,
@@ -127,8 +130,9 @@ export const config = {
   // without measuring again.
   benchMinorRoadClasses: ['unclassified', 'residential', 'living_street', 'service'],
 
-  // TomTom Traffic on the route being followed (key from the service environment, never versioned).
-  tomtomApiKey: process.env.TOMTOM_API_KEY || null,
+  // TomTom Traffic on the route being followed (key from the service environment, never versioned),
+  // only with TOMTOM_ENABLED=1.
+  tomtomApiKey: (TOMTOM_ON && process.env.TOMTOM_API_KEY) || null,
   tomtomUrl: process.env.TOMTOM_URL || 'https://api.tomtom.com',
   // Our route goes back to TomTom as supporting points: one every 30 m at least, 1000 at most.
   trafficSupportingSpacingM: 30,
@@ -238,14 +242,14 @@ export const config = {
   // TomTom POI Search (search/tomtom.js): the shops, gyms and the like OpenStreetMap misses
   // ("leclerc orly"), asked for what is typed that is not plainly an address, from
   // searchTomtomMinChars characters; its answers are never kept. Off unless
-  // SEARCH_TOMTOM_ENABLED=1: not one request otherwise. Key: SEARCH_TOMTOM_API_KEY, else the
+  // SEARCH_TOMTOM_ENABLED=1 and TOMTOM_ENABLED=1: not one request otherwise. Key: SEARCH_TOMTOM_API_KEY, else the
   // traffic's TOMTOM_API_KEY. Its own budget (search/budget.js), on disk apart from the traffic's:
   // searchTomtomDailyMax requests a UTC day and searchTomtomMonthlyMax a UTC month at most
   // (public pricing: 2500 free Search API requests a month, docs.tomtom.com/pricing), each
   // counted before it leaves; a budget that cannot be read or saved sends none. After a failure
   // TomTom rests searchTomtomPauseMs, after a refusal (key, rights, request) searchTomtomBlockMs;
   // Photon and the BAN answer meanwhile.
-  searchTomtomEnabled: /^(1|true)$/i.test(process.env.SEARCH_TOMTOM_ENABLED || ''),
+  searchTomtomEnabled: TOMTOM_ON && /^(1|true)$/i.test(process.env.SEARCH_TOMTOM_ENABLED || ''),
   searchTomtomApiKey: process.env.SEARCH_TOMTOM_API_KEY || process.env.TOMTOM_API_KEY || null,
   searchTomtomDailyMax: count(process.env.SEARCH_TOMTOM_DAILY_MAX, 100),
   searchTomtomMonthlyMax: count(process.env.SEARCH_TOMTOM_MONTHLY_MAX, 2000),
@@ -424,6 +428,8 @@ export const config = {
 
   // Accounts (identity + roles guest/client/admin).
   accountsFile: process.env.ACCOUNTS_FILE || './data/accounts.json',
+  // The copies written before a guest purge (accounts.backup-<day>.json) are deleted after this.
+  accountsBackupKeepDays: count(process.env.ACCOUNTS_BACKUP_KEEP_DAYS, 14),
   // A Guest gets the complete navigation experience for one week. Afterwards
   // the account stays signed in and can consult the map, but cannot start a trip.
   guestTrialMs: Number(process.env.GUEST_TRIAL_MS) || 7 * D,

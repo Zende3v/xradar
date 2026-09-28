@@ -250,6 +250,11 @@ des trajets (D1.10).
 `lat`/`lon`/`speedKmh`/`positionAt` **pour les conducteurs qui partagent leur position** (null
 pour les autres). Un compte reste « en ligne » 90 secondes après son dernier signe de vie.
 
+Depuis le 28/09, une position n'est gardée que **pendant un trajet**, plus une à la **fermeture de
+l'app** hors trajet. Hors trajet, un compte en ligne a donc `lat` à null. Dans `/positions`, un
+point `inTrip: false` est une fermeture d'app : le dernier point d'un compte donne sa dernière
+connexion avec sa position.
+
 Le détail du mécanisme (ce que l'app envoie, ce qui est écrit, quand c'est effacé, ce que ça pèse)
 est dans [POSITIONS.md](POSITIONS.md).
 

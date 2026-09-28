@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **27/09/2026 20:55** (Claude : ORS `api.heigit.org`, phase 2 installée, ombre active). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **28/09/2026 20:30** (Claude : ménage aspirateurs, TomTom coupé, présence limitée au trajet). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -24,7 +24,7 @@ sont repris dans le journal.
 |---|---|---|
 | 1 | Mesurer l'existant | **en service depuis le 25/09**, collecte en cours |
 | 2 | Valhalla installé, en mode ombre | **en ombre depuis 27/09 20:54** : backend phase 2, Podman, swap 4 Go, carte France (36 min, 50/50), `VALHALLA_ENABLED=1`, `routingEngine=ors`, cron dimanche = signalisation + Valhalla ; banc ORS + Valhalla (3c1bd99), build 11 Gio, alertes mail build/panne vers Arthur |
-| 3 | Valhalla pour les admins, puis pour tous | **admins sur Valhalla depuis 27/09 23:45** (banc 472 mesures : Valhalla +6 % vs meilleur TomTom, ORS +12 %) ; cap envoyé par les apps (Android 6, iOS 4) contre demi-tours ; **28/09 : trajets admins** ; tous : à décider |
+| 3 | Valhalla pour les admins, puis pour tous | **admins sur Valhalla depuis 27/09 23:45** (banc 472 mesures : Valhalla +6 % vs meilleur TomTom, ORS +12 %) ; cap envoyé par les apps (Android 6, iOS 4) contre demi-tours ; **28/09 : trajets admins** ; tempête de recalculs corrigée (Android 7, iOS 5) ; tous : à décider |
 | 4 | ETA dynamique, data.gouv, cap, ferries | à faire |
 | 5 | Politique de confidentialité et CGU | à faire |
 | 6 | Trafic dans Valhalla : fermetures et travaux | à faire |
@@ -132,8 +132,24 @@ beaucoup la durée (14 min annoncées contre 29 min pour TomTom). Toulouse (Capi
   `/health` 17:52 : ORS 2 clés bloquées jusqu'au 28/09 00:00 UTC (201 et 45 appels), `budgetLeft` 0. Cause à diagnostiquer.
 - Sauvegardes uniquement sur le VPS, aucune copie ailleurs.
 
+## Ménage du 28/09 (aspirateurs)
+
+Cause : recalcul tous les 150 m (hors route mesuré au sommet, pas au segment). Corrigé Android (7), iOS (5).
+Revue des autres aspirateurs, décisions d'Arthur :
+- **TomTom coupé partout** jusqu'à l'ETA dynamique : interrupteur `TOMTOM_ENABLED` (absent = aucun appel).
+  Trafic `/api/traffic/route` et `/faster` : 503, apps gèrent déjà. Recherche : Photon + BAN seuls. Banc : cron à retirer au déploiement.
+- **Présence** : position seulement en trajet, plus une à la fermeture de l'app (`closing`). Hors trajet en
+  arrière-plan : aucun ping. Serveur jette les positions hors trajet des anciennes apps.
+- **Limite de vitesse hors route** : requête tous les 100 m au lieu de 40 m.
+- **Code mort supprimé** : Android `data/geocoding`, `SignApi.near` ; iOS `SignAPI.near` ;
+  backend `/api/live/position` et `/api/live/near`.
+- **Copies `accounts.backup-*`** : gardées 14 jours (jamais purgées avant).
+- Gardé : `avoid=traffic` (contrat `/api/route`), ombre ORS (jusqu'à décision `all`), `signs_prev` (retour arrière).
+- Restent à trancher : rafraîchissement signalements 25 s même à l'arrêt ; GPS haute précision en arrière-plan hors trajet.
+- Politique de confidentialité : collecte réduite, texte à réécrire en phase 5.
+
 ## Prochaine étape
 
-1. Clore revue indépendante des scripts avant installation ; reprendre tâche Claude existante quand bridge permet reprise stricte.
-2. Présenter lot VPS précis à Arthur : Podman, swap, service, premier build France et mesures. Accord requis avant intervention.
-3. Poursuivre trajets ordinaires et collecte phase 1 ; couvrir Android et situations variées avant bilan.
+1. Arthur : déploiement backend du ménage (accord requis), puis tests Android 1.0.1 (8) et iOS 1.0.0 (6).
+2. Retest bugs graphiques (tracé saccadé, signalisation groupée, longs trajets) après fin des recalculs.
+3. Décider `routingEngine=all`, puis phase 4 (ETA dynamique, trafic : TomTom réactivé sur événement).

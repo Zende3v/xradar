@@ -34,6 +34,7 @@ import com.eona.app.core.model.UserReport
 import com.eona.app.core.model.isEnforcement
 import com.eona.app.data.account.AccountRepository
 import com.eona.app.data.bugs.BugTripTrace
+import com.eona.app.data.live.Presence
 import com.eona.app.data.preferences.AlertPreferences
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.data.preferences.OverspeedWarning
@@ -82,7 +83,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val routingRepository = RoutingRepository()
     private val reportsRepository = ReportsRepository()
     private val speedLimitRepository = SpeedLimitRepository()
-    private val liveApi = com.eona.app.data.live.LiveApi()
     private val tripHistory = TripHistoryRepository(application)
     private val radars = MutableStateFlow<List<Radar>>(emptyList())
     private val reports = MutableStateFlow<List<UserReport>>(emptyList())
@@ -390,22 +390,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 refreshTraffic(routeVersion)
             }
         }
-        // Presence: the app says it is open, and whether a trip runs. The position goes with it
-        // only with "Présence et position", the time spent only with "Temps d'utilisation":
-        // both switches off, nothing is sent at all.
+        // Presence: the app says it is open, and whether a trip runs; a position only during a
+        // trip (Presence). Both switches off, nothing is sent at all.
         viewModelScope.launch {
             while (true) {
-                val privacy = AppPreferences.settings.value
-                AccountRepository.token?.takeIf { privacy.presence || privacy.usageTime }?.let { token ->
-                    val fix = LocationRepository.location.value.takeIf { privacy.presence }
-                    liveApi.presence(
-                        token,
-                        inTrip = ActiveTripRepository.destination.value != null,
-                        position = fix?.let { GeoPoint(it.latitude, it.longitude) },
-                        speedKmh = fix?.speedKmh?.roundToInt()?.coerceAtLeast(0),
-                        countTime = privacy.usageTime,
-                    )
-                }
+                Presence.ping()
                 delay(PRESENCE_MS)
             }
         }
@@ -1562,8 +1551,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val SAME_ROAD_M = 60.0
         /** Round distances the voice is allowed to announce (descending). */
         val ANNOUNCE_MARKERS_M = intArrayOf(1000, 700, 500, 300, 200, 150, 100)
-        // Live speed limit polling.
-        const val LIMIT_MOVE_M = 40.0
+        // Live speed limit polling, off the route: one request per 100 m driven at most (28/09).
+        const val LIMIT_MOVE_M = 100.0
         /** Farther than this from the route, its limits are not the driver's. */
         const val ROUTE_LIMIT_MAX_OFF_M = 30.0
         const val LIMIT_POLL_MS = 2_500L

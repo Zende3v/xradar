@@ -32,40 +32,28 @@ const guarded = (handler) => async (req, res) => {
 };
 
 /**
- * POST /api/live/presence  { inTrip, lat?, lon?, speedKmh?, session? }
+ * POST /api/live/presence  { inTrip, lat?, lon?, speedKmh?, session?, closing? }
  * The app is open (it says so about every 30 s) and whether a trip is running. What it sends
  * follows the driver's privacy switches: a position only with "Ma présence et ma position",
  * `session: true` only with "Temps d'utilisation". Nothing is guessed here.
+ * A position is kept only during a trip, or once when the app is left (`closing: true`): the
+ * last place it was used. Older apps send one with every ping; out of a trip it is dropped.
  */
 liveRouter.post('/presence', guarded(async (req, res) => {
   const account = presentAccount(req, res);
   if (!account) return;
   const inTrip = req.body?.inTrip === true;
-  liveStore.touch(account.id, inTrip);
+  const closing = req.body?.closing === true;
+  if (closing) liveStore.remove(account.id);
+  else liveStore.touch(account.id, inTrip);
   accountStore.recordActivity(account.id, req.body?.session === true);
   const lat = Number(req.body?.lat);
   const lon = Number(req.body?.lon);
-  if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+  if ((inTrip || closing) && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
     await positionStore.add(account.id, { lat, lon, speedKmh: Number(req.body?.speedKmh), inTrip });
   }
   res.json({ ok: true });
 }));
-
-/**
- * Apps from before presence: sharing a position still counts them as open (the position is
- * ignored, they never asked the driver), and nobody is shown around them any more.
- */
-liveRouter.post('/position', (req, res) => {
-  const account = presentAccount(req, res);
-  if (!account) return;
-  liveStore.touch(account.id, false);
-  res.json({ ok: true, visible: false });
-});
-
-liveRouter.get('/near', (req, res) => {
-  if (!presentAccount(req, res)) return;
-  res.json({ count: 0, users: [] });
-});
 
 /**
  * GET /api/live/online (admins) — who has the app open now: the account, whether a trip is

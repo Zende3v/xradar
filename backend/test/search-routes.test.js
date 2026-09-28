@@ -12,6 +12,7 @@ const dir = mkdtempSync(join(tmpdir(), 'eona-search-'));
 const usageFile = join(dir, 'search-tomtom-usage.json');
 const trafficFile = join(dir, 'tomtom-usage.json');
 Object.assign(process.env, {
+  TOMTOM_ENABLED: '1',
   SEARCH_TOMTOM_ENABLED: '1',
   SEARCH_TOMTOM_API_KEY: 'search-key-for-tests',
   SEARCH_TOMTOM_USAGE_FILE: usageFile,

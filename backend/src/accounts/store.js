@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
 import { haversine } from '../radars/geo.js';
@@ -1209,6 +1209,13 @@ class AccountStore {
     await mkdir(dir, { recursive: true });
     await writeFile(`${dir}/accounts.backup-${day}.json`, JSON.stringify([...this.byId.values()], null, 2), 'utf8');
     this.backupDay = day;
+    // The purged guests must not live on in old copies: ACCOUNTS_BACKUP_KEEP_DAYS days, like the
+    // nightly backups.
+    const oldest = new Date(now - config.accountsBackupKeepDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    for (const name of await readdir(dir).catch(() => [])) {
+      const kept = /^accounts\.backup-(\d{4}-\d{2}-\d{2})\.json$/.exec(name)?.[1];
+      if (kept && kept < oldest) await unlink(`${dir}/${name}`).catch(() => {});
+    }
   }
 
   get meta() {

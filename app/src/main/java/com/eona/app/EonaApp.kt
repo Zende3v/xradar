@@ -15,6 +15,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import com.eona.app.data.account.AccountRepository
+import com.eona.app.data.live.Presence
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.feature.onboarding.OnboardingRoute
 import com.eona.app.feature.onboarding.Terms
@@ -46,11 +47,15 @@ fun EonaApp() {
     // A blocked account sees the offers each time the app comes to the front, and as soon as it
     // gets blocked (the driving screen shows them).
     LifecycleStartEffect(Unit) {
+        Presence.shown()
         val job = scope.launch {
             AccountRepository.reload()
             OffersPrompt.offerIfRestricted()
         }
-        onStopOrDispose { job.cancel() }
+        onStopOrDispose {
+            job.cancel()
+            Presence.left()
+        }
     }
     LaunchedEffect(account?.isRestricted) {
         if (account?.isRestricted == true) OffersPrompt.offerIfRestricted()

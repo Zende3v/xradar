@@ -182,9 +182,11 @@ systemctl daemon-reload && systemctl restart eona-backend
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
 | `PUBLIC_BASE_URL` | base des URLs d'avatars (les anciennes en `ts.net` sont réécrites au chargement) | `https://api.lrda-mercuriale.uk` |
 | `ACCOUNTS_FILE` / `AVATARS_DIR` | comptes / photos | `./data/accounts.json` / `./data/avatars` |
+| `ACCOUNTS_BACKUP_KEEP_DAYS` | copies `accounts.backup-<jour>.json` (avant purge des invités) gardées | 14 j |
 | `GUEST_TRIAL_MS` | essai compte email | 7 j |
 | `GUEST_LIFETIME_MS` | durée de vie compte invité | 7 j |
-| `TOMTOM_API_KEY` | trafic TomTom sur le trajet (drop-in `tomtom.conf`, jamais versionnée) | absent = pas de trafic (503) |
+| `TOMTOM_ENABLED` | interrupteur de **tout** TomTom : trafic, `/faster`, banc, recherche (coupé le 28/09 jusqu'à l'ETA dynamique) | absent = aucun appel TomTom |
+| `TOMTOM_API_KEY` | trafic TomTom sur le trajet (drop-in `tomtom.conf`, jamais versionnée), lue seulement avec `TOMTOM_ENABLED=1` | absent = pas de trafic (503) |
 | `DEVICE_TRIALS_FILE` | fin du premier essai par téléphone | `./data/device-trials.json` |
 | `GUEST_REPORTS_PER_DAY` / `GUEST_TRIPS_PER_DAY` | limites invité par jour | 5 / 7 |
 | `REFERRAL_SUBSCRIPTION_MONTHS` | mois offerts par parrainage | 6 |
