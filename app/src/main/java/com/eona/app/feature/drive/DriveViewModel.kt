@@ -1486,7 +1486,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val heading = sample.bearingDeg?.toDouble()
 
         val ahead = radarList
-            // The way it controls, when known: a radar for the other side stays quiet (28/09).
+            // "Pas dans mon sens": quiet the way drivers said it does not control (28/09).
             .filter { radar -> radar.controls(heading) && quietForMe(radar.id, heading) }
             .map { radar -> radar to Geo.haversine(sample.latitude, sample.longitude, radar.lat, radar.lon) }
             .filter { (radar, _) ->

@@ -1,5 +1,0 @@
-# EONA : sens des radars fixes (28/09, Arthur). Lundi 04:30, après la reconstruction du dimanche.
-# Lit seulement les pages radars jamais lues ou lues il y a plus de 180 jours (1 par seconde).
-# Journal : /var/log/eona-radar-directions.log. L'heure est celle du système (Europe/Paris).
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-30 4 * * 1 eona cd /opt/eona-backend && node bin/eona-radar-directions.js >> /var/log/eona-radar-directions.log 2>&1

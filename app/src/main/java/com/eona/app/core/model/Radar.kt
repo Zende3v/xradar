@@ -12,9 +12,7 @@ data class Radar(
     val vma: Int?,
     val lat: Double,
     val lon: Double,
-    /** The way it controls, in degrees (official site, on its road); null: unknown, both ways. */
-    val course: Double? = null,
-    /** A way drivers said it does not control ("Pas dans mon sens"); null: none. */
+    /** A way drivers said it does not control ("Pas dans mon sens"); null: none, both ways. */
     val quietCourse: Double? = null,
 ) {
     val isSpeedRadar: Boolean get() = !code.uppercase().startsWith("ETFR")
@@ -25,18 +23,14 @@ data class Radar(
 
     /**
      * Whether it controls the way the driver goes ([heading], their course; null: unknown, it
-     * does). The drivers' word wins ([quietCourse]); else the official way ([course]): more than
-     * [OTHER_WAY_DEG] off it, the driver is on the other side. Unknown: both ways, as before.
+     * does): quiet within [QUIET_DEG] of the way drivers said it does not control ([quietCourse]).
      */
     fun controls(heading: Double?): Boolean {
         if (heading == null) return true
-        quietCourse?.let { return Geo.angularDiff(heading, it) > QUIET_DEG }
-        course?.let { return Geo.angularDiff(heading, it) <= OTHER_WAY_DEG }
-        return true
+        return quietCourse?.let { Geo.angularDiff(heading, it) > QUIET_DEG } ?: true
     }
 
     companion object {
         const val QUIET_DEG = 45.0
-        const val OTHER_WAY_DEG = 120.0
     }
 }

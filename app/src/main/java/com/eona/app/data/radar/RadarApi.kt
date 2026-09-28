@@ -78,8 +78,7 @@ class RadarApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 vma = if (o.isNull("vma")) null else o.optInt("vma"),
                 lat = o.optDouble("lat"),
                 lon = o.optDouble("lon"),
-                // The way it controls: absent from an older backend.
-                course = if (o.isNull("course")) null else o.optDouble("course").takeIf { it.isFinite() },
+                // "Pas dans mon sens": absent from an older backend.
                 quietCourse = if (o.isNull("quietCourse")) null else o.optDouble("quietCourse").takeIf { it.isFinite() },
             )
         }

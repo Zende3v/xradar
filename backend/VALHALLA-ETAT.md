@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **28/09/2026 21:20** (Claude : corrections 3.2 à 3.4, sens des radars à trancher). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **28/09/2026 22:39** (Codex : option 1 seule déployée, correctif iOS poussé). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -161,17 +161,26 @@ Revue des autres aspirateurs, décisions d'Arthur :
 - **3.4 Arrêter le trajet** : résumé affiché (« Trajet terminé ») et trajet enregistré, comme à l'arrivée.
   Groupe et partage : inchangés (pas de « arrivé » annoncé à tort). Mesure ETA : trajet toujours `arrived: false`.
 - **Déployé 28/09 21:17** : sauvegarde `/opt/eona-backend-src-backup-20260928-2117.tgz`, `/health` ok ; vérifié Paris-Évry : sortie 8, N 104, Sénart.
-- **3.1 Sens des radars** (Arthur : options 1 et 2, sinon deux sens) :
-  - sens officiel : texte du site radars (1 page/s, identifié EONA), villes par la BAN, route PostGIS ;
-    sens retenu seulement si la route va dans le sens du texte à 60° près. Essai 40 radars : 31 sens ;
-    sur routes à sens unique, 22 d'accord, 2 opposés vérifiés justes (radar placé près de l'autre chaussée) ;
-  - « Pas dans mon sens » sur l'alerte radar : 2 votes à moins de 45° = radar muet dans ce sens pour tous ;
-    muet tout de suite pour le votant ;
-  - app : radar muet si le cap est à plus de 120° du sens officiel ; sans sens connu, sonne dans les deux sens ;
-  - collecte complète lancée le 28/09 à 21:34 (`eona-radar-directions-first`), puis cron lundi 04:30.
+- **3.1 Sens des radars : option 1 seule** (Arthur, 28/09 22:20) :
+  - « Pas dans mon sens » sur l'alerte radar : 2 votes à moins de 45° = radar muet dans ce sens pour tous
+    (admin : 1 vote suffit) ; muet tout de suite pour le votant, tant que l'app tourne ;
+  - sans vote : le radar sonne dans les deux sens, comme avant.
+  - Option 2 (sens aspiré sur le site officiel) supprimée : faite par erreur à 21:31 (Arthur avait mal
+    compris la question). Collecte arrêtée à 22:20 ; cron, `radar-directions.json` et journal en
+    quarantaine `/root/eona-quarantaine-20260928/radar-directions/` ; code retiré.
+  - **Retrait déployé 28/09 à 22:38** par Codex, accord Arthur : `config.js` et `radars/store.js` remplacés.
+    Module, script et cron source obsolètes déplacés dans `radar-directions/code-20260928-223651/`, sous la quarantaine précédente.
+    Sauvegarde vérifiée : `/opt/eona-backend-src-backup-20260928-223651.tgz` (src, manifests, script et cron source).
+    Backend actif ; `/health` local HTTP 200, public `status: ok`. API publique : 83 radars vérifiés, tous avec `quietCourse`, aucun avec `course`.
+    Aspirateur arrêté ; cron actif et fichier de directions absents. 3 309 radars chargés après redémarrage.
+  - **iOS 1.0.0 (10)** : `f98041b` poussé sur `main`. `RadarAPI.notMyWay` vérifie le JSON optionnel avant lecture.
+    Compilation et tests Swift restent à lancer par Arthur sur Codemagic. Aucun build iOS local.
+  - **Android 1.0.1 (12)** : APK existant, produit par Claude à 22:23 ; aucun nouveau build pendant reprise.
+    Vérifications Codex : test ciblé votes réussi (1/1), différences Git sans erreur, fichiers déployés identiques par SHA-256.
+    Relecture Claude indisponible : quota mensuel atteint. Aucun nouveau chantier repris.
 
 ## Prochaine étape
 
-1. Arthur : tests Android 1.0.1 (11) et iOS 1.0.0 (9).
+1. Arthur : lancer Codemagic sur `main` (`f98041b`), puis tests téléphone iOS 1.0.0 (10) et Android 1.0.1 (12).
 2. Retest bugs graphiques (tracé saccadé, signalisation groupée, longs trajets) après fin des recalculs.
 3. Décider `routingEngine=all`, puis phase 4 (ETA dynamique, trafic : TomTom réactivé sur événement).
