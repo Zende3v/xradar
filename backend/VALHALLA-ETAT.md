@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **28/09/2026 22:39** (Codex : option 1 seule déployée, correctif iOS poussé). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **29/09/2026** (Claude : curseur flèche, point Valhalla : 136 routes admins, 0 erreur, 0 repli). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -181,6 +181,6 @@ Revue des autres aspirateurs, décisions d'Arthur :
 
 ## Prochaine étape
 
-1. Arthur : lancer Codemagic sur `main` (`f98041b`), puis tests téléphone iOS 1.0.0 (10) et Android 1.0.1 (12).
+1. Arthur : lancer Codemagic sur `main` (`e826474`), puis tests téléphone iOS 1.0.0 (11) et Android 1.0.1 (13) (curseur flèche par défaut).
 2. Retest bugs graphiques (tracé saccadé, signalisation groupée, longs trajets) après fin des recalculs.
 3. Décider `routingEngine=all`, puis phase 4 (ETA dynamique, trafic : TomTom réactivé sur événement).
