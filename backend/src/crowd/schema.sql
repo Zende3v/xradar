@@ -196,3 +196,16 @@ CREATE TABLE IF NOT EXISTS crowd.admin_action (
 );
 CREATE INDEX IF NOT EXISTS admin_action_at ON crowd.admin_action (at DESC);
 CREATE INDEX IF NOT EXISTS admin_action_target ON crowd.admin_action (target_type, target_id);
+
+-- "Pas dans mon sens" (28/09): a driver says a fixed radar does not control the way they drive
+-- ([course], their GPS course then). One vote per radar and account, the latest; kept
+-- config.radarVoteKeepDays. Enough of them, close together, make the radar quiet that way.
+CREATE TABLE IF NOT EXISTS crowd.radar_vote (
+    radar_id text NOT NULL,
+    account_id text NOT NULL,
+    course smallint NOT NULL,
+    weight smallint NOT NULL DEFAULT 1,
+    at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (radar_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS radar_vote_at ON crowd.radar_vote (at);

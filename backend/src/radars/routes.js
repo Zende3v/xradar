@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { config } from '../config.js';
+import { authAccount } from '../accounts/auth.js';
 import { alongRoute, inBbox, near } from './geo.js';
 import { radarStore } from './store.js';
+import { radarVoteStore } from './votes.js';
 
 export const radarRouter = Router();
 
@@ -59,6 +61,31 @@ radarRouter.post('/route', (req, res) => {
   const buffer = clamp(Number(req.body?.buffer) || config.radarRouteBufferM, 1, config.radarRouteMaxBufferM);
   const radars = alongRoute(radarStore.all(), coords, buffer, config.maxResults);
   res.json({ count: radars.length, bufferM: buffer, radars });
+});
+
+/**
+ * POST /api/radars/:id/not-my-way  { course }  (Bearer)
+ * "Pas dans mon sens": the driver says this fixed radar does not control the way they drive
+ * ([course], their GPS course, 0-360). One vote per radar and account, the latest; an admin's
+ * weighs config.radarVoteAdminWeight. Answers { quietCourse }: the way the radar is now quiet,
+ * or null while the votes are too few.
+ */
+radarRouter.post('/:id/not-my-way', async (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'account required' });
+  if (account.banned) return res.status(403).json({ error: 'banned' });
+  const id = String(req.params.id);
+  if (!radarStore.has(id)) return res.status(404).json({ error: 'unknown radar' });
+  const course = Number(req.body?.course);
+  if (!Number.isFinite(course) || course < 0 || course > 360) return res.status(400).json({ error: 'course 0-360 required' });
+  try {
+    const quietCourse = await radarVoteStore.vote(id, account.id, course, account.role === 'admin');
+    radarStore.setQuiet(id, quietCourse);
+    res.json({ quietCourse });
+  } catch (e) {
+    console.warn('[radar-votes] vote failed —', String(e.message || e));
+    res.status(503).json({ error: 'votes unavailable' });
+  }
 });
 
 function clamp(value, min, max) {

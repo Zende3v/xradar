@@ -26,6 +26,26 @@ export const config = {
   // How often to re-check data.gouv for a fresh dataset (ms). Default: daily.
   refreshIntervalMs: Number(process.env.REFRESH_INTERVAL_MS) || 24 * 60 * 60 * 1000,
 
+  // The way each fixed radar controls (28/09, Arthur): the official radar site's text ("MACON
+  // vers MOULINS"), read by bin/eona-radar-directions.js into radarDirectionsFile, one page a
+  // radarSiteGapMs, fetched again after radarSiteRefetchDays; towns placed by the BAN, the road
+  // read within radarRoadMaxM. Radars without a way found ring both ways, as before.
+  radarDirectionsFile: process.env.RADAR_DIRECTIONS_FILE || './data/radar-directions.json',
+  radarSiteUrl: process.env.RADAR_SITE_URL || 'https://radars.securite-routiere.gouv.fr',
+  radarSiteUserAgent: 'EONA/1.0 (+https://api.lrda-mercuriale.uk)',
+  radarSiteGapMs: 1000,
+  radarSiteRefetchDays: 180,
+  radarRoadMaxM: 40,
+  // A town farther than this from its radar is another town of the same name.
+  radarTownMaxM: 400_000,
+  // "Pas dans mon sens" (crowd.radar_vote): drivers saying a radar does not control their way.
+  // Votes weigh 1 (an admin radarVoteAdminWeight); radarVoteMinWeight within radarVoteSpreadDeg
+  // of each other make the radar quiet that way (quietCourse), for radarVoteKeepDays.
+  radarVoteMinWeight: 2,
+  radarVoteAdminWeight: 2,
+  radarVoteSpreadDeg: 45,
+  radarVoteKeepDays: 365,
+
   // Guards on /api/route, so no client can spend the day's routing quota on its own (a
   // recalculation loop, a retry that never gives up). Same trip asked again within
   // routeCacheMs, from routeCacheFromM of the same start to routeCacheToM of the same

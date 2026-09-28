@@ -24,7 +24,7 @@ accountStore.start().catch((e) => console.error('[accounts] start failed:', e.me
 // Drivers' reports and speed-limit changes live in PostGIS (schema crowd): the schema first,
 // then the stores that prune and decide on it.
 ensureCrowdSchema()
-  .then(() => Promise.all([reportStore.start(), speedLimitStore.start()]))
+  .then(() => Promise.all([reportStore.start(), speedLimitStore.start(), radarStore.loadVotes()]))
   .catch((e) => console.error('[crowd] start failed:', e.message));
 // The route log, the bench and the shadow mode (schema routing): measures only, nothing waits
 // for them. Then the shadow's purges, schema there or not (a failed purge is tried again),
