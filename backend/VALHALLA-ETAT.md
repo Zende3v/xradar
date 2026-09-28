@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **28/09/2026 22:30** (Claude : corrections 3.2 à 3.4, sens des radars à trancher). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **28/09/2026 21:20** (Claude : corrections 3.2 à 3.4, sens des radars à trancher). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -160,6 +160,7 @@ Revue des autres aspirateurs, décisions d'Arthur :
   Arrêté : position figée, cap gelé, 0 km/h. Départ seulement si les fixes s'éloignent vraiment.
 - **3.4 Arrêter le trajet** : résumé affiché (« Trajet terminé ») et trajet enregistré, comme à l'arrivée.
   Groupe et partage : inchangés (pas de « arrivé » annoncé à tort). Mesure ETA : trajet toujours `arrived: false`.
+- **Déployé 28/09 21:17** : sauvegarde `/opt/eona-backend-src-backup-20260928-2117.tgz`, `/health` ok ; vérifié Paris-Évry : sortie 8, N 104, Sénart.
 - **3.1 Sens des radars** : aucune source fiable. Données ouvertes sans sens. Site officiel : texte « X vers Y »,
   robots refusés. OSM `direction` : 1 660 caméras, sens ambigu (8 opposés sur 46 même loin de toute voie inverse).
   Déduction par chaussée à sens unique : accord OSM 250 sur 416 sous 20 m d'écart. À trancher par Arthur.
