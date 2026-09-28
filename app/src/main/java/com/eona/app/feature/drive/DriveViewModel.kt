@@ -600,9 +600,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 if (sample == null) return@collect
                 // A simulated trip is not being driven: never "correct" it.
                 if (ActiveTripRepository.start.value != null) return@collect
-                val offBy = route.points.minOfOrNull {
-                    Geo.haversine(sample.latitude, sample.longitude, it.lat, it.lon)
-                } ?: return@collect
+                // Distance to the route's line, not to its points: Valhalla leaves 100 m and more
+                // between points on a straight road, and the nearest point then said "off the
+                // route" to a car right on it — a new route every 150 m (28/09/2026).
+                val rp = path?.takeIf { it.points === route.points } ?: RoutePath(route.points)
+                val offBy = rp.match(sample.latitude, sample.longitude)?.offRouteMeters ?: return@collect
                 val now = System.currentTimeMillis()
                 // On the route: the trip has really started, and a detour may be corrected later.
                 if (offBy <= OFF_ROUTE_M) {
