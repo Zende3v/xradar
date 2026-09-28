@@ -135,7 +135,8 @@ const LAST_SECOND = 253_402_300_799;
  * @typedef {{ lat: number, lon: number }} Point
  * @typedef {{
  *   type: string, modifier: string | null, location: [number, number], exit: number | null,
- *   name: string, distanceM: number, durationS: number,
+ *   name: string, exitNumber: string | null, towardRefs: string[], toward: string[],
+ *   distanceM: number, durationS: number,
  * }} Step
  * @typedef {{
  *   distanceM: number, durationS: number, coordinates: [number, number][], steps: Step[],
@@ -575,6 +576,7 @@ function normalizeSteps(list) {
       location,
       exit: type === 'roundabout' ? exit : null,
       name: name || ref,
+      ...signpost(step),
       distance,
       duration,
     });
@@ -584,6 +586,35 @@ function normalizeSteps(list) {
     distanceM: Math.round(distance),
     durationS: Math.round(duration),
   }));
+}
+
+/** A road number as signs show it ("A 6", "N 104", "E 15", "D 2"): the start of a direction. */
+const ROAD_REF = /^[A-Z]{1,3} ?\d+[A-Za-z]?$/;
+/** Signpost names kept for a step: the banner and the voice use the first ones only. */
+const TOWARD_MAX = 3;
+
+/**
+ * What the motorway signs say at a step (additive, 28/09): the exit number (`exitNumber`, "8",
+ * "12a"), the roads (`towardRefs`, ["N 104", "A 4"]) and the places (`toward`, ["Sénart"]) the
+ * branch leads to. Valhalla writes its destinations "N 104, A 4: Sénart, Corbeil-Essonnes".
+ * Nothing when the signs say nothing: ORS never gives them.
+ */
+function signpost(step) {
+  const exits = (optional(step.exits, 'string', 'step exits') ?? '').split(';')[0].trim();
+  const destinations = (optional(step.destinations, 'string', 'step destinations') ?? '').trim();
+  const colon = destinations.indexOf(': ');
+  const listed = (text) => text.split(',').map((part) => part.trim()).filter(Boolean);
+  let refs = colon >= 0 ? listed(destinations.slice(0, colon)) : [];
+  let places = listed(colon >= 0 ? destinations.slice(colon + 2) : destinations);
+  if (colon < 0) {
+    refs = places.filter((part) => ROAD_REF.test(part));
+    places = places.filter((part) => !ROAD_REF.test(part));
+  }
+  return {
+    exitNumber: exits && exits.length <= 8 ? exits : null,
+    towardRefs: [...new Set(refs)].slice(0, TOWARD_MAX),
+    toward: [...new Set(places)].slice(0, TOWARD_MAX),
+  };
 }
 
 /** /status checked, as Valhalla gives it; what a non-verbose server leaves out is null. */

@@ -25,6 +25,9 @@ data class GuidanceInstruction(
     val distanceMeters: Int,
     /** e.g. "Tournez à droite". */
     val primaryText: String,
-    /** Road you turn onto, e.g. "Rue de la Paix" (null when unnamed). */
+    /** Road you turn onto, e.g. "Rue de la Paix", or where a motorway branch leads, e.g.
+     * "N 104 · Sénart, Corbeil-Essonnes" (null when unnamed). */
     val roadName: String?,
+    /** The motorway exit's number, shown as its sign ("Sortie 8"). */
+    val exitNumber: String? = null,
 )

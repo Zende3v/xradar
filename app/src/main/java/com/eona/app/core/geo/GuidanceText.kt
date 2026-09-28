@@ -51,7 +51,7 @@ object GuidanceText {
             }
             "merge" -> "Insérez-vous" + side(m)
             "on ramp" -> "Prenez la bretelle" + side(m)
-            "off ramp" -> "Prenez la sortie" + side(m)
+            "off ramp" -> step.exitNumber?.let { "Prenez la sortie $it" } ?: ("Prenez la sortie" + side(m))
             "fork" -> when {
                 m?.contains("left") == true -> "Restez à gauche"
                 m?.contains("right") == true -> "Restez à droite"
@@ -70,6 +70,27 @@ object GuidanceText {
             else -> turn(m)
         }
     }
+
+    /** The steps where the motorway signs matter: exits, ramps, forks and merges. */
+    private fun signposted(step: RouteStep): Boolean =
+        step.type == "off ramp" || step.type == "on ramp" || step.type == "fork" || step.type == "merge"
+
+    /**
+     * Where a motorway branch leads, for the banner: the first road and two places at most
+     * ("N 104 · Sénart, Corbeil-Essonnes"); null when the signs say nothing.
+     */
+    fun signpost(step: RouteStep): String? {
+        if (!signposted(step)) return null
+        val parts = listOfNotNull(
+            step.towardRefs.firstOrNull(),
+            step.toward.take(2).joinToString(", ").ifBlank { null },
+        )
+        return parts.joinToString(" · ").ifBlank { null }
+    }
+
+    /** Where a branch leads, for the voice: one place, else one road ("Sénart"). */
+    private fun spokenToward(step: RouteStep): String? =
+        if (signposted(step)) step.toward.firstOrNull() ?: step.towardRefs.firstOrNull() else null
 
     private fun turn(m: String?): String = when (m) {
         "left" -> "Tournez à gauche"
@@ -119,6 +140,8 @@ object GuidanceText {
     fun spokenFar(step: RouteStep, meters: Int): String {
         if (step.type == "arrive") return "Vous êtes bientôt arrivé"
         val head = "Dans ${spokenDistance(meters)}, ${lowerFirst(verb(step))}"
+        // A motorway branch: where it leads, in a word ("prenez la sortie 8 vers Sénart").
+        spokenToward(step)?.let { return "$head vers $it" }
         val road = step.name.takeIf { it.isNotBlank() && step.type != "roundabout" && step.type != "rotary" }
         return if (road != null) "$head sur $road" else head
     }
@@ -126,7 +149,8 @@ object GuidanceText {
     /** Short spoken cue at the maneuver ("Tournez à droite maintenant"). */
     fun spokenNear(step: RouteStep): String = when (step.type) {
         "arrive" -> "Vous êtes arrivé à destination"
-        "roundabout", "rotary", "roundabout turn", "merge", "on ramp", "off ramp", "fork" -> verb(step)
+        "roundabout", "rotary", "roundabout turn" -> verb(step)
+        "merge", "on ramp", "off ramp", "fork" -> verb(step) + (spokenToward(step)?.let { " vers $it" } ?: "")
         else -> {
             val v = verb(step)
             if (v == "Continuez tout droit") v else "$v maintenant"

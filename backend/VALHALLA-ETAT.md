@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **28/09/2026 20:45** (Claude : ménage déployé 20:34, TomTom coupé, présence limitée au trajet). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **28/09/2026 22:30** (Claude : corrections 3.2 à 3.4, sens des radars à trancher). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -152,8 +152,20 @@ Revue des autres aspirateurs, décisions d'Arthur :
   `ors-usage.json.bak-20260927-1938`, `bench-intensif.sh`, 4 anciennes sauvegardes `src` (3 dernières gardées).
 - Politique de confidentialité : collecte réduite, texte à réécrire en phase 5.
 
+## Corrections du 28/09 soir (Arthur)
+
+- **3.2 Guidage autoroute** : étapes Valhalla avec `exitNumber`, `towardRefs`, `toward` (additif, vides pour ORS).
+  Bannière : pastille « Sortie 8 », ligne « N 104 · Sénart, Corbeil-Essonnes ». Voix courte : « prenez la sortie 8 vers Sénart ».
+- **3.3 Curseur qui tremble à l'arrêt** : filtre d'arrêt (Android `StandstillFilter.kt`, iOS `StandstillFilter.swift`).
+  Arrêté : position figée, cap gelé, 0 km/h. Départ seulement si les fixes s'éloignent vraiment.
+- **3.4 Arrêter le trajet** : résumé affiché (« Trajet terminé ») et trajet enregistré, comme à l'arrivée.
+  Groupe et partage : inchangés (pas de « arrivé » annoncé à tort). Mesure ETA : trajet toujours `arrived: false`.
+- **3.1 Sens des radars** : aucune source fiable. Données ouvertes sans sens. Site officiel : texte « X vers Y »,
+  robots refusés. OSM `direction` : 1 660 caméras, sens ambigu (8 opposés sur 46 même loin de toute voie inverse).
+  Déduction par chaussée à sens unique : accord OSM 250 sur 416 sous 20 m d'écart. À trancher par Arthur.
+
 ## Prochaine étape
 
-1. Arthur : tests Android 1.0.1 (9) et iOS 1.0.0 (7).
+1. Arthur : tests Android 1.0.1 (10) et iOS 1.0.0 (8) ; choix pour le sens des radars (3.1).
 2. Retest bugs graphiques (tracé saccadé, signalisation groupée, longs trajets) après fin des recalculs.
 3. Décider `routingEngine=all`, puis phase 4 (ETA dynamique, trafic : TomTom réactivé sur événement).

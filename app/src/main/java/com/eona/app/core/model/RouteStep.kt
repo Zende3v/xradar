@@ -11,4 +11,10 @@ data class RouteStep(
     val name: String,
     val distanceMeters: Int,
     val exit: Int?,
+    /** The motorway exit's number ("8", "12a"), when the signs give one. */
+    val exitNumber: String? = null,
+    /** The roads the branch leads to, as the signs say them ("N 104", "A 4"). */
+    val towardRefs: List<String> = emptyList(),
+    /** The places the branch leads to ("Sénart", "Corbeil-Essonnes"). */
+    val toward: List<String> = emptyList(),
 )

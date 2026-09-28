@@ -1,6 +1,6 @@
 package com.eona.app.location
 
-import com.eona.app.core.drive.SpeedFilter
+import com.eona.app.core.drive.StandstillFilter
 import com.eona.app.core.model.GpsSignal
 import com.eona.app.core.model.LocationSample
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,13 +22,15 @@ object LocationRepository {
     private val _signal = MutableStateFlow(GpsSignal.Searching)
     val signal: StateFlow<GpsSignal> = _signal.asStateFlow()
 
-    /** The raw speed spikes at a stop and jumps while driving: it is published filtered. */
-    private val speedFilter = SpeedFilter()
+    /**
+     * The raw speed spikes at a stop and jumps while driving, the position drifts and turns at a
+     * stop: it is published filtered, the car held still where it stopped.
+     */
+    private val filter = StandstillFilter()
 
     @Synchronized
     fun update(sample: LocationSample) {
-        val speed = speedFilter.update(sample.speedMps?.toDouble(), sample.speedAccuracyMps?.toDouble(), sample.timeMs)
-        _location.value = sample.copy(speedMps = speed.toFloat())
+        _location.value = filter.update(sample)
         _signal.value = when {
             sample.accuracyM == null || sample.accuracyM <= GOOD_ACCURACY_M -> GpsSignal.Good
             else -> GpsSignal.Weak
@@ -41,7 +43,7 @@ object LocationRepository {
 
     @Synchronized
     fun reset() {
-        speedFilter.reset()
+        filter.reset()
         _location.value = null
         _signal.value = GpsSignal.Searching
     }

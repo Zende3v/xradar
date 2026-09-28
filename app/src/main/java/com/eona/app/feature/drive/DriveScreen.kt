@@ -110,7 +110,7 @@ fun DriveRoute(
         state = state,
         onOpenSearch = onOpenSearch,
         onOpenSettings = onOpenSettings,
-        onStopNavigation = { ActiveTripRepository.clear() },
+        onStopNavigation = viewModel::stopNavigation,
         onReport = viewModel::report,
         isAdmin = account?.role == com.eona.app.core.model.Role.Admin,
         restricted = account?.isRestricted == true,
@@ -940,7 +940,11 @@ private fun ArrivalCard(arrival: TripArrival, onDismiss: () -> Unit, modifier: M
                     EonaIcon(EonaIcons.Check, contentDescription = null, tint = colors.success, size = 26.dp)
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    EonaText("Vous êtes arrivé", style = EonaTheme.typography.headline, color = colors.textPrimary)
+                    EonaText(
+                        if (arrival.arrived) "Vous êtes arrivé" else "Trajet terminé",
+                        style = EonaTheme.typography.headline,
+                        color = colors.textPrimary,
+                    )
                     EonaText(
                         arrival.toLabel,
                         style = EonaTheme.typography.footnote,

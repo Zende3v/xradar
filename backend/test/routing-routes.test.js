@@ -23,7 +23,8 @@ const USERS = {
   other: { id: 'driver-2', role: 'client' },
 };
 const ROUTE_KEYS = ['coordinates', 'distanceM', 'durationS', 'engine', 'mapVersion', 'steps'];
-const STEP_KEYS = ['distanceM', 'durationS', 'exit', 'location', 'modifier', 'name', 'type'];
+// Phase 1 keys, plus the motorway signs (exitNumber, towardRefs, toward), additive since 28/09.
+const STEP_KEYS = ['distanceM', 'durationS', 'exit', 'exitNumber', 'location', 'modifier', 'name', 'toward', 'towardRefs', 'type'];
 
 const servers = [];
 after(() => Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve)))));

@@ -57,11 +57,28 @@ fun GuidanceBanner(instruction: GuidanceInstruction, modifier: Modifier = Modifi
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                EonaText(
-                    GuidanceText.distanceLabel(instruction.distanceMeters),
-                    style = EonaTheme.typography.titleLarge,
-                    color = colors.textPrimary,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                ) {
+                    EonaText(
+                        GuidanceText.distanceLabel(instruction.distanceMeters),
+                        style = EonaTheme.typography.titleLarge,
+                        color = colors.textPrimary,
+                    )
+                    // The exit's number, as on the motorway sign.
+                    instruction.exitNumber?.let { number ->
+                        EonaText(
+                            "Sortie $number",
+                            style = EonaTheme.typography.footnote,
+                            color = colors.accent,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .background(colors.accent.copy(alpha = 0.16f), EonaTheme.shapes.xs)
+                                .padding(horizontal = spacing.sm, vertical = 2.dp),
+                        )
+                    }
+                }
                 EonaText(
                     instruction.roadName ?: instruction.primaryText,
                     style = EonaTheme.typography.subhead,

@@ -33,6 +33,8 @@ data class TripArrival(
     val distanceMeters: Int,
     val durationSeconds: Int,
     val alertsCount: Int,
+    /** False when the driver stopped the trip on the way: the same card, "Trajet terminé". */
+    val arrived: Boolean = true,
     val id: Long = System.nanoTime(),
 )
 

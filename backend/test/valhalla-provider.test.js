@@ -69,7 +69,7 @@ function encodeValue(value) {
 }
 
 /** One step as Valhalla 3.9 writes it in OSRM format. */
-function osrmStep(type, location, { modifier, exit, name = '', ref, distance, duration }) {
+function osrmStep(type, location, { modifier, exit, name = '', ref, exits, destinations, distance, duration }) {
   const maneuver = { bearing_after: 90, bearing_before: 0, location: [...location], type };
   if (modifier !== undefined) maneuver.modifier = modifier;
   if (exit !== undefined) maneuver.exit = exit;
@@ -85,6 +85,8 @@ function osrmStep(type, location, { modifier, exit, name = '', ref, distance, du
     geometry: encodePolyline6([location, location]),
   };
   if (ref !== undefined) step.ref = ref;
+  if (exits !== undefined) step.exits = exits;
+  if (destinations !== undefined) step.destinations = destinations;
   return step;
 }
 
@@ -93,8 +95,11 @@ const OSRM_STEPS = [
   osrmStep('turn', SHAPE[1], { modifier: 'right', ref: 'D 906', distance: 820.6, duration: 95.2 }),
   osrmStep('rotary', SHAPE[2], { modifier: 'slight right', exit: 2, name: 'Avenue de Friedland', distance: 150.2, duration: 20.4 }),
   osrmStep('exit rotary', SHAPE[3], { modifier: 'right', name: 'Avenue de Friedland', distance: 49.9, duration: 5.3 }),
-  osrmStep('off ramp', SHAPE[3], { modifier: 'slight right', exit: 4, ref: 'A 13; N 13', distance: 1000.4, duration: 60.4 }),
-  osrmStep('fork', SHAPE[4], { modifier: 'slight left', name: 'Boulevard Périphérique', ref: 'BP', distance: 700, duration: 50 }),
+  osrmStep('off ramp', SHAPE[3], {
+    modifier: 'slight right', exit: 4, ref: 'A 13; N 13', exits: '8;9', destinations: 'N 104, A 4, A 5, N 104: Sénart, Corbeil-Essonnes, Marne-la-Vallée, Lisses',
+    distance: 1000.4, duration: 60.4,
+  }),
+  osrmStep('fork', SHAPE[4], { modifier: 'slight left', name: 'Boulevard Périphérique', ref: 'BP', destinations: 'A 6, Évry, Lyon', distance: 700, duration: 50 }),
   osrmStep('notification', SHAPE[4], { modifier: 'straight', name: 'Bac du Verdon', distance: 10, duration: 600 }),
   osrmStep('use lane', SHAPE[5], { modifier: 'straight', name: 'Avenue Foch', distance: 80, duration: 9 }),
   osrmStep('continue', SHAPE[5], { modifier: 'uturn', name: 'Avenue Foch', distance: 120.6, duration: 30.4 }),
@@ -104,17 +109,19 @@ const OSRM_STEPS = [
 
 /** The same steps as the app reads them (the fields and vocabulary of ORS's normalized steps). */
 const APP_STEPS = [
-  { type: 'depart', modifier: null, location: SHAPE[0], exit: null, name: 'Rue de Rivoli', distanceM: 312, durationS: 42 },
-  { type: 'turn', modifier: 'right', location: SHAPE[1], exit: null, name: 'D 906', distanceM: 821, durationS: 95 },
+  { type: 'depart', modifier: null, location: SHAPE[0], exit: null, name: 'Rue de Rivoli', exitNumber: null, towardRefs: [], toward: [], distanceM: 312, durationS: 42 },
+  { type: 'turn', modifier: 'right', location: SHAPE[1], exit: null, name: 'D 906', exitNumber: null, towardRefs: [], toward: [], distanceM: 821, durationS: 95 },
   // The named roundabout, its exit step folded in (150.2 + 49.9 m, 20.4 + 5.3 s).
-  { type: 'roundabout', modifier: 'slight right', location: SHAPE[2], exit: 2, name: 'Avenue de Friedland', distanceM: 200, durationS: 26 },
-  { type: 'off ramp', modifier: 'slight right', location: SHAPE[3], exit: null, name: 'A 13; N 13', distanceM: 1000, durationS: 60 },
-  { type: 'fork', modifier: 'slight left', location: SHAPE[4], exit: null, name: 'Boulevard Périphérique', distanceM: 700, durationS: 50 },
-  { type: 'notification', modifier: 'straight', location: SHAPE[4], exit: null, name: 'Bac du Verdon', distanceM: 10, durationS: 600 },
-  { type: 'continue', modifier: 'straight', location: SHAPE[5], exit: null, name: 'Avenue Foch', distanceM: 80, durationS: 9 },
-  { type: 'continue', modifier: 'uturn', location: SHAPE[5], exit: null, name: 'Avenue Foch', distanceM: 121, durationS: 30 },
-  { type: 'end of road', modifier: null, location: SHAPE[5], exit: null, name: 'Place Charles de Gaulle', distanceM: 60, durationS: 12 },
-  { type: 'arrive', modifier: 'right', location: SHAPE[6], exit: null, name: 'Place Charles de Gaulle', distanceM: 0, durationS: 0 },
+  { type: 'roundabout', modifier: 'slight right', location: SHAPE[2], exit: 2, name: 'Avenue de Friedland', exitNumber: null, towardRefs: [], toward: [], distanceM: 200, durationS: 26 },
+  { type: 'off ramp', modifier: 'slight right', location: SHAPE[3], exit: null, name: 'A 13; N 13',
+    exitNumber: '8', towardRefs: ['N 104', 'A 4', 'A 5'], toward: ['Sénart', 'Corbeil-Essonnes', 'Marne-la-Vallée'], distanceM: 1000, durationS: 60 },
+  { type: 'fork', modifier: 'slight left', location: SHAPE[4], exit: null, name: 'Boulevard Périphérique',
+    exitNumber: null, towardRefs: ['A 6'], toward: ['Évry', 'Lyon'], distanceM: 700, durationS: 50 },
+  { type: 'notification', modifier: 'straight', location: SHAPE[4], exit: null, name: 'Bac du Verdon', exitNumber: null, towardRefs: [], toward: [], distanceM: 10, durationS: 600 },
+  { type: 'continue', modifier: 'straight', location: SHAPE[5], exit: null, name: 'Avenue Foch', exitNumber: null, towardRefs: [], toward: [], distanceM: 80, durationS: 9 },
+  { type: 'continue', modifier: 'uturn', location: SHAPE[5], exit: null, name: 'Avenue Foch', exitNumber: null, towardRefs: [], toward: [], distanceM: 121, durationS: 30 },
+  { type: 'end of road', modifier: null, location: SHAPE[5], exit: null, name: 'Place Charles de Gaulle', exitNumber: null, towardRefs: [], toward: [], distanceM: 60, durationS: 12 },
+  { type: 'arrive', modifier: 'right', location: SHAPE[6], exit: null, name: 'Place Charles de Gaulle', exitNumber: null, towardRefs: [], toward: [], distanceM: 0, durationS: 0 },
 ];
 
 function osrmRoute({ shape = SHAPE, steps = OSRM_STEPS, distance = 3303.7, duration = 950.2 } = {}) {
@@ -392,7 +399,11 @@ describe('routes read back', () => {
     // normalizeOrsFeature (ors.js): the same keys, in the same order.
     assert.deepEqual(Object.keys(route), ['distanceM', 'durationS', 'coordinates', 'steps', 'engine', 'mapVersion']);
     for (const step of route.steps) {
-      assert.deepEqual(Object.keys(step), ['type', 'modifier', 'location', 'exit', 'name', 'distanceM', 'durationS']);
+      assert.deepEqual(Object.keys(step), [
+        'type', 'modifier', 'location', 'exit', 'name', 'exitNumber', 'towardRefs', 'toward', 'distanceM', 'durationS',
+      ]);
+      assert.ok(step.exitNumber === null || typeof step.exitNumber === 'string');
+      assert.ok([step.towardRefs, step.toward].every((list) => list.every((part) => typeof part === 'string')));
       assert.equal(typeof step.type, 'string');
       assert.ok(step.modifier === null || typeof step.modifier === 'string');
       assert.ok(step.location.length === 2 && step.location.every(Number.isFinite));

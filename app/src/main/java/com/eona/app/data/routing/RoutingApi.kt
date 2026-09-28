@@ -111,6 +111,9 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         val JSON = "application/json; charset=utf-8".toMediaType()
     }
 
+    private fun strings(arr: org.json.JSONArray?): List<String> =
+        if (arr == null) emptyList() else (0 until arr.length()).mapNotNull { arr.optString(it).trim().ifBlank { null } }
+
     /** Turn-by-turn steps; empty if the backend hasn't been redeployed with steps=true. */
     private fun parseSteps(obj: JSONObject): List<RouteStep> {
         val arr = obj.optJSONArray("steps") ?: return emptyList()
@@ -125,6 +128,10 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 name = s.optString("name", ""),
                 distanceMeters = s.optInt("distanceM"),
                 exit = if (s.isNull("exit")) null else s.optInt("exit"),
+                // The motorway signs: absent from ORS and from an older backend.
+                exitNumber = if (s.isNull("exitNumber")) null else s.optString("exitNumber").ifBlank { null },
+                towardRefs = strings(s.optJSONArray("towardRefs")),
+                toward = strings(s.optJSONArray("toward")),
             )
         }
     }

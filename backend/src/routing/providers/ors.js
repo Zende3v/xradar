@@ -273,6 +273,10 @@ function normalizeOrsSteps(segments, coordinates) {
         location: s.maneuver?.location ?? at ?? null, // [lon, lat]
         exit: s.exit_number ?? null,
         name: s.name && s.name !== '-' ? s.name : '',
+        // The motorway signs (exit number, where the branch leads): Valhalla only.
+        exitNumber: null,
+        towardRefs: [],
+        toward: [],
         distanceM: Math.round(s.distance ?? 0),
         durationS: Math.round(s.duration ?? 0),
       });

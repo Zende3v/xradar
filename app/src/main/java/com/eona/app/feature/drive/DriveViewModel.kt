@@ -139,6 +139,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** Radars + reports + radar-car zones, pre-combined so the main combine stays ≤5 flows. */
     private val roadObjects = combine(radars, reports, zones) { r, rep, z -> Triple(r, rep, z) }
 
+    /** The trip ends because the driver stopped it, not by the arrival or a refusal. */
+    private var stoppedByDriver = false
     private var lastFetchLat = Double.NaN
     private var lastFetchLon = Double.NaN
     /** The last fix above DRIVE_MIN_SPEED_MS: standing still longer, reports refresh less often. */
@@ -749,7 +751,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             maneuver = GuidanceText.maneuverOf(target),
             distanceMeters = meters,
             primaryText = GuidanceText.verb(target),
-            roadName = target.name.ifBlank { null },
+            roadName = GuidanceText.signpost(target) ?: target.name.ifBlank { null },
+            exitNumber = target.exitNumber?.takeIf { target.type == "off ramp" },
         )
 
         if (!AppPreferences.alerts.value.voice) return
@@ -872,11 +875,14 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val finished = trip ?: return
         trip = null
         BugTripTrace.ended()
-        // Arrived, not stopped on the way: the HUD says so before going back to simply driving.
+        // Arrived, or stopped by the driver once under way: the HUD shows the trip's summary
+        // before going back to simply driving (a stop counts as a finished trip, 28/09).
         val arrivedAtDestination = arrived
-        if (arrived) {
+        val stopped = stoppedByDriver
+        stoppedByDriver = false
+        if (arrived || (stopped && _tripUnderway.value)) {
             arrived = false
-            showArrival(finished)
+            showArrival(finished, arrivedAtDestination)
         }
         _tripUnderway.value = false
         // "Statistiques de conduite" off: the trip only served the guidance (its arrival).
@@ -898,13 +904,20 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
      * starts another trip. It no longer goes on its own: parking, the screen off or another app in
      * front, a card gone after 15 s was never seen.
      */
-    private fun showArrival(finished: TripRecorder) {
+    private fun showArrival(finished: TripRecorder, arrivedAtDestination: Boolean) {
         arrival.value = TripArrival(
             toLabel = finished.toLabel,
             distanceMeters = finished.distanceMeters.roundToInt(),
             durationSeconds = ((System.currentTimeMillis() - finished.startedAt) / 1000).toInt(),
             alertsCount = finished.alertsMet,
+            arrived = arrivedAtDestination,
         )
+    }
+
+    /** The driver stops the trip ("Arrêter"): the summary shows and the trip is saved, as at the arrival. */
+    fun stopNavigation() {
+        stoppedByDriver = true
+        ActiveTripRepository.clear()
     }
 
     /** The driver closed the arrival card. */
