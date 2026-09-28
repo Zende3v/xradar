@@ -662,3 +662,14 @@ Péages : violation non mesurable par le banc (pas d'attribut péage dans `signs
 **D4.4 fait (27/09, 23:55)** : apps Android 1.0.1 (6) et iOS 1.0.0 (4) envoient `heading` à partir de 1,5 m/s ; backend : Valhalla `heading` ±45° + `radius` 50 m au départ (sans rayon, le cap est ignoré : seule la route la plus proche est candidate), ORS `bearings`. Vérifié : Grande-Armée cap 116° et Annemasse cap 346° sans demi-tour ; cap opposé garde le demi-tour (voiture dans le mauvais sens). Départ à l'arrêt : sans cap, demi-tour possible (sens inconnu).
 
 **28/09** : trajets réels des admins prévus (Arthur).
+
+**28/09, trajets admins** : Valhalla 134 routes, 0 erreur, 0 repli. Défaut app : recalcul tous les 150 m (hors route mesuré au sommet le plus proche, pas au segment). Corrigé Android 1.0.1 (7), iOS 1.0.0 (5).
+
+## Ménage du 28/09 (Arthur)
+
+- **TomTom coupé partout** jusqu'à l'ETA dynamique (phase 4) : interrupteur `TOMTOM_ENABLED`, absent = aucun appel. Banc arrêté (cron en quarantaine).
+- **ORS gardé encore un peu** en secours et en ombre, même si Valhalla semble déjà une base correcte (Arthur).
+- **Présence** : position seulement en trajet, plus une à la fermeture de l'app. Aucun ping hors trajet en arrière-plan.
+- **Limite de vitesse hors route** : requête tous les 100 m.
+- **Signalements** : rechargés toutes les 30 s, toutes les 90 s après 2 min d'arrêt.
+- **Batterie** (GPS en arrière-plan hors trajet) : pas un sujet pour l'instant (Arthur).

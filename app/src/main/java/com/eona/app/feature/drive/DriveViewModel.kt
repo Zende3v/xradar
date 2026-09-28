@@ -141,6 +141,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
     private var lastFetchLat = Double.NaN
     private var lastFetchLon = Double.NaN
+    /** The last fix above DRIVE_MIN_SPEED_MS: standing still longer, reports refresh less often. */
+    @Volatile private var lastMovingAt = System.currentTimeMillis()
     // Radars: the route they were loaded along (null = the ring around the driver),
     // whether that worked, and where the ring was last centred.
     private var radarsRoute: Route? = null
@@ -309,6 +311,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             LocationRepository.location.collect { sample ->
                 if (sample == null) return@collect
+                if ((sample.speedMps ?: 0f) > DRIVE_MIN_SPEED_MS) lastMovingAt = System.currentTimeMillis()
                 // A simulated trip is driven from its first fix: there is no route to join.
                 if (trip != null && ActiveTripRepository.start.value != null) markUnderway()
                 // Whoever follows the trip hears from the driver every few seconds.
@@ -368,11 +371,18 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        // Reports are time-sensitive: refresh them on a short interval too.
+        // Reports are time-sensitive: refresh them on a short interval too, a longer one once the
+        // car has stood still REPORT_STOPPED_MS. Moving again, the short one is back at once.
         viewModelScope.launch {
+            var lastRefreshAt = 0L
             while (true) {
-                LocationRepository.location.value?.let { fix -> refreshReports(fix.latitude, fix.longitude) }
-                delay(REPORT_REFRESH_MS)
+                val now = System.currentTimeMillis()
+                val every = if (now - lastMovingAt > REPORT_STOPPED_MS) REPORT_REFRESH_STOPPED_MS else REPORT_REFRESH_MS
+                if (now - lastRefreshAt >= every) {
+                    lastRefreshAt = now
+                    LocationRepository.location.value?.let { fix -> refreshReports(fix.latitude, fix.longitude) }
+                }
+                delay(REPORT_TICK_MS)
             }
         }
         // "Éviter les bouchons" turned on during a trip: the traffic already known is looked at now.
@@ -1479,7 +1489,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val RADAR_RING_M = 22_000
         const val RADAR_RING_REFRESH_M = 5_000.0
         const val RADAR_RETRY_MS = 20_000L
-        const val REPORT_REFRESH_MS = 25_000L
+        // Reports refresh every 30 s, every 90 s after 2 min standing still (28/09).
+        const val REPORT_REFRESH_MS = 30_000L
+        const val REPORT_REFRESH_STOPPED_MS = 90_000L
+        const val REPORT_STOPPED_MS = 120_000L
+        const val REPORT_TICK_MS = 5_000L
         /** The app tells the backend it is open this often (the backend forgets it after 90 s). */
         const val PRESENCE_MS = 30_000L
         /** The route's traffic is asked for again this often during a trip. */

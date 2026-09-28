@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **28/09/2026 20:30** (Claude : ménage aspirateurs, TomTom coupé, présence limitée au trajet). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **28/09/2026 20:45** (Claude : ménage déployé 20:34, TomTom coupé, présence limitée au trajet). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -137,19 +137,23 @@ beaucoup la durée (14 min annoncées contre 29 min pour TomTom). Toulouse (Capi
 Cause : recalcul tous les 150 m (hors route mesuré au sommet, pas au segment). Corrigé Android (7), iOS (5).
 Revue des autres aspirateurs, décisions d'Arthur :
 - **TomTom coupé partout** jusqu'à l'ETA dynamique : interrupteur `TOMTOM_ENABLED` (absent = aucun appel).
-  Trafic `/api/traffic/route` et `/faster` : 503, apps gèrent déjà. Recherche : Photon + BAN seuls. Banc : cron à retirer au déploiement.
+  Trafic `/api/traffic/route` et `/faster` : 503, apps gèrent déjà. Recherche : Photon + BAN seuls. Banc : cron retiré.
 - **Présence** : position seulement en trajet, plus une à la fermeture de l'app (`closing`). Hors trajet en
   arrière-plan : aucun ping. Serveur jette les positions hors trajet des anciennes apps.
 - **Limite de vitesse hors route** : requête tous les 100 m au lieu de 40 m.
 - **Code mort supprimé** : Android `data/geocoding`, `SignApi.near` ; iOS `SignAPI.near` ;
   backend `/api/live/position` et `/api/live/near`.
 - **Copies `accounts.backup-*`** : gardées 14 jours (jamais purgées avant).
-- Gardé : `avoid=traffic` (contrat `/api/route`), ombre ORS (jusqu'à décision `all`), `signs_prev` (retour arrière).
-- Restent à trancher : rafraîchissement signalements 25 s même à l'arrêt ; GPS haute précision en arrière-plan hors trajet.
+- **Signalements** : rechargés toutes les 30 s, toutes les 90 s après 2 min d'arrêt (Android 9, iOS 7).
+- Gardé : `avoid=traffic` (contrat `/api/route`), ORS en secours et en ombre encore un peu (Arthur), `signs_prev` (retour arrière).
+- Batterie (GPS en arrière-plan hors trajet) : pas un sujet pour l'instant (Arthur).
+- **Déployé 28/09 20:34** (accord Arthur) : sauvegarde `/opt/eona-backend-src-backup-20260928-2034.tgz`, `/health` ok, trafic `null`.
+  Quarantaine `/root/eona-quarantaine-20260928/` : cron `eona-bench`, `liste-des-passages-a-niveau.geojson`, `signs-cache/`,
+  `ors-usage.json.bak-20260927-1938`, `bench-intensif.sh`, 4 anciennes sauvegardes `src` (3 dernières gardées).
 - Politique de confidentialité : collecte réduite, texte à réécrire en phase 5.
 
 ## Prochaine étape
 
-1. Arthur : déploiement backend du ménage (accord requis), puis tests Android 1.0.1 (8) et iOS 1.0.0 (6).
+1. Arthur : tests Android 1.0.1 (9) et iOS 1.0.0 (7).
 2. Retest bugs graphiques (tracé saccadé, signalisation groupée, longs trajets) après fin des recalculs.
 3. Décider `routingEngine=all`, puis phase 4 (ETA dynamique, trafic : TomTom réactivé sur événement).
