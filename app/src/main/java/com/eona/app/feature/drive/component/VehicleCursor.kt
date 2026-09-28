@@ -55,6 +55,13 @@ fun VehicleGlyph(type: VehicleType, color: Color, modifier: Modifier = Modifier)
 private fun drawVehicle(canvas: Canvas, type: VehicleType, size: Float, bodyColor: Int, rimmed: Boolean) {
     val tones = Tones(bodyColor)
     val layers = when (type) {
+        VehicleType.Arrow -> listOf(Layer(Path().apply {
+            moveTo(size * 0.5f, size * 0.175f)
+            lineTo(size * 0.75f, size * 0.775f)
+            lineTo(size * 0.5f, size * 0.625f)
+            lineTo(size * 0.25f, size * 0.775f)
+            close()
+        }, tones.body, corner = 0.018f))
         VehicleType.Car -> car(size, tones, taxi = false)
         VehicleType.Taxi -> car(size, tones, taxi = true)
         VehicleType.Motorcycle -> motorcycle(size, tones)

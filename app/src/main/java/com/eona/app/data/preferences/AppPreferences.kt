@@ -88,16 +88,17 @@ enum class AccentColor(val hex: String, val label: String) {
 /**
  * "Véhicule", in Mon compte: the drawing of the driver's own position on the map, nothing else
  * (no routing, speed, statistics or rights). Kept on the phone only, stored as [wire] ("car",
- * "motorcycle", "taxi", "truck", as on iOS); anything else reads as a car.
+ * "motorcycle", "taxi", "truck", as on iOS); anything else reads as an arrow.
  */
 enum class VehicleType(val wire: String, val label: String) {
+    Arrow("arrow", "Flèche"),
     Car("car", "Voiture"),
     Motorcycle("motorcycle", "Moto"),
     Taxi("taxi", "Taxi"),
     Truck("truck", "Camion");
 
     companion object {
-        fun fromWire(wire: String?): VehicleType = entries.firstOrNull { it.wire == wire } ?: Car
+        fun fromWire(wire: String?): VehicleType = entries.firstOrNull { it.wire == wire } ?: Arrow
     }
 }
 
@@ -107,7 +108,7 @@ data class AppSettings(
     /** "Couleur de l'app". */
     val accent: AccentColor = AccentColor.Cyan,
     /** "Véhicule": the position cursor's drawing. */
-    val vehicleType: VehicleType = VehicleType.Car,
+    val vehicleType: VehicleType = VehicleType.Arrow,
     /** Ask the router to keep the trip off toll roads. */
     val avoidTolls: Boolean = false,
     /** Ask the router to keep the trip off motorways. */
