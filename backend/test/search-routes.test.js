@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { after, describe, it } from 'node:test';
 
-// The search over Photon and the Base Adresse Nationale (TomTom POI Search left on 29/09).
+// The search over the Base Adresse Nationale and Photon, which stands in for EONA's own index while
+// it cannot answer — here, no database (local-search.test.js tests the index's side).
 Object.assign(process.env, {
   PHOTON_URL: 'https://photon.test',
   BAN_URL: 'https://ban.test',
@@ -119,7 +120,8 @@ describe('search', () => {
   it('keeps what Photon and the BAN answered, never a failure', async () => {
     const logs = [];
     const warn = console.warn;
-    console.warn = (...args) => logs.push(args.join(' '));
+    // The index missing (no database here) is logged each time; only the sources' failures count.
+    console.warn = (...args) => { const line = args.join(' '); if (!line.startsWith('[search] index')) logs.push(line); };
     try {
       failures.photon = 1;
       const before = { ...calls };
@@ -127,7 +129,7 @@ describe('search', () => {
       const first = await searchPlaces('boulangerie paul orly', VILLEJUIF);
       assert.deepEqual(names(first.results), []);
       assert.equal(first.cached, false);
-      assert.deepEqual(logs, ['[search] photon — HTTP 500']);
+      assert.deepEqual(logs, ['[search] places — HTTP 500']);
 
       // Photon is asked again; the BAN answered: kept.
       const second = await searchPlaces('boulangerie paul orly', VILLEJUIF);

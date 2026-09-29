@@ -10,6 +10,7 @@ import { routing } from './routing/engine.js';
 import { ensureRoutingSchema } from './routing/schema.js';
 import { shadowStore } from './routing/shadow.js';
 import { speedLimitStore } from './speedlimits/store.js';
+import { refreshLocalMeta } from './search/local.js';
 import { datagouvStore } from './traffic/datagouv.js';
 
 // Opening hours are read on the French clock, whatever the host's timezone.
@@ -21,6 +22,10 @@ radarStore.start();
 if (config.datagouvEnabled) datagouvStore.start();
 // Official fuel prices (refreshed every 10 min) — they only enrich the fuel search.
 fuelStore.start();
+// EONA's own place index: its build date and size for /health, read now and every 10 min (a
+// weekly rebuild swaps it in while the service runs).
+refreshLocalMeta();
+setInterval(() => refreshLocalMeta(), 10 * 60_000).unref();
 // Load persisted accounts.
 settingsStore.load().catch((e) => console.error('[settings] load failed:', e.message));
 accountStore.start().catch((e) => console.error('[accounts] start failed:', e.message));

@@ -10,5 +10,11 @@ bash "$HERE/signalisation/rebuild.sh"
 SIGNS=$?
 bash "$HERE/valhalla/build.sh"
 ROUTING=$?
-echo "[geodata] signalisation=$SIGNS valhalla=$ROUTING"
-[[ $SIGNS == 0 && $ROUTING == 0 ]]
+# Recherche : même extrait, déjà vérifié. Échec = index publié gardé.
+SEARCH=1
+if [[ $SIGNS == 0 ]]; then
+  bash "$HERE/search/rebuild.sh"
+  SEARCH=$?
+fi
+echo "[geodata] signalisation=$SIGNS valhalla=$ROUTING recherche=$SEARCH"
+[[ $SIGNS == 0 && $ROUTING == 0 && $SEARCH == 0 ]]

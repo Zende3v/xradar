@@ -284,6 +284,13 @@ export const config = {
   // Same name, this close: one place with several entrances or buildings.
   searchSameNameM: 400,
   searchPerMinute: 40,
+  // EONA's own place index (search/build.sql, src/search/local.js): the places within this of the
+  // driver, the notable ones all over France, at most this long per search.
+  searchLocalRadiusM: 60_000,
+  searchLocalLimit: 40,
+  searchNotableLimit: 15,
+  searchLocalMaxWords: 6,
+  searchLocalTimeoutMs: 2500,
   // Identifies us to the open-data servers we download from.
   placeUserAgent: process.env.PLACE_USER_AGENT || 'EONA/1.0 (+https://api.lrda-mercuriale.uk)',
 

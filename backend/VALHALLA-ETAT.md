@@ -223,10 +223,14 @@ Revue des autres aspirateurs, décisions d'Arthur :
 - `/faster` : temps = temps moteur + retards live (HERE + conducteurs), plus de chronométrage TomTom.
 - **TomTom retiré** : trafic, `/faster`, recherche POI, banc (historique gardé, lecture seule).
 - Apps : source « here », vitesses partagées, `etaS` envoyé à `/faster`, « À propos ». Android 1.0.1 (16), iOS 1.0.0 (15).
-- **Recherche** : TomTom retiré, Photon + BAN seuls ; solution plus fiable à proposer à Arthur.
+- **Recherche : moteur EONA** (30/09, option A d'Arthur ; Google écarté : ses conditions EEE interdisent d'afficher
+  les lieux Places près d'une carte non Google). Index OSM dans PostGIS (schéma `search`, 2,4 M lieux, rebuild hebdo
+  dans la chaîne geodata) + BAN ; Photon en secours seulement. 30 à 100 ms. README §5 bis.
+- Déployé 30/09 nuit : HERE (TomTom en quarantaine `/root/eona-quarantaine-20260930-here/`), doublons HERE
+  corrigés, recherche EONA. Android 1.0.1 (17), iOS 1.0.0 (16) : crédit OSM pour la recherche.
 
 ## Prochaine étape
 
-1. Arthur : accord pour déployer (HERE, suppression TomTom côté VPS : drop-ins et compteurs en quarantaine).
-2. Arthur : moyen de paiement HERE (Base Plan), pour passer le gratuit quand il faudra.
-3. Recherche : choisir la solution (proposée en réponse).
+1. Arthur : tests téléphone (trafic HERE, ETA, recherche).
+2. Arthur : moyen de paiement HERE (Base Plan), pour passer le gratuit quand il faudra ; régénérer la clé HERE.
+3. Phase 5 : CGU et politique de confidentialité (HERE, vitesses EONA, data.gouv, recherche EONA).

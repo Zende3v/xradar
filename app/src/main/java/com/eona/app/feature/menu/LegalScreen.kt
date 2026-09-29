@@ -73,7 +73,7 @@ fun LegalRoute(onBack: () -> Unit) {
                 RowDivider()
                 Source("OpenMapTiles", "Schéma des tuiles vectorielles", "https://openmaptiles.org/")
                 RowDivider()
-                Source("© contributeurs OpenStreetMap", "Carte, services autour, horaires, signalisation et limitations (ODbL)", "https://www.openstreetmap.org/copyright")
+                Source("© contributeurs OpenStreetMap", "Carte, recherche de lieux, services autour, horaires, signalisation et limitations (ODbL)", "https://www.openstreetmap.org/copyright")
             }
 
             EonaListGroup(title = "Autres") {

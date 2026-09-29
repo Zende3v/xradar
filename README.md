@@ -28,6 +28,7 @@ App Android ──HTTPS──▶ Cloudflare Tunnel ──▶ backend Node :8090 
    │                                              │
    ├─ tuiles carte : Stadia Maps (direct)          ├─ PostgreSQL/PostGIS « eona »
    └─ adresses : api-adresse.data.gouv.fr          │    ├─ schéma signs  : routes + panneaux + services autour (rebuild hebdo depuis OSM)
+                                                   │    ├─ schéma search : lieux nommés OSM de la recherche (rebuild hebdo)
                                                    │    ├─ schéma crowd  : signalements + corrections de limite
                                                    │    └─ schéma routing : journal de routage + banc (mesures phase 1 Valhalla)
                                                    ├─ data/accounts.json : comptes, stats, parrainage
@@ -56,15 +57,16 @@ backend/
 │  ├─ traffic/            HERE (here.js), compteur HERE (budget.js), data.gouv (datagouv.js), vitesses et bouchons des conducteurs (speeds.js, crowd.js)
 │  ├─ accounts/ live/ radars/ fuel/
 │  ├─ places/             services autour (PostGIS) + horaires (hours.js, lib opening_hours)
+│  ├─ search/             recherche : index EONA (local.js), BAN, Photon en secours, classement (rank.js)
 │  ├─ reports/            signalements (anti-doublon, votes, score.js)
 │  ├─ speedlimits/        corrections de limitation
 │  └─ signs/postgis.js    limite sous le conducteur, panneaux du trajet
 ├─ signalisation/         pipeline OSM → PostGIS (import.sh, style.lua, build.sql, checks.sql, publish.sql, rebuild.sh)
-├─ bench/trajets.json     50 trajets du banc (coordonnées BAN)
+├─ search/                index de recherche OSM → PostGIS (import.sh, style.lua, build.sql, publish.sql, rebuild.sh)
 ├─ bin/eona-accounts.js CLI admin comptes
 ├─ bin/eona-eta-report.js rapport ETA (lecture seule)
-├─ bin/eona-bench-run.sh  lance un créneau du banc (appelé par cron)
-├─ deploy/                unit systemd + setup-admin.sh + eona-bench.cron (pas installé par défaut)
+├─ bin/eona-geodata-rebuild.sh  chaîne hebdo : signalisation, Valhalla, recherche (cron dimanche 03:30)
+├─ deploy/                unit systemd + setup-admin.sh
 └─ scripts/apk-server.js  serveur temporaire de téléchargement APK
 app/                      app Android
 ```
@@ -103,7 +105,7 @@ mkdir -p /opt/eona-backend/data/avatars /var/lib/eona-signs
 Depuis le PC (dossier du repo) :
 
 ```bash
-scp -r backend/src backend/bin backend/bench backend/deploy backend/signalisation backend/scripts backend/package.json backend/package-lock.json root@193.168.146.56:/opt/eona-backend/
+scp -r backend/src backend/bin backend/deploy backend/signalisation backend/search backend/valhalla backend/scripts backend/package.json backend/package-lock.json root@193.168.146.56:/opt/eona-backend/
 ```
 
 Sur le VPS :
@@ -177,7 +179,6 @@ systemctl daemon-reload && systemctl restart eona-backend
 | `ORS_USAGE_FILE` | compteurs du jour des clés ORS (clé nommée par un hash court, jamais en clair) | `./data/ors-usage.json` |
 | `OSRM_URL` | OSRM de repli | `https://router.project-osrm.org` |
 | `HERE_USAGE_FILE` | compteur HERE du jour et du mois, par usage et par type | `./data/here-usage.json` |
-| `BENCH_TRIPS_FILE` | trajets du banc | `./bench/trajets.json` |
 | `PGHOST` / `PGDATABASE` | base | `/var/run/postgresql` / `eona` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
 | `PUBLIC_BASE_URL` | base des URLs d'avatars (les anciennes en `ts.net` sont réécrites au chargement) | `https://api.lrda-mercuriale.uk` |
@@ -213,10 +214,10 @@ Le .service : `Restart=on-failure` (relance seul 5 s après un crash), `ProtectS
 ### 3.6 Signalisation (premier build + cron)
 
 ```bash
-bash /opt/eona-backend/signalisation/rebuild.sh    # ~10 min : téléchargement 5,8 Go + import + build + contrôles + publication
+bash /opt/eona-backend/bin/eona-geodata-rebuild.sh  # téléchargement + signalisation, puis Valhalla, puis recherche (§5, §5 bis)
 cat > /etc/cron.d/eona-signs <<'EOF'
-# EONA signalisation : reconstruction hebdo depuis un extrait France frais (dimanche 03:30).
-30 3 * * 0 root bash /opt/eona-backend/signalisation/rebuild.sh >> /var/lib/eona-signs/rebuild.log 2>&1
+# EONA : reconstruction hebdo depuis un extrait France frais (dimanche 03:30).
+30 3 * * 0 root /bin/bash /opt/eona-backend/bin/eona-geodata-rebuild.sh >> /var/lib/eona-signs/rebuild.log 2>&1
 EOF
 ```
 
@@ -257,13 +258,13 @@ Depuis le PC, dossier du repo.
    ssh root@193.168.146.56 "rm -rf /opt/eona-backend/src"
    scp -r backend/src backend/package.json backend/package-lock.json root@193.168.146.56:/opt/eona-backend/
    ```
-   Pipeline signalisation modifié → envoyer aussi `backend/signalisation`. Trajets du banc ou scripts
-   modifiés → aussi `backend/bench` et `backend/bin`.
+   Pipeline signalisation ou recherche modifié → envoyer aussi `backend/signalisation` ou `backend/search`.
+   Scripts modifiés → aussi `backend/bin`.
 3. Sur le VPS :
    ```bash
    cd /opt/eona-backend
    npm ci --omit=dev                      # seulement si package.json a changé
-   chown -R eona:eona src node_modules package.json package-lock.json signalisation bench bin
+   chown -R eona:eona src node_modules package.json package-lock.json signalisation search bin
    systemctl restart eona-backend
    curl -s http://127.0.0.1:8090/health
    journalctl -u eona-backend -n 30 --no-pager
@@ -317,6 +318,50 @@ runuser -u eona -- psql -d eona -c "DROP SCHEMA signs_broken CASCADE"
 ```
 
 Sans `ALTER`, la base ne touche jamais `crowd` : signalements et corrections survivent à chaque rebuild.
+
+---
+
+## 5 bis. Recherche (OSM → PostGIS)
+
+Moteur de recherche EONA depuis le 30/09 (Photon avant, TomTom avant le 29/09). `GET /api/search` fusionne :
+
+- **lieux nommés** : index EONA, schéma `search` (`src/search/local.js`) ;
+- **adresses** : Base Adresse Nationale (API publique).
+
+Photon ne sert plus qu'en secours, si l'index manque ou si la base ne répond pas (log `[search] index — … — Photon instead`).
+
+Chaîne `search/rebuild.sh`, lancée chaque semaine par `bin/eona-geodata-rebuild.sh` après la signalisation et Valhalla, sur le même extrait déjà vérifié (~7 min au total) :
+
+1. **import.sh** (~3 min) : osmium garde commerces, services, écoles, gares, aéroports, aires, lieux-dits, communes… ; osm2pgsql (`style.lua`) charge dans le schéma `search_osm` les objets **nommés** seulement. Écartés : bancs, poubelles, distributeurs automatiques, parkings privés, etc.
+2. **build.sql** (~4 min) → schéma `search_next`. Table `poi` : 2,4 M lieux (30/09), 766 Mo avec index.
+   - Doublons fusionnés : même type, même nom, à moins de 150 m.
+   - Commune tirée des polygones admin_level 8.
+   - `doc` : texte replié (sans accents ni ponctuation) des noms, de la marque, de la commune et du code postal.
+   - `weight` : importance de 0 à 1 (ville, aéroport avec code IATA, gare, lien Wikidata, surface).
+   - Index : trigrammes (`pg_trgm`) sur `doc`, trigrammes partiel sur les lieux notables (`weight >= 0.6`), GiST sur la position.
+   - Refus si moins de 500 k lieux ou moins de 20 k villes et villages.
+3. **publish.sql** : bascule atomique `search` → `search_prev`, `search_next` → `search`. Puis suppression de `search_osm`.
+
+Requête : chaque mot tapé de 3 lettres ou plus doit ressembler (`<%`, similarité de mot ≥ 0,6) à un mot des noms ou de la commune. Un mot en cours de frappe ou une faute d'une lettre passe donc. Deux listes :
+
+- les lieux à moins de 60 km, 40 au plus ;
+- les lieux notables de toute la France, 15 au plus.
+
+`rank.js` classe ensuite ces lieux avec la BAN : distance, nom, type, importance. Un lieu notable nommé comme tapé (« marseille ») compte comme proche.
+
+Temps mesurés le 30/09 : 30 à 100 ms (jusqu'à 250 ms à froid), plafond 2,5 s par recherche.
+
+```bash
+tail -30 /var/lib/eona-signs/search-build.log                 # premier build (30/09)
+bash /opt/eona-backend/search/rebuild.sh                      # relancer à la main (verrou partagé avec la chaîne hebdo)
+runuser -u eona -- psql -d eona -c "SELECT * FROM search.meta"
+```
+
+**Revenir à l'index précédent** :
+
+```bash
+runuser -u eona -- psql -d eona -c "BEGIN; ALTER SCHEMA search RENAME TO search_broken; ALTER SCHEMA search_prev RENAME TO search; COMMIT;"
+```
 
 ---
 
@@ -398,6 +443,7 @@ df -h / && free -h
 | `routing.provider` | `ors` (clé présente) ou `osrm` |
 | `routing.usage` | `day` (UTC), `keys[]` : `used` (appels du jour), `blockedUntil` (clé écartée jusqu'à, sinon `null`) ; survit au redémarrage |
 | `traffic.here` | `day`, `used`, `byUse` {`eta`, `faster`}, `byKind` {`flow`, `incidents`}, `month`, `monthUsed`, `dailyCap`, `accountDailyMax`, `deepCoverage` ; survit au redémarrage. `traffic.speeds` : échantillons de vitesse des conducteurs en mémoire, trajets distincts |
+| `search` | `places` : `eona` (index EONA) ou `photon` (index absent) ; `index` : `builtAt`, `places` (§5 bis), relu toutes les 10 min |
 | `fuel.ready` / `lastError` | `true` / `null` |
 | `memoryMB` | ~180–400 |
 
@@ -435,20 +481,6 @@ SQL
 ```
 
 **Banc** (D1.7) : a mesuré nos routes contre TomTom jusqu'au 29/09 (TomTom retiré). Plus de passage ; historique lisible : `GET /api/admin/bench/runs`, table `routing.bench_run`.
-
-⚠️ Nombre de trajets : garder N tel que N / pgcd(N, 6) ne soit pas multiple de 4 (50 : 25, ok ; 48 ou 52 : non). Sinon un trajet retombe toujours sur les mêmes créneaux.
-
-Installer le cron (à la main, après accord d'Arthur) :
-
-```bash
-timedatectl | grep 'Time zone'                                   # doit dire Europe/Paris (heures du cron = heure système)
-cd /opt/eona-backend
-bash bin/eona-bench-run.sh manuel                                # un passage sans créneau : JSON de résumé, jeton jamais affiché
-install -m 644 deploy/eona-bench.cron /etc/cron.d/eona-bench     # nom sans point, sinon cron l'ignore
-tail -f /var/log/eona-bench.log
-```
-
-Créneaux (P1.2) : 08:00 matin, 12:30 midi, 18:00 soir, 23:00 nuit. Les changer : dans `deploy/eona-bench.cron` seulement, puis réinstaller. Retirer : `rm /etc/cron.d/eona-bench`.
 
 Lire : `GET /api/admin/bench/runs?since=…` (API-WEBAPP.md §6 ter) ou :
 
@@ -644,7 +676,8 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 | GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways,traffic&heading=0-360` | compte obligatoire (401), restreint 403, limite du jour 429 ; `heading` facultatif (cap voiture en roulant, D4.4) : Valhalla part dans ce sens (tolérance 45°, rayon 50 m), ORS `bearings`, pas de cache ; ORS ou OSRM (`engine` : `ors`/`osrm`, `mapVersion` : date de carte ORS ou null) ; étapes : `type`, `modifier`, `location`, `exit`, `name`, plus panneaux d'autoroute (Valhalla seul, 28/09) `exitNumber` (numéro de sortie ou null), `towardRefs` (routes, ex. `N 104`) et `toward` (villes), 3 au plus, vides sinon ; chaque réponse → `routing.route_log` ; `traffic` (ORS, anciennes versions des apps seulement : iOS et Android passent par `/api/route/faster`) contourne les bouchons signalés en direct (carré de 500 m autour de chacun, 100 max, sauf à moins de 500 m du départ ou de l'arrivée ; recalcul sans eux si l'itinéraire devient impossible) |
 | POST | `/api/route/faster {coordinates, avoid?, sinceRerouteS?, etaS?}` | Bearer, mêmes refus que `/api/route` (sans compter de trajet) ; une vérification par compte et par minute (429) ; évitement intelligent des bouchons sur **le reste** du trajet : trafic live (HERE + conducteurs) sur le reste, bouchons proches (< 1 km) regroupés, gardés s'ils coûtent ≥ 60 s (ou route fermée) ; **détour local** : le moteur trace des variantes (autour de tous, autour du pire, ses alternatives) sur une fenêtre ; temps = temps moteur + retards live ; `better` (itinéraire au format `/api/route`, temps moteur) seulement si le gain ≥ 3 min et ≥ 5 % de `etaS` (l'ETA de l'app), ou toujours autour d'une **route fermée** ; aucune recherche < 5 min après un recalcul trafic, gain doublé jusqu'à 15 min. Sinon `better: null` et `reason`. 503 sans HERE ni ORS quand ORS trace |
 | POST | `/api/bugs {category, description, steps?, app, context?}` · GET/PATCH (admin) | « Signaler un bug » ; `context` (catégorie `navigation` : moteur, carte, trajet en cours ou dernier avec destination et route ≤ 600 points) ; corps ≤ 256 ko |
-| POST/GET | `/api/admin/bench/run?slot=` · `/api/admin/bench/runs?since=&limit=` | admin ; banc (§7 bis) |
+| GET | `/api/admin/bench/runs?since=&limit=` | admin ; banc, lecture seule depuis le 30/09 (§7 bis) |
+| GET | `/api/search?q=&lat=&lon=&limit=` | Bearer, 40 par minute et par compte (429) ; lieux nommés (index EONA, §5 bis ; Photon s'il manque) + adresses (BAN), fusionnés et classés (distance, nom, type) ; `{count, results[]}` : `id`, `name`, `subtitle`, `lat`, `lon`, `city`, `address`, `postcode`, `category`, `source` (`osm`, `ban`), `distanceM` ; jamais gardé (`no-store`) |
 | GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm[&limit][&pool=1]` | plus proches d'abord (20, `pool=1` : 60) ; `hours` (état, créneaux du jour, prochain changement), `charging`, `parking`, `stars`, `brand` ; station : prix + horaires officiels |
 | POST | `/api/live/presence {inTrip}` | Bearer ; app ouverte (~30 s), compteur seulement. Anciennes apps : `/position` compte la présence (position ignorée), `/near` renvoie personne |
 | GET | `/api/signs/limit?lat&lon&bearing&way` | `{v, way}` |

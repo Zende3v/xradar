@@ -684,3 +684,14 @@ Péages : violation non mesurable par le banc (pas d'attribut péage dans `signs
 - `/faster` : temps moteur + retards live ; plus de chronométrage TomTom. Seuil de gain : 3 min et 5 % de l'ETA de l'app.
 - **TomTom retiré** partout : trafic, `/faster`, recherche POI, banc (historique en lecture seule).
 - **Recherche** : Photon + BAN seuls, en attendant une solution plus fiable (choix d'Arthur).
+
+## Recherche EONA (30/09, Arthur : option A)
+
+- **Index OSM maison** dans PostGIS (schéma `search`), rebuild hebdo avec la signalisation et Valhalla ; BAN pour les adresses.
+  Photon seulement en secours (index absent, base muette).
+- **Google Places écarté** : quotas gratuits, mais conditions EEE (08/07/2025) : hors latitude, longitude et `place_id`,
+  rien d'affiché près d'une carte, Google ou non ; seule exception, le « Places UI Kit » au look Google.
+- Mots tapés : trigrammes `pg_trgm`, chaque mot de 3 lettres ou plus contre noms et commune (faute d'une lettre,
+  mot en cours tolérés). Lieux à moins de 60 km + lieux notables de toute la France.
+- Classement `rank.js` : distance, nom (mots non tapés pénalisés), type, importance (index). Lieu notable nommé comme
+  tapé (au moins la moitié de son nom) compté comme proche.

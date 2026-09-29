@@ -7,13 +7,17 @@
  *   2. how well the name matches what they typed;
  *   3. what kind of place it is (a school beats a bus stop; a street loses to a shop when a
  *      place's name is typed, not an address);
- *   4. how well the source itself ranked it, which carries the place's own standing.
+ *   4. how much the place matters (a town, an airport: EONA's index says) and how well the source
+ *      itself ranked it.
  *
  * No search engine here: a score between 0 and 1 per criterion, weighted and added.
  */
 
 /** Weights: proximity and name carry the answer, the rest separates near-equal results. */
-const WEIGHT = { distance: 0.40, name: 0.34, kind: 0.18, rank: 0.08 };
+const WEIGHT = { distance: 0.34, name: 0.34, kind: 0.18, importance: 0.10, rank: 0.04 };
+/** What a place matters when its source does not say: a commune more than a street or a shop. */
+const IMPORTANCE_DEFAULT = 0.3;
+const IMPORTANCE_COMMUNE = 0.8;
 
 /**
  * How proximity fades. A driver looking for "carrefour" means the one down the road, not the one
@@ -63,6 +67,18 @@ const BAN_STREETS = new Set(['street', 'housenumber']);
  * scores at least this for its distance (as if about 3 km away).
  */
 const TOWN_DISTANCE = 0.8;
+/**
+ * A notable place (a town, an airport, a station: EONA's index gives its importance, 0 to 1)
+ * named as typed is what is meant, even far off ("marseille": the city before the shops nearby
+ * named after it): its distance scores at least TOWN_DISTANCE times its importance. Named as
+ * typed: every word typed is a word of its name, and they make at least NOTABLE_COVER of it — a
+ * generic word ("aeroport") names every airport, never one far away.
+ */
+const NOTABLE = 0.6;
+const NOTABLE_COVER = 0.5;
+/** Each word of a name the driver did not type costs this much of the name's score, up to NAME_EXTRA_MAX. */
+const NAME_EXTRA = 0.05;
+const NAME_EXTRA_MAX = 0.3;
 
 /** Street words that seldom name a place: an address wherever they are typed. */
 const STREET_WORDS = new Set([
@@ -150,7 +166,10 @@ function nameScore(query, name, context, town) {
       hit += 0.5; // the town or the street, not the name itself
     }
   }
-  const score = hit / asked.length;
+  // A name longer than what was typed says less about it: "Gare de Lyon" before
+  // "Residhome Paris Gare de Lyon".
+  const extra = Math.max(0, target.split(' ').length - fold(query).split(' ').filter(Boolean).length);
+  const score = (hit / asked.length) * (1 - Math.min(NAME_EXTRA_MAX, NAME_EXTRA * extra));
   // The name starting with what was typed is the strongest sign there is.
   return target.startsWith(fold(query)) ? Math.min(1, score + 0.15) : score;
 }
@@ -182,14 +201,32 @@ export function kindScore(item, { address = true } = {}) {
   return KIND_DEFAULT;
 }
 
+/** The distance score a notable place named as typed keeps however far it is (NOTABLE); 0 otherwise. */
+function notableFloor(query, item) {
+  if (!(item.importance >= NOTABLE)) return 0;
+  const folded = fold(item.name);
+  const typed = words(query);
+  const name = ` ${folded} `;
+  if (!typed.every((word) => name.includes(` ${word} `))) return 0;
+  const cover = typed.join('').length / folded.replace(/ /g, '').length;
+  return cover >= NOTABLE_COVER ? TOWN_DISTANCE * item.importance : 0;
+}
+
+/** How much the place matters, between 0 and 1: EONA's index says; a commune of the BAN matters. */
+function importanceScore(item) {
+  if (Number.isFinite(item.importance)) return item.importance;
+  return item.source === 'ban' && item.banType === 'municipality' ? IMPORTANCE_COMMUNE : IMPORTANCE_DEFAULT;
+}
+
 /** The score of one answer, and the parts that made it (handy when tuning). */
 export function score(item, { query, index, total }) {
   const town = townWords(query, item);
   const near = distanceScore(item.distanceM);
   const parts = {
-    distance: town.size ? Math.max(near, TOWN_DISTANCE) : near,
+    distance: town.size ? Math.max(near, TOWN_DISTANCE) : Math.max(near, notableFloor(query, item)),
     name: nameScore(query, item.name, item.subtitle ?? '', town),
     kind: kindScore(item, { address: looksLikeAddress(query) }),
+    importance: importanceScore(item),
     rank: rankScore(index, total),
   };
   const total01 = Object.entries(WEIGHT).reduce((sum, [key, weight]) => sum + weight * parts[key], 0);

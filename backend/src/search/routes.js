@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
 import { haversine } from '../radars/geo.js';
+import { fromLocal } from './local.js';
 import { fold, score } from './rank.js';
 
 export const searchRouter = Router();
@@ -13,12 +14,14 @@ export const searchRouter = Router();
  * street, and the Base Adresse Nationale — which only knows addresses — answers beside the point.
  * So the sources are asked at once and their answers are merged:
  *
- *   • Photon (OpenStreetMap): places by name — schools, shops, stations, town halls…
+ *   • EONA's own index (local.js): OpenStreetMap's named places — schools, shops, stations, town
+ *     halls, lieux-dits… — in PostGIS, rebuilt each week. Photon (OpenStreetMap too) stands in
+ *     while it cannot answer.
  *   • Base Adresse Nationale: French addresses, official and precise to the house number.
  *
  * Both are free and take no key; their answers are kept a few minutes so a driver typing letter
- * by letter does not hammer them. The answer itself is never kept (no-store). Each account has a
- * ceiling. (TomTom POI Search left on 29/09.)
+ * by letter does not ask again. The answer itself is never kept (no-store). Each account has a
+ * ceiling. (TomTom POI Search left on 29/09, Photon on 30/09.)
  */
 searchRouter.get('/', async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -45,12 +48,23 @@ searchRouter.get('/', async (req, res) => {
  */
 export async function searchPlaces(query, around, allow = () => true) {
   const key = cacheKey(query, around);
-  const asked = [photon, ban];
+  const asked = [places, ban];
   const known = asked.map((source) => source.cached(key));
   const cached = known.every(Boolean);
   if (!cached && !allow()) return null;
   const lists = await Promise.all(asked.map((source, i) => known[i] ?? source.ask(key, query, around)));
   return { results: merge(lists, around, query), cached };
+}
+
+/** Places by name: EONA's own index; Photon while it cannot answer (not built yet, database down). */
+async function fromPlaces(query, around) {
+  try {
+    const found = await fromLocal(query, around);
+    return found.map((place) => ({ ...place, category: categoryLabel(place.osmKey, place.osmValue) }));
+  } catch (e) {
+    console.warn('[search] index —', reason(e), '— Photon instead');
+    return fromPhoton(query, around);
+  }
 }
 
 /** Places by name, from OpenStreetMap through Photon. */
@@ -272,7 +286,7 @@ function source(label, ask) {
   };
 }
 
-const photon = source('photon', fromPhoton);
+const places = source('places', fromPlaces);
 const ban = source('adresse', fromBAN);
 /** A source that failed: no places, and why in the logs. */
 function failed(label, e) {
@@ -286,6 +300,8 @@ function reason(e) {
   if (Number.isInteger(e?.status)) return `HTTP ${e.status}`;
   if (e instanceof SyntaxError) return 'unreadable answer';
   if (e?.cause?.code) return `unreachable (${e.cause.code})`;
+  // PostgreSQL's own code: 42P01 no index yet, 57014 too slow.
+  if (typeof e?.code === 'string') return `database ${e.code}`;
   return e?.name ?? 'failed';
 }
 

@@ -28,6 +28,7 @@ import { groupStore } from './trips/groups.js';
 import { groupPage, sharePage } from './trips/page.js';
 import { hereUsage } from './traffic/budget.js';
 import { datagouvStore } from './traffic/datagouv.js';
+import { localMeta } from './search/local.js';
 import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
 import { speedStore } from './traffic/speeds.js';
@@ -106,6 +107,8 @@ export function createApp() {
         speeds: speedStore.meta,
         datagouv: { shown: settingsStore.trafficDatagouv, ...datagouvStore.meta },
       },
+      // Places by name: EONA's own index once built (Photon until then), addresses from the BAN.
+      search: { places: localMeta() ? 'eona' : 'photon', index: localMeta() },
       trips: { ...shareStore.meta, ...groupStore.meta },
       signs: { published },
       speedLimits: speedLimitStore.meta,
