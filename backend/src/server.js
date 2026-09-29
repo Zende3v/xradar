@@ -26,10 +26,11 @@ import { searchRouter } from './search/routes.js';
 import { shareStore } from './trips/shares.js';
 import { groupStore } from './trips/groups.js';
 import { groupPage, sharePage } from './trips/page.js';
-import { tomtomUsage } from './traffic/budget.js';
+import { hereUsage } from './traffic/budget.js';
 import { datagouvStore } from './traffic/datagouv.js';
 import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
+import { speedStore } from './traffic/speeds.js';
 
 /**
  * An address WEBAPP_ORIGINS lets in: written out in full, or with one star standing for a
@@ -95,13 +96,14 @@ export function createApp() {
       reports: reportStore.meta,
       accounts: accountStore.meta,
       live: liveStore.meta,
-      // What ORS and TomTom were asked today (UTC day), kept on disk across restarts; Valhalla's
+      // What ORS and HERE were asked (UTC day, HERE by month too), kept on disk across restarts; Valhalla's
       // state and map (read off the requests), the routes it left to ORS and why, the shadow.
       routing: routingHealth(),
       traffic: {
-        provider: config.tomtomApiKey ? 'tomtom' : null,
+        provider: config.hereApiKey ? 'here' : null,
         probes: probeStore.meta.count,
-        tomtom: tomtomUsage(),
+        here: hereUsage(),
+        speeds: speedStore.meta,
         datagouv: { shown: settingsStore.trafficDatagouv, ...datagouvStore.meta },
       },
       trips: { ...shareStore.meta, ...groupStore.meta },

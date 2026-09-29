@@ -31,12 +31,12 @@ App Android ──HTTPS──▶ Cloudflare Tunnel ──▶ backend Node :8090 
                                                    │    ├─ schéma crowd  : signalements + corrections de limite
                                                    │    └─ schéma routing : journal de routage + banc (mesures phase 1 Valhalla)
                                                    ├─ data/accounts.json : comptes, stats, parrainage
-                                                   ├─ data/ors-usage.json, tomtom-usage.json : compteurs du jour ORS / TomTom
+                                                   ├─ data/ors-usage.json, here-usage.json : compteurs ORS (jour) / HERE (jour, mois)
                                                    ├─ data/avatars/      : photos de profil
                                                    ├─ data.gouv : radars fixes (téléchargé au démarrage + chaque jour)
                                                    ├─ prix-carburants : flux officiel, prix + horaires (toutes les 10 min)
                                                    ├─ OpenRouteService (si ORS_API_KEY) sinon OSRM public : itinéraires
-                                                   └─ TomTom : trafic sur le trajet, évitement des bouchons, banc
+                                                   └─ HERE Traffic v7 : trafic sur le trajet, évitement des bouchons
 ```
 
 Présence (app ouverte, en trajet ou non ; **aucune position**) : mémoire seulement (90 s), comptée dans `/health` (`live.online`, `live.inTrip`), montrée à personne. Sessions (tokens) : mémoire seulement → un redémarrage déconnecte, l'app se reconnecte seule par son `deviceId` (compte rattaché au téléphone).
@@ -53,7 +53,7 @@ backend/
 │  ├─ crowd/schema.sql    schéma crowd, appliqué à chaque démarrage (idempotent)
 │  ├─ routing/            itinéraires : engine.js (ORS/OSRM), faster.js, log.js (journal), bench.js (banc),
 │  │                      schema.sql (schéma routing, appliqué à chaque démarrage)
-│  ├─ traffic/            TomTom (tomtom.js), compteur TomTom (budget.js), bouchons des conducteurs
+│  ├─ traffic/            HERE (here.js), compteur HERE (budget.js), data.gouv (datagouv.js), vitesses et bouchons des conducteurs (speeds.js, crowd.js)
 │  ├─ accounts/ live/ radars/ fuel/
 │  ├─ places/             services autour (PostGIS) + horaires (hours.js, lib opening_hours)
 │  ├─ reports/            signalements (anti-doublon, votes, score.js)
@@ -176,7 +176,7 @@ systemctl daemon-reload && systemctl restart eona-backend
 | `ORS_DAILY_BUDGET` | appels ORS par clé et par jour, sous le quota du plan gratuit (2000) | `1500` |
 | `ORS_USAGE_FILE` | compteurs du jour des clés ORS (clé nommée par un hash court, jamais en clair) | `./data/ors-usage.json` |
 | `OSRM_URL` | OSRM de repli | `https://router.project-osrm.org` |
-| `TOMTOM_USAGE_FILE` | compteur du jour TomTom, par usage | `./data/tomtom-usage.json` |
+| `HERE_USAGE_FILE` | compteur HERE du jour et du mois, par usage et par type | `./data/here-usage.json` |
 | `BENCH_TRIPS_FILE` | trajets du banc | `./bench/trajets.json` |
 | `PGHOST` / `PGDATABASE` | base | `/var/run/postgresql` / `eona` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
@@ -185,11 +185,11 @@ systemctl daemon-reload && systemctl restart eona-backend
 | `ACCOUNTS_BACKUP_KEEP_DAYS` | copies `accounts.backup-<jour>.json` (avant purge des invités) gardées | 14 j |
 | `GUEST_TRIAL_MS` | essai compte email | 7 j |
 | `GUEST_LIFETIME_MS` | durée de vie compte invité | 7 j |
-| `TOMTOM_ENABLED` | interrupteur de **tout** TomTom : trafic, `/faster`, banc, recherche | absent = aucun appel TomTom |
-| `TOMTOM_DAILY_CAP` / `TOMTOM_ETA_SHARE` / `TOMTOM_FASTER_SHARE` | budget TomTom du jour (D3.1) : plafond total, part du recalage de l'ETA, part de `/faster` ; au-delà, l'usage continue sans TomTom | 2300 / 1700 / 400 |
+| `HERE_API_KEY` | trafic HERE Traffic v7 sur le trajet (drop-in `here.conf`, jamais versionnée) | absent = pas de trafic live |
+| `HERE_DEEP_COVERAGE` / `HERE_DAILY_CAP` / `HERE_ACCOUNT_DAILY_MAX` | Deep Coverage (tarif Advanced Traffic) ; plafond du jour (aucun par défaut) ; rafraîchissements HERE par compte et par jour | coupé / aucun / 150 |
 | `DATAGOUV_ENABLED` | collecte des flux DIR (data.gouv, Bison Futé) : vitesses QTV et événements toutes les 6 min, stations par jour | actif ; `0` = coupé |
 | `DATAGOUV_SPEEDS_URL` / `DATAGOUV_EVENTS_URL` / `DATAGOUV_STATIONS_URL` | adresses des flux DIR | tipi.bison-fute.gouv.fr |
-| `TOMTOM_API_KEY` | trafic TomTom sur le trajet (drop-in `tomtom.conf`, jamais versionnée), lue seulement avec `TOMTOM_ENABLED=1` | absent = pas de trafic (503) |
+| `HERE_TRAFFIC_URL` | adresse de HERE Traffic v7 | `https://data.traffic.hereapi.com/v7` |
 | `DEVICE_TRIALS_FILE` | fin du premier essai par téléphone | `./data/device-trials.json` |
 | `GUEST_REPORTS_PER_DAY` / `GUEST_TRIPS_PER_DAY` | limites invité par jour | 5 / 7 |
 | `REFERRAL_SUBSCRIPTION_MONTHS` | mois offerts par parrainage | 6 |
@@ -328,7 +328,7 @@ Sans `ALTER`, la base ne touche jamais `crowd` : signalements et corrections sur
 | Photos de profil | `data/avatars/` | oui |
 | Signalements + votes, corrections de limite + historique | PostGIS schéma `crowd` | **OUI** |
 | Journal de routage (90 j), mesures du banc | PostGIS schéma `routing` | oui (mesures phase 1) |
-| Compteurs du jour ORS / TomTom | `data/ors-usage.json`, `data/tomtom-usage.json` | non (repart à zéro chaque jour) |
+| Compteurs ORS (jour) / HERE (jour, mois) | `data/ors-usage.json`, `data/here-usage.json` | non (repartent à zéro chaque jour, HERE chaque mois aussi) |
 | Routes + panneaux | PostGIS schémas `signs`, `signs_prev` | non (rebuild) |
 | Extrait OSM | `/var/lib/eona-signs/france-latest.osm.pbf` | non (retéléchargé) |
 | Copies auto des comptes avant purge | `data/accounts.backup-<date>.json` | oui |
@@ -397,7 +397,7 @@ df -h / && free -h
 | `signs.published` | `built_at` ≤ 8 jours, `roads` ~5,8 M, `signs` ~2 M ; `null` = base injoignable |
 | `routing.provider` | `ors` (clé présente) ou `osrm` |
 | `routing.usage` | `day` (UTC), `keys[]` : `used` (appels du jour), `blockedUntil` (clé écartée jusqu'à, sinon `null`) ; survit au redémarrage |
-| `traffic.tomtom` | `day` (UTC), `used`, `byUse` {`eta`, `faster`, `bench`, `other`}, `freeDailyQuota` 2500 ; survit au redémarrage |
+| `traffic.here` | `day`, `used`, `byUse` {`eta`, `faster`}, `byKind` {`flow`, `incidents`}, `month`, `monthUsed`, `dailyCap`, `accountDailyMax`, `deepCoverage` ; survit au redémarrage. `traffic.speeds` : échantillons de vitesse des conducteurs en mémoire, trajets distincts |
 | `fuel.ready` / `lastError` | `true` / `null` |
 | `memoryMB` | ~180–400 |
 
@@ -419,7 +419,7 @@ Mémoire au repos : backend ~180 Mo, PostgreSQL ~1 Go de cache. Disque : `signs`
 
 Plan : `backend/PLAN-VALHALLA.md`, décisions : `backend/VALHALLA-DECISIONS.md`. Rien ne change pour les conducteurs.
 
-**Compteurs** ORS et TomTom : `/health` (§7), jour UTC, fichiers `data/ors-usage.json` et `data/tomtom-usage.json` (écriture ~1 s après chaque appel, fichier temporaire renommé). Un redémarrage garde le jour en cours. Heure de remise à zéro du quota TomTom : **à vérifier**.
+**Compteurs** ORS et HERE : `/health` (§7), jour UTC (HERE : mois aussi, sa facturation), fichiers `data/ors-usage.json` et `data/here-usage.json` (écriture ~1 s après chaque appel, fichier temporaire renommé). Un redémarrage garde le jour en cours.
 
 **Délais** : ORS et OSRM coupés à 10 s (`orsTimeoutMs`, `osrmTimeoutMs` dans `config.js`, à calibrer en phase 2 ; les apps abandonnent à 15 s) → 502.
 
@@ -434,7 +434,7 @@ FROM routing.route_log WHERE cached IS NOT TRUE GROUP BY 1, 2 ORDER BY 1 DESC, 2
 SQL
 ```
 
-**Banc** (D1.7) : 50 trajets fixes (`backend/bench/trajets.json`, coordonnées Base Adresse Nationale). Tourne **dans** le backend (mêmes clés ORS, même compteur TomTom, même base). Un passage = 6 trajets suivants d'un curseur tournant (`routing.bench_state`) ; par trajet : notre route (même moteur que `/api/route`), son temps TomTom avec trafic, la meilleure route TomTom, km par classe de route (`signs.road.highway`, échantillon tous les 50 m, route à moins de 30 m). Résultats : `routing.bench_run`. Part TomTom du banc : 50 requêtes par jour (`benchTomtomDailyMax`), passage arrêté avant.
+**Banc** (D1.7) : a mesuré nos routes contre TomTom jusqu'au 29/09 (TomTom retiré). Plus de passage ; historique lisible : `GET /api/admin/bench/runs`, table `routing.bench_run`.
 
 ⚠️ Nombre de trajets : garder N tel que N / pgcd(N, 6) ne soit pas multiple de 4 (50 : 25, ok ; 48 ou 52 : non). Sinon un trajet retombe toujours sur les mêmes créneaux.
 
@@ -642,13 +642,14 @@ Rien n'est effacé : statut `removed` / `rejected`, gardé dans l'historique.
 | GET | `/api/radars/near` `/bbox` · POST `/api/radars/route` | radars fixes ; chacun avec `quietCourse` (sens où les conducteurs l'ont dit « pas dans mon sens » : 2 votes à 45° près, 1 admin suffit), null = sonne dans les deux sens |
 | POST | `/api/radars/:id/not-my-way {course}` | Bearer ; « Pas dans mon sens » : un vote par radar et compte (`crowd.radar_vote`, 365 j), admin compte 2 ; 2 votes à moins de 45° l'un de l'autre = `quietCourse` ; réponse `{quietCourse}` |
 | GET | `/api/route?from=lat,lon&to=lat,lon&avoid=tolls,highways,traffic&heading=0-360` | compte obligatoire (401), restreint 403, limite du jour 429 ; `heading` facultatif (cap voiture en roulant, D4.4) : Valhalla part dans ce sens (tolérance 45°, rayon 50 m), ORS `bearings`, pas de cache ; ORS ou OSRM (`engine` : `ors`/`osrm`, `mapVersion` : date de carte ORS ou null) ; étapes : `type`, `modifier`, `location`, `exit`, `name`, plus panneaux d'autoroute (Valhalla seul, 28/09) `exitNumber` (numéro de sortie ou null), `towardRefs` (routes, ex. `N 104`) et `toward` (villes), 3 au plus, vides sinon ; chaque réponse → `routing.route_log` ; `traffic` (ORS, anciennes versions des apps seulement : iOS et Android passent par `/api/route/faster`) contourne les bouchons signalés en direct (carré de 500 m autour de chacun, 100 max, sauf à moins de 500 m du départ ou de l'arrivée ; recalcul sans eux si l'itinéraire devient impossible) |
-| POST | `/api/route/faster {coordinates, avoid?, sinceRerouteS?}` | Bearer, mêmes refus que `/api/route` (sans compter de trajet) ; évitement intelligent des bouchons sur **le reste** du trajet (du conducteur à l'arrivée) : TomTom chronomètre le trajet avec le trafic, les ralentissements proches (< 1 km) forment un bouchon, gardé s'il coûte ≥ 60 s (ou route fermée) ; rien n'est cherché si leur total ne peut pas atteindre le gain minimum. Sinon **détour local** (limites ORS : alternatives ≤ 100 km, zones évitées ≤ 150 km) : bouchons commençant à ≤ 60 km, ORS trace des variantes du conducteur jusqu'à 5 km après le dernier (≤ 85 km le long du trajet ; cap conservé au départ et au point de retour) — autour de tous, autour du pire, ses alternatives —, suivies du même reste de trajet ; les doublons, celles qui traversent encore tous les bouchons (ou une fermeture) et celles plus lentes sans trafic que le trajet de plus que le retard des bouchons sont écartés ; TomTom chronomètre les 3 meilleures en entier. `better` (itinéraire au format `/api/route` : détour + reste recalculé par ORS, `durationS` = temps TomTom avec trafic, `gainS`, `closed`) seulement si le gain ≥ 3 min et ≥ 5 % du temps restant, ou toujours pour contourner une **route fermée** (la variante la plus rapide qui l'évite) ; aucune recherche < 5 min après un recalcul trafic, gain doublé jusqu'à 15 min (anti A→B→A). Sinon `better: null` et `reason`. 503 sans clé ORS ou TomTom |
+| POST | `/api/route/faster {coordinates, avoid?, sinceRerouteS?, etaS?}` | Bearer, mêmes refus que `/api/route` (sans compter de trajet) ; une vérification par compte et par minute (429) ; évitement intelligent des bouchons sur **le reste** du trajet : trafic live (HERE + conducteurs) sur le reste, bouchons proches (< 1 km) regroupés, gardés s'ils coûtent ≥ 60 s (ou route fermée) ; **détour local** : le moteur trace des variantes (autour de tous, autour du pire, ses alternatives) sur une fenêtre ; temps = temps moteur + retards live ; `better` (itinéraire au format `/api/route`, temps moteur) seulement si le gain ≥ 3 min et ≥ 5 % de `etaS` (l'ETA de l'app), ou toujours autour d'une **route fermée** ; aucune recherche < 5 min après un recalcul trafic, gain doublé jusqu'à 15 min. Sinon `better: null` et `reason`. 503 sans HERE ni ORS quand ORS trace |
 | POST | `/api/bugs {category, description, steps?, app, context?}` · GET/PATCH (admin) | « Signaler un bug » ; `context` (catégorie `navigation` : moteur, carte, trajet en cours ou dernier avec destination et route ≤ 600 points) ; corps ≤ 256 ko |
 | POST/GET | `/api/admin/bench/run?slot=` · `/api/admin/bench/runs?since=&limit=` | admin ; banc (§7 bis) |
 | GET | `/api/places/near?lat&lon&kind=fuel\|charging\|parking\|tobacco\|garage\|hotel\|atm[&limit][&pool=1]` | plus proches d'abord (20, `pool=1` : 60) ; `hours` (état, créneaux du jour, prochain changement), `charging`, `parking`, `stars`, `brand` ; station : prix + horaires officiels |
 | POST | `/api/live/presence {inTrip}` | Bearer ; app ouverte (~30 s), compteur seulement. Anciennes apps : `/position` compte la présence (position ignorée), `/near` renvoie personne |
 | GET | `/api/signs/limit?lat&lon&bearing&way` | `{v, way}` |
-| POST | `/api/traffic/route {coordinates, aheadM?}` | Bearer ; notre tracé renvoyé à TomTom (points d'appui, 1 tous les 30 m, 1000 max) : portions ralenties **sur notre route** en mètres (`fromM`, `toM`, `level` slow/jam/heavy/closed, `delayS` réparti par longueur quand une section TomTom est coupée), `totalM`, `travelS` / `delayS` (temps TomTom avec trafic, part perdue) ; cache 60 s ; plus les **bouchons des conducteurs** là où ils coûtent plus que TomTom (`source: "crowd"`, le surplus seulement) : signalements « Bouchon » confirmés dans le sens du trajet (2 conducteurs, admin ou sondes ; 1 km, 3 min sans mesure) et ralentissements mesurés par 3 conducteurs (sondes, retard = vitesse médiane contre limitation) ; avec `aheadM` (progression du conducteur), `check` dit si `/api/route/faster` vaut la peine ; chaque section a sa `source` (`tomtom`, `crowd`, D2.7) ; `tomtom: false` : TomTom pas demandé (recalage des apps, D2.2) ; TomTom seulement dans le budget du jour (D3.1) et une fois par minute par compte, `tomtom` dit s'il a répondu, `minGapS` l'attente avant le prochain recalage ; `datagouv` : vitesses et événements DIR (`source: "datagouv"`, `kind`), fusionnés en dernier pour leur surplus seulement si l'interrupteur est actif (réponse `datagouv`) ; `raw: true` + `sources: ["datagouv"]` : chaque source entière, les apps fusionnent et calculent les deux ETA ; TomTom muet : les autres sources répondent. Les apps en tirent l'ETA dynamique (D2.1) |
+| POST | `/api/traffic/speeds {tripKey, samples[]}` | Bearer ; vitesses du conducteur en trajet (« Aide au trafic partagé ») : `lat`, `lon`, `course`, `speedKmh`, `limitKmh?`, `t` ; anonymes (clé aléatoire du trajet, jamais le compte), 20 par envoi, un envoi toutes les 30 s par compte (429), gardées 30 min en mémoire |
+| POST | `/api/traffic/route {coordinates, aheadM?, live?, raw?, sources?}` | Bearer ; ralentissements **sur notre route** en mètres (`fromM`, `toM`, `level` slow/jam/heavy/closed, `delayS`, `kind`, `source`) : `here` (HERE Traffic v7, vitesses et incidents dans un couloir autour du reste du trajet, 2 requêtes ; pas demandé si les vitesses EONA couvrent déjà 80 % du trajet, une fois par minute et 150 fois par jour par compte au plus), `crowd` (bouchons signalés, sondes, vitesses partagées), `datagouv` (DIR, derrière l'interrupteur) ; `live` dit si HERE a répondu (`tomtom` aussi, pour les apps d'avant HERE, qui reçoivent HERE sous le nom `tomtom`), `eonaCoverage` la part couverte par les conducteurs ; `raw: true` : chaque source entière ; `check` si `/api/route/faster` vaut la peine. Les apps en tirent l'ETA dynamique (D2.1) |
 | POST | `/api/traffic/probe {lat, lon, bearing, speedKmh, limitKmh}` · `/api/traffic/probe/dismiss` | Bearer ; sonde « Partager les ralentissements » : vitesse < 60 % d'une limitation ≥ 70 km/h (400 sinon), 1 par minute et par conducteur (429) ; en mémoire 30 min sous un pseudonyme changé chaque jour ; 3 conducteurs en 10 min à moins de 1 km, même sens (±45°) → signalement « Bouchon » `system` (fusionné s'il existe, au plus 1 fois / 5 min par endroit) ; réponse `{known}` (bouchon déjà connu là : pas de question au conducteur) ; `dismiss` = « Non », retire ses sondes récentes |
 | POST | `/api/signs/route {coordinates}` | panneaux + changements de limite du trajet |
 | GET | `/api/signs/near` | panneaux autour |

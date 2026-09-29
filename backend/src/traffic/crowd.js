@@ -15,7 +15,7 @@ const MIN_SPEED_KMH = 3;
 
 /**
  * What drivers say about the traffic on a route ([path], see routing/geometry.js), besides
- * TomTom: confirmed "Bouchon" reports on it, the same way (2 drivers, an admin's, or made from
+ * the live traffic (HERE): confirmed "Bouchon" reports on it, the same way (2 drivers, an admin's, or made from
  * probes), and slowdowns probeClusterMinDrivers drivers measured. Stretches in metres along
  * the route, with the time they cost: measured from the probes' speeds against the road's
  * limit when there are some, and from what the driver said otherwise (léger, important, à
@@ -100,7 +100,7 @@ export async function crowdAlong(path) {
 }
 
 /**
- * TomTom's stretches with the drivers' jams added where they cost more than TomTom says: the
+ * The live traffic's stretches (HERE's) with the drivers' jams added where they cost more than it says: the
  * extra time only (the worst of the two, never both), as 'crowd' stretches.
  */
 export function withCrowd(sections, crowd) {
@@ -116,7 +116,7 @@ export function withCrowd(sections, crowd) {
   return sections.concat(extra).sort((a, b) => a.fromM - b.fromM);
 }
 
-/** The time the drivers' jams add to TomTom's on a route (withCrowd's stretches). */
+/** The time the drivers' jams add to the live traffic's on a route (withCrowd's stretches). */
 export function crowdExtraS(sections) {
   return sections.reduce((sum, s) => (s.source === 'crowd' ? sum + s.delayS : sum), 0);
 }

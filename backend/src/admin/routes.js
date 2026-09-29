@@ -4,7 +4,7 @@ import { adminActor } from '../accounts/auth.js';
 import { ROUTING_ENGINES, settingsStore } from '../accounts/settings.js';
 import { accountStore } from '../accounts/store.js';
 import { reportStore } from '../reports/store.js';
-import { BENCH_SLOTS, benchRuns, runBench } from '../routing/bench.js';
+import { benchRuns } from '../routing/bench.js';
 import { routing } from '../routing/engine.js';
 import { shadow, shadowStore } from '../routing/shadow.js';
 import { datagouvStore } from '../traffic/datagouv.js';
@@ -97,22 +97,7 @@ adminRouter.get('/audit', guarded(async (req, res) => {
 }));
 
 /**
- * POST /api/admin/bench/run[?slot=matin|midi|soir|nuit] — one bench run (routing/bench.js):
- * the next trips of the rotation, each timed against TomTom and stored. Started by
- * deploy/eona-bench.cron (the slot says which), or by hand (no slot). Answers the run's summary;
- * 409 while another run goes, 503 without a TomTom key.
- */
-adminRouter.post('/bench/run', guarded(async (req, res) => {
-  const slot = req.query.slot ? String(req.query.slot) : null;
-  if (slot && !BENCH_SLOTS.includes(slot)) return res.status(400).json({ error: 'slot = matin|midi|soir|nuit' });
-  if (!config.tomtomApiKey) return res.status(503).json({ error: 'bench unavailable' });
-  const summary = await runBench({ slot });
-  if (!summary) return res.status(409).json({ error: 'bench already running' });
-  res.json(summary);
-}));
-
-/**
- * GET /api/admin/bench/runs?since=&limit= — the bench's measures, newest first: from `since`
+ * GET /api/admin/bench/runs?since=&limit= — the bench's measures (until 29/09, against TomTom), newest first: from `since`
  * (ISO or milliseconds) on, `limit` of them (200 by default, 1000 at most).
  */
 adminRouter.get('/bench/runs', guarded(async (req, res) => {

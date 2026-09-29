@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 import { crowdAlong, crowdExtraS, withCrowd } from '../traffic/crowd.js';
-import { trafficAlong } from '../traffic/tomtom.js';
+import { hereAlong } from '../traffic/here.js';
 import { gridOf, headingAt, measure, samplesBetween, share, sliceOf } from './geometry.js';
 import { square } from './providers/ors.js';
 
@@ -25,18 +25,15 @@ const WINDOW_MAX_M = 85_000;
 const SAME_ROUTE_SHARE = 0.9;
 // A variant going through half a closed stretch or more still meets the closure.
 const THROUGH_CLOSURE_SHARE = 0.5;
-// A pause between TomTom requests: its free tier refuses bursts.
-const TOMTOM_GAP_MS = 250;
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Whether a faster way exists around the traffic on the rest of the route being followed
  * ([points], [lat, lon], from the driver to the destination). An engine keeps drawing the
- * routes — ORS or Valhalla, whichever [draw] asks (engine.js, drawer) — and TomTom keeps
- * timing them; this only compares:
- * 1. TomTom times the rest of the route with today's traffic and lists its slowdowns; the
- *    drivers' jams (confirmed reports, probes: traffic/crowd.js) add what TomTom misses;
+ * routes — ORS or Valhalla, whichever [draw] asks (engine.js, drawer) — and gives their time
+ * without traffic; the live traffic ([traffic]: HERE and the drivers', since 30/09) adds the time
+ * lost on each. This only compares:
+ * 1. the live traffic on the rest of the route lists its slowdowns (HERE's, the drivers' jams and
+ *    speeds: traffic/crowd.js, traffic/speeds.js);
  * 2. slowdowns close together make one jam; only jams worth a detour and near enough
  *    (HORIZON_M) are kept, and nothing is searched when all of them together could not save
  *    the minimum gain (a closed road always is);
@@ -46,31 +43,31 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * 4. a variant that is the route itself, still goes through every jam (or through a closure),
  *    or that the engine alone finds slower than the route by more than the time the jams cost,
  *    is dropped;
- * 5. TomTom times each variant left, whole, with today's traffic, plus the drivers' jams on it;
+ * 5. over the window (the rest after it is the same for all), the route's time is the engine's
+ *    for it (baselineS) plus its slowdowns there; a variant's, the engine's plus the live
+ *    traffic on it;
  * 6. the fastest replaces the route only for a real gain: rerouteMinGainS and
- *    rerouteMinGainRatio of the time left, twice that for a while after a reroute
- *    ([sinceRerouteS]), and nothing at all just after one. A closed road is gone around by
- *    the fastest variant that avoids it, whatever the gain.
+ *    rerouteMinGainRatio of the time left ([etaS], the app's ETA, when it sends it), twice that
+ *    for a while after a reroute ([sinceRerouteS]), and nothing at all just after one. A closed
+ *    road is gone around by the fastest variant that avoids it, whatever the gain.
  * A jam alone never moves the driver: only the time saved does. When every variant the engine
  * was asked failed for an outage of it (Valhalla down: [draw] says `outage`), the answer is
  * `reason: "fallback"` (D5.2).
  *
  * Returns { answer, compare }: [answer], the JSON of /api/route/faster; [compare], what the
  * shadow mode needs to draw the same variants with the other engine (shadow.js) — null when no
- * engine was asked. [time] and [pause] stand for TomTom and its pause in the tests.
+ * engine was asked. [traffic] stands for the live traffic in the tests.
  */
-export async function checkFaster(points, { avoid = [], sinceRerouteS = null, draw, time = timeRoute, pause = sleep } = {}) {
+export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic } = {}) {
   if (sinceRerouteS != null && sinceRerouteS < config.rerouteCooldownS) {
     return { answer: { better: null, reason: 'cooldown' }, compare: null };
   }
 
   const path = measure(points);
-  const current = await time(points, path);
-  const currentS = current.travelS;
-  if (!(currentS > 0)) return { answer: { better: null, reason: 'no time' }, compare: null };
+  const current = await traffic(points, path);
   const sticky = sinceRerouteS != null && sinceRerouteS < config.rerouteStickyS;
   const thresholdS = Math.round(
-    Math.max(config.rerouteMinGainS, config.rerouteMinGainRatio * currentS) * (sticky ? config.rerouteStickyFactor : 1),
+    Math.max(config.rerouteMinGainS, config.rerouteMinGainRatio * (etaS > 0 ? etaS : 0)) * (sticky ? config.rerouteStickyFactor : 1),
   );
 
   // The jams near enough to go around now, the detour rejoining the route past them.
@@ -79,7 +76,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, dr
     .filter((jam) => jam.fromM <= HORIZON_M && (short || jam.toM + REJOIN_AFTER_M <= WINDOW_MAX_M));
   const closed = jams.some((jam) => jam.closed);
   const lostS = jams.reduce((sum, jam) => sum + jam.delayS, 0);
-  const summary = { currentS, crowdS: current.crowdS, thresholdS, jams: jams.map(({ fromM, toM, delayS, closed: shut }) => ({ fromM, toM, delayS, closed: shut })) };
+  const summary = { lostS, crowdS: current.crowdS, thresholdS, jams: jams.map(({ fromM, toM, delayS, closed: shut }) => ({ fromM, toM, delayS, closed: shut })) };
   if (!jams.length || (!closed && lostS < thresholdS)) {
     return { answer: { ...summary, better: null, reason: 'no significant jam' }, compare: null };
   }
@@ -115,19 +112,20 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, dr
     return { answer: { ...summary, better: null, reason: 'fallback' }, compare: null };
   }
 
-  // Each variant timed whole (the same rest of the route after it), like the route now.
+  // Over the window: the route's engine time plus its slowdowns there, against each variant's.
+  if (drawn.baselineS == null) return { answer: { ...summary, better: null, reason: 'no baseline' }, compare: { plan, drawn, detour: null } };
+  const currentS = drawn.baselineS + delayWithin(current.sections, 0, rejoinM);
   let best = null;
   let timed = 0;
   for (const candidate of drawn.viable) {
-    await pause(TOMTOM_GAP_MS);
-    const whole = tail ? candidate.line.concat(tail.slice(1)) : candidate.line;
-    const traffic = await time(whole).catch((e) => {
-      console.warn('[faster] TomTom variant —', String(e.message || e));
+    const live = await traffic(candidate.line).catch((e) => {
+      console.warn('[faster] live traffic on a variant —', String(e.message || e));
       return null;
     });
-    if (!(traffic?.travelS > 0)) continue;
+    if (!live) continue;
     timed += 1;
-    if (!best || traffic.travelS < best.travelS) best = { candidate, route: candidate.route, travelS: traffic.travelS };
+    const travelS = candidate.route.durationS + live.delayS;
+    if (!best || travelS < best.travelS) best = { candidate, route: candidate.route, travelS };
   }
 
   const gainS = best ? currentS - best.travelS : 0;
@@ -136,17 +134,17 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, dr
     `[faster] now ${currentS}s (drivers +${current.crowdS}s), ${jams.length} jam(s) ${lostS}s lost${closed ? ' + closed' : ''}, window ${Math.round(rejoinM / 1000)}/${Math.round(path.total / 1000)} km, ` +
       `${drawn.found.length} ${drawn.engine ?? 'engine'} route(s), ${timed} timed, best ${best ? best.travelS + 's' : '-'}, threshold ${thresholdS}s${sticky ? ' (sticky)' : ''} → ${switching ? 'switch' : 'keep'}`,
   );
-  const result = { ...summary, variants: timed, bestS: best?.travelS ?? null };
+  const result = { ...summary, currentS, variants: timed, bestS: best?.travelS ?? null };
   const compare = { plan, drawn, detour: switching ? best.candidate : null };
   if (!switching) return { answer: { ...result, better: null, reason: best ? 'not enough gain' : 'no variant' }, compare };
   const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw) : best.route;
   if (!route) return { answer: { ...result, better: null, reason: 'rest of the route unavailable' }, compare };
-  // The time shown for the new route is TomTom's, with traffic: the one the gain was measured on.
-  return { answer: { ...result, better: { gainS: Math.max(0, gainS), closed, route: { ...route, durationS: best.travelS } } }, compare };
+  // The new route keeps its engine time: the apps add the live traffic to it (their ETA).
+  return { answer: { ...result, better: { gainS: Math.max(0, gainS), closed, route } }, compare };
 }
 
 /**
- * The variants of [plan] drawn by [draw] (every ask at once), then sifted without TomTom: what
+ * The variants of [plan] drawn by [draw] (every ask at once), then sifted without traffic: what
  * the route itself is (its engine time: baselineS), what still goes through the jams, the
  * duplicates. { engine, found, baselineS, candidates, viable, errors, outage, skipped, latencyMs };
  * [outage]: every ask failed for an outage of the engine; [skipped]: none was sent.
@@ -169,8 +167,8 @@ export async function drawVariants(plan, draw) {
  * [routes] (the app's shape) against the window of [plan]: the route itself gives the engine's
  * time for the window (baselineS); a variant through a closure, through every jam, or like one
  * already kept is dropped; one slower, without traffic, than the route by more than the jams
- * cost cannot win. The first config.rerouteMaxVariants left are `viable` (one TomTom request
- * each).
+ * cost cannot win. The first config.rerouteMaxVariants left are `viable` (one live traffic
+ * request each).
  */
 function sift(plan, routes) {
   let baselineS = null;
@@ -221,19 +219,29 @@ export function worthChecking(sections, totalM, aheadM) {
 }
 
 /**
- * A route's time now: TomTom's with traffic, plus what the drivers' jams add ([crowdS]), and
- * its slowdowns (TomTom's and the drivers'). Without the drivers' jams (database down),
- * TomTom's alone.
+ * The live traffic on a route now: its slowdowns (HERE's, and the drivers' where they cost more),
+ * the time they lose together ([delayS]) and the drivers' part of it ([crowdS]). Without HERE
+ * (no key, or silent), the drivers' alone; without them (database down), HERE's alone.
  */
-async function timeRoute(points, path = measure(points)) {
-  const traffic = await trafficAlong(points, { use: 'faster' });
+async function liveTraffic(points, path = measure(points)) {
+  const live = await hereAlong(points, { use: 'faster' }).catch((e) => {
+    console.warn('[faster] HERE unavailable —', String(e.message || e));
+    return { sections: [] };
+  });
   const crowd = await crowdAlong(path).catch((e) => {
     console.warn('[faster] drivers\' jams unavailable —', String(e.message || e));
     return [];
   });
-  const sections = withCrowd(traffic.sections, crowd);
-  const crowdS = crowdExtraS(sections);
-  return { travelS: traffic.travelS > 0 ? traffic.travelS + crowdS : traffic.travelS, crowdS, sections };
+  const sections = withCrowd(live.sections, crowd);
+  return { sections, delayS: delayWithin(sections, 0, path.total), crowdS: crowdExtraS(sections) };
+}
+
+/** The time [sections] lose between [fromM] and [toM], a section cut pro rata. */
+function delayWithin(sections, fromM, toM) {
+  return Math.round(sections.reduce((sum, s) => {
+    const overlap = Math.min(s.toM, toM) - Math.max(s.fromM, fromM);
+    return overlap > 0 && s.toM > s.fromM ? sum + ((s.delayS ?? 0) * overlap) / (s.toM - s.fromM) : sum;
+  }, 0));
 }
 
 /**
@@ -270,7 +278,7 @@ function weight(jam) {
 }
 
 /**
- * The jams on the route: slowdowns (TomTom's stretches, sorted) merged when closer than
+ * The jams on the route: slowdowns (the live traffic's stretches, sorted) merged when closer than
  * rerouteJamGapM, kept when one is worth a detour (rerouteJamMinDelayS, or closed) and lies
  * beyond the route's first and last metres.
  */

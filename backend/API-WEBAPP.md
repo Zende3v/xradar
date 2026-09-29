@@ -228,7 +228,7 @@ journal (section 6 bis).
 | `appVersion` | texte | ex. `1.0.1 (4)` |
 | `platform` | texte | `android` ou `ios` |
 | `etaMode` | texte | `proportional` (phase 1) |
-| `trafficSources` | liste | sources de trafic vues (`tomtom`, `crowd`, `datagouv`, `sytadin`) |
+| `trafficSources` | liste | sources de trafic vues (`here`, `tomtom` avant le 30/09, `crowd`, `datagouv`) |
 
 Le rapport `bin/eona-eta-report.js` exclut les trajets avec `retargeted: true` de toutes les
 mesures d'ETA et les compte à part dans `trips.excluded.retargeted` (raison `retargeted` en
@@ -484,43 +484,35 @@ Même chose sur une réponse du cache d'une minute. Rien d'autre ne change.
 ```json
 "routing": { "provider": "ors", "keys": 2, "ready": 2, "budgetLeft": 2950,
   "usage": { "day": "2026-09-25", "keys": [{ "used": 50, "blockedUntil": null }, { "used": 0, "blockedUntil": null }] } },
-"traffic": { "provider": "tomtom", "probes": 0,
-  "tomtom": { "day": "2026-09-25", "used": 130, "byUse": { "eta": 70, "faster": 12, "bench": 48, "other": 0 }, "freeDailyQuota": 2500 } }
+"traffic": { "provider": "here", "probes": 0,
+  "here": { "day": "2026-09-30", "used": 130, "byUse": { "eta": 110, "faster": 20 }, "byKind": { "flow": 65, "incidents": 65 },
+    "month": "2026-09", "monthUsed": 130, "dailyCap": null, "accountDailyMax": 150, "deepCoverage": false },
+  "speeds": { "samples": 0, "trips": 0 } }
 ```
 
 - ORS : `usage.keys` dans l'ordre des clés ; `blockedUntil` = clé écartée jusqu'à (ISO), `null` = sert.
-- TomTom : toute requête envoyée compte (réponse en cache = 0). `eta` = `/api/traffic/route`,
-  `faster` = `/api/route/faster`, `bench` = banc. Heure de remise à zéro du quota TomTom : **à
-  vérifier** (console TomTom ou support) ; ici minuit UTC.
+- HERE : toute requête envoyée compte, 2 par rafraîchissement (`flow` + `incidents`). `eta` =
+  `/api/traffic/route`, `faster` = `/api/route/faster`. Mois (`monthUsed`) : sa facturation. `dailyCap`
+  `null` = aucun plafond global ; `accountDailyMax` = rafraîchissements HERE par compte et par jour.
+- `speeds` : échantillons de vitesse des conducteurs en mémoire (30 min), trajets distincts.
 
 **Journal de routage** : table `routing.route_log` (base), pas d'API. Une ligne par réponse de
 `/api/route` et `/faster` : statut, latence, moteur, nouveau trajet ou recalcul, cache, distance,
 durée, étapes, demi-tour dans les 2 premières manœuvres, évitements, erreur. Ni compte ni
 coordonnée. 90 jours.
 
-**Banc** (admin) :
+**Banc** (admin, lecture seule depuis le 30/09 : TomTom retiré, plus de passage) :
 
 | Besoin | Appel |
 |---|---|
-| Lancer un passage | `POST /api/admin/bench/run?slot=matin\|midi\|soir\|nuit` (`slot` facultatif : sans = à la main) |
 | Lire les mesures | `GET /api/admin/bench/runs?since=<ISO ou ms>&limit=` (200 par défaut, 1000 max), du plus récent au plus ancien |
 
-- Passage : 6 trajets suivants de `bench/trajets.json` (curseur tournant en base), 2 requêtes
-  TomTom chacun, 3 avec Valhalla actif ; arrêt anticipé quand le banc a dépensé 75 requêtes TomTom dans la journée. `409`
-  si un passage tourne déjà, `503` sans clé TomTom. Réponse à la fin du passage (durée à mesurer ;
-  le script cron attend 15 min max).
-- Réponse du passage : `slot`, `startedAt`, `trips`, `ok`, `stopped` (raison d'arrêt ou `null`),
-  `nextTrip`, `tomtom` `{bench, benchDailyMax}`, `results[]` : `id`, `ok`, `error`, `engine`,
-  `latencyMs`, `ourDurationS` (moteur), `ourTomtomS` (TomTom, notre route), `bestTomtomS` (meilleure
-  route TomTom), `gapS` (écart), `ourKm`, `bestKm`, `ourMinorKm`, `bestMinorKm`, `uturnStart`, `valhalla`
-  (`null` si Valhalla coupé, sinon `ok`, `error`, `latencyMs`, `durationS`, `tomtomS`, `gapS` contre meilleure
-  route TomTom, `km`, `minorKm`, `uturnStart`).
 - Une mesure (`runs[]`) : `id`, `at`, `slot`, `tripId`, `engine`, `mapVersion`, `ok`, `error`,
-  `latencyMs`, `ourDistanceM`, `ourDurationS`, `ourTomtomS`, `bestDistanceM`, `bestTomtomS`,
-  `gapS`, `ourKmByClass` / `bestKmByClass` (km par classe OSM `highway`, `none` = pas de route
-  voiture : bac), `ourMinorKm` / `bestMinorKm`, `uturnStart`, `steps`, `avoid`, `from`, `to`, `valhalla` (`null` avant phase 2 ou Valhalla
-  coupé ; sinon `mapVersion`, `error`, `latencyMs`, `distanceM`, `durationS`, `tomtomS`, `gapS`, `kmByClass`,
-  `minorKm`, `uturnStart`, `steps`). Même trajet calculé par Valhalla seul, chronométré par TomTom.
+  `latencyMs`, `ourDistanceM`, `ourDurationS`, `ourTomtomS` (TomTom, notre route), `bestDistanceM`,
+  `bestTomtomS` (meilleure route TomTom), `gapS`, `ourKmByClass` / `bestKmByClass` (km par classe OSM
+  `highway`, `none` = pas de route voiture : bac), `ourMinorKm` / `bestMinorKm`, `uturnStart`, `steps`,
+  `avoid`, `from`, `to`, `valhalla` (`null` avant phase 2 ou Valhalla coupé ; sinon `mapVersion`, `error`,
+  `latencyMs`, `distanceM`, `durationS`, `tomtomS`, `gapS`, `kmByClass`, `minorKm`, `uturnStart`, `steps`).
 - Petites routes (P1.3) : `unclassified`, `residential`, `living_street`, `service`. Calculées à
   la lecture depuis les km par classe : définition changeable sans refaire les mesures.
 - Coordonnées gardées : trajets de test fixes, personne derrière.
@@ -557,7 +549,7 @@ Lectures excluent immédiatement données périmées. Tracés enregistrés uniqu
 Seuils initiaux D7.1 : écart durée >10 % ou portion commune <70 %. Aucun lien compte conservé dans tables ombre.
 Webapp peut dessiner GeoJSON ; interface carte correspondante reste à réaliser dans dépôt webapp.
 
-Ombre `/faster` compare candidats dessinés par autre moteur, sans nouvelle requête TomTom.
+Ombre `/faster` compare candidats dessinés par autre moteur, sans nouvelle requête HERE.
 Elle ne mesure donc pas gain trafic complet du détour concurrent. Latences reportées concernent calcul réellement exécuté.
 ORS en ombre suspendu quand budget disponible passe sous réserve configurée.
 `/faster` conserve ORS en mode `ors` ; après secours Valhalla → ORS, réponse `better:null, reason:"fallback"`.

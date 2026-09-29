@@ -171,7 +171,7 @@ function rankScore(index, total) {
  * not, a street or a door is not what is looked for.
  */
 export function kindScore(item, { address = true } = {}) {
-  // TomTom's places bring their own, from their POI types (search/tomtom.js).
+  // A source that knows its places' kind brings it.
   if (Number.isFinite(item.kind)) return item.kind;
   if (item.source === 'ban') return !address && BAN_STREETS.has(item.banType) ? STREET_FOR_PLACE : ADDRESS_SCORE;
   // Photon without a name: a door ("8 rue …").

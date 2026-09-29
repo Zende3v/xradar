@@ -18,8 +18,8 @@ import { routeFacts } from './log.js';
  * - /api/route/faster (kind `faster`, only when the engine was asked for variants): the other
  *   engine draws the same variants (same window, headings, avoid options, jams' polygons,
  *   alternatives) and they are sifted as the engine's were (faster.js) — never timed: no
- *   TomTom request for the shadow. Compared: routes drawn, candidates, the ones TomTom would
- *   have timed (viable), and, for a detour served, the common road of the closest candidate of
+ *   live traffic request for the shadow. Compared: routes drawn, candidates, the ones the live
+ *   traffic would have timed (viable), and, for a detour served, the common road of the closest candidate of
  *   the other engine with it.
  *
  * Measures only in routing.shadow_run: no coordinates, no account, kept config.shadowKeepDays.
@@ -506,7 +506,7 @@ export function createShadow({
 
   /**
    * After a /api/route/faster answer that asked an engine ([compare] from checkFaster; null:
-   * nothing to compare). The other engine draws the same variants; TomTom is never asked.
+   * nothing to compare). The other engine draws the same variants; the live traffic is never asked.
    */
   function afterFaster(res, { plan, compare, avoid, admin }) {
     if (!plan?.shadow || !compare) return;

@@ -4,9 +4,6 @@ const H = 60 * MIN;
 const D = 24 * H;
 // A count from the environment, 0 included (`Number(value) || fallback` would read 0 as unset).
 const count = (value, fallback) => (/^\d+$/.test(String(value ?? '').trim()) ? Number(String(value).trim()) : fallback);
-// Every TomTom use (traffic, /faster, bench, search) waits for TOMTOM_ENABLED=1 (28/09: all cut
-// until the dynamic ETA). Off, the keys read as absent: not one request, whatever the apps ask.
-const TOMTOM_ON = /^(1|true)$/i.test(process.env.TOMTOM_ENABLED || '');
 
 export const config = {
   port: Number(process.env.PORT) || 8080,
@@ -124,59 +121,65 @@ export const config = {
   // The route log (schema routing, routing/log.js): one line per /api/route and /faster answer,
   // no account, no coordinates, kept this many days.
   routeLogKeepDays: 90,
-  // The bench (routing/bench.js, D1.7): fixed France trips (benchTripsFile), benchTripsPerRun per
-  // run, 4 runs a day (deploy/eona-bench.cron). A trip costs 2 TomTom requests, 3 with Valhalla on
-  // (its route timed too); a run stops once the bench spent benchTomtomDailyMax of them today.
-  benchTripsFile: process.env.BENCH_TRIPS_FILE || './bench/trajets.json',
-  benchTripsPerRun: Number(process.env.BENCH_TRIPS_PER_RUN) || 6,
-  benchTomtomDailyMax: Number(process.env.BENCH_TOMTOM_DAILY_MAX) || 75,
-  // Km per road class along a bench route: the road under a sample every benchRoadStepM metres
-  // (longer routes: benchRoadMaxSamples samples at most), found within signRoadMaxDistM.
-  benchRoadStepM: 50,
-  benchRoadMaxSamples: 20000,
-  // The OSM classes counted as minor roads (P1.3). The bench keeps km per class: this can change
-  // without measuring again.
+  // The bench (routing/bench.js, D1.7) measured our routes against TomTom's until 29/09; its runs
+  // stay readable. The OSM classes counted as minor roads (P1.3), for those runs.
   benchMinorRoadClasses: ['unclassified', 'residential', 'living_street', 'service'],
 
-  // TomTom Traffic on the route being followed (key from the service environment, never versioned),
-  // only with TOMTOM_ENABLED=1.
-  tomtomApiKey: (TOMTOM_ON && process.env.TOMTOM_API_KEY) || null,
-  tomtomUrl: process.env.TOMTOM_URL || 'https://api.tomtom.com',
-  // Our route goes back to TomTom as supporting points: one every 30 m at least, 1000 at most.
-  trafficSupportingSpacingM: 30,
-  trafficMaxSupportingPoints: 1000,
+  // HERE Traffic API v7 (traffic/here.js): the live traffic on the route since 30/09, in place of
+  // TomTom. Key from the service environment (drop-in here.conf, never versioned); absent, no live
+  // traffic: the ETA goes on with the engine, EONA and data.gouv. A refresh sends 2 requests (flow,
+  // incidents) over a corridor around the rest of the route (its first hereCorridorMaxM, at most
+  // hereCorridorMaxPoints points, hereCorridorRadiusM either side). Billed past HERE's free tier
+  // (Base Plan): no daily cap asked (Arthur, 29/09) unless HERE_DAILY_CAP; but one account asks at
+  // most once a hereAccountGapS and hereAccountDailyMax times a UTC day, so no loop drains it. A
+  // segment is on the route within hereOnRouteM; slowed from jam factor hereMinJamFactor.
+  hereApiKey: process.env.HERE_API_KEY || null,
+  hereTrafficUrl: process.env.HERE_TRAFFIC_URL || 'https://data.traffic.hereapi.com/v7',
+  hereDeepCoverage: /^(1|true)$/i.test(process.env.HERE_DEEP_COVERAGE || ''),
+  hereDailyCap: count(process.env.HERE_DAILY_CAP, null),
+  hereAccountGapS: 60,
+  hereAccountDailyMax: count(process.env.HERE_ACCOUNT_DAILY_MAX, 150),
+  hereUsageFile: process.env.HERE_USAGE_FILE || './data/here-usage.json',
+  hereTimeoutMs: 12 * 1000,
+  hereCorridorMaxM: 490_000,
+  hereCorridorMaxPoints: 300,
+  hereCorridorStepM: 200,
+  hereCorridorRadiusM: 100,
+  hereOnRouteM: 25,
+  hereMinJamFactor: 2,
+  hereMinSpeedMs: 1,
   trafficMaxPoints: 50_000,
-  // Drivers on the same route share one answer this long.
-  trafficCacheMs: 60 * 1000,
-  trafficTimeoutMs: 12 * 1000,
-  // TomTom requests, counted per UTC day and by use (traffic/budget.js), kept on disk. The free
-  // plan allows about this many a day, every TomTom API together (tiles aside); when TomTom
-  // starts counting again is not documented (to check: TomTom console or support).
-  tomtomFreeDailyQuota: 2500,
-  tomtomUsageFile: process.env.TOMTOM_USAGE_FILE || './data/tomtom-usage.json',
-  // The day's budget (D3.1): never more than tomtomDailyCap requests, under the free quota; each
-  // use within its share (the bench keeps benchTomtomDailyMax). Past a share, that use goes on
-  // without TomTom: the ETA with the engine, EONA and data.gouv. The ETA's recalage (D2.2) is
-  // spaced as its share empties: past each ratio of tomtomEtaSpacing, the apps wait at least that
-  // many seconds between two recalages (`minGapS`). One account asks TomTom for its ETA at most
-  // every trafficTomtomAccountGapS.
-  tomtomDailyCap: count(process.env.TOMTOM_DAILY_CAP, 2300),
-  tomtomShares: { eta: count(process.env.TOMTOM_ETA_SHARE, 1700), faster: count(process.env.TOMTOM_FASTER_SHARE, 400), other: 50 },
-  tomtomEtaSpacing: [[0.5, 600], [0.8, 1200]],
-  trafficTomtomAccountGapS: 60,
+  // The drivers' own speeds (traffic/speeds.js, "Aide au trafic partagé"): anonymous samples during
+  // trips, kept speedSampleKeepMs in memory. Fresh (speedSampleFreshMs) samples within
+  // speedSampleOnRouteM of a route, the same way, cover speedSampleBinM stretches of it; where
+  // they cover speedCoverageSkipRatio of the corridor, HERE is not asked. A stretch slower than
+  // speedSlowRatio of its road's limit is a slowdown (source crowd, kind speed).
+  speedSampleKeepMs: 30 * MIN,
+  speedSampleFreshMs: 10 * MIN,
+  speedSampleMax: 200_000,
+  speedSamplesPerPost: 20,
+  speedPostGapS: 30,
+  speedSampleOnRouteM: 30,
+  speedSampleBinM: 500,
+  speedSampleMinPerBin: 2,
+  speedCoverageSkipRatio: 0.8,
+  speedSlowRatio: 0.6,
+
   // Smart rerouting around traffic (POST /api/route/faster). A variant replaces the route only
-  // when TomTom times it, with traffic, at least rerouteMinGainS and rerouteMinGainRatio of the
-  // time left faster. No new route within rerouteCooldownS of the last one, and twice the gain
+  // when it is, with today's traffic (the engine's time plus the live delays on it), at least
+  // rerouteMinGainS and rerouteMinGainRatio of the time left faster. No new route within rerouteCooldownS of the last one, and twice the gain
   // (rerouteStickyFactor) until rerouteStickyS: no back and forth between two routes.
   rerouteMinGainS: 3 * 60,
   rerouteMinGainRatio: 0.05,
   rerouteCooldownS: 5 * 60,
+  // One faster-route check per account this often at most, whatever the app asks.
+  rerouteCheckGapS: 60,
   rerouteStickyS: 15 * 60,
   rerouteStickyFactor: 2,
   // A slowdown worth going around on its own (sections closer than rerouteJamGapM make one).
   rerouteJamMinDelayS: 60,
   rerouteJamGapM: 1000,
-  // Variants timed by TomTom per check, at most (one TomTom request each).
+  // Variants timed per check, at most (one HERE refresh each).
   rerouteMaxVariants: 3,
 
   // data.gouv traffic (traffic/datagouv.js, D3.2): the DIR's open feeds on Bison Futé (Licence
@@ -203,7 +206,7 @@ export const config = {
   datagouvPointHalfM: 200,
   datagouvSameWayDeg: 90,
 
-  // Drivers' own traffic, besides TomTom (traffic/crowd.js). A "Bouchon" report weighs on
+  // Drivers' own traffic, besides HERE (traffic/crowd.js). A "Bouchon" report weighs on
   // routing once confirmed (2 drivers, an admin's, or made from probes): it covers
   // crowdJamHalfLengthM each side and costs crowdJamDefaultDelayS unless probes measured it.
   // On a route: within crowdOnRouteM, for its way (crowdSameWayDeg).
@@ -266,8 +269,8 @@ export const config = {
   placePoolLimit: 60,
   // Search (/api/search): what a driver types is rarely an address, so a place search
   // (Photon, OpenStreetMap) and the official address search (Base Adresse Nationale) answer
-  // together, TomTom POI Search too once turned on (below). Photon and the BAN are free and need
-  // no key; their answers are kept a few minutes, a failed one is asked again.
+  // together. Both are free and need no key; their answers are kept a few minutes, a failed one is
+  // asked again.
   photonUrl: process.env.PHOTON_URL || 'https://photon.komoot.io',
   banUrl: process.env.BAN_URL || 'https://api-adresse.data.gouv.fr',
   searchMinChars: 2,
@@ -281,25 +284,6 @@ export const config = {
   // Same name, this close: one place with several entrances or buildings.
   searchSameNameM: 400,
   searchPerMinute: 40,
-  // TomTom POI Search (search/tomtom.js): the shops, gyms and the like OpenStreetMap misses
-  // ("leclerc orly"), asked for what is typed that is not plainly an address, from
-  // searchTomtomMinChars characters; its answers are never kept. Off unless
-  // SEARCH_TOMTOM_ENABLED=1 and TOMTOM_ENABLED=1: not one request otherwise. Key: SEARCH_TOMTOM_API_KEY, else the
-  // traffic's TOMTOM_API_KEY. Its own budget (search/budget.js), on disk apart from the traffic's:
-  // searchTomtomDailyMax requests a UTC day and searchTomtomMonthlyMax a UTC month at most
-  // (public pricing: 2500 free Search API requests a month, docs.tomtom.com/pricing), each
-  // counted before it leaves; a budget that cannot be read or saved sends none. After a failure
-  // TomTom rests searchTomtomPauseMs, after a refusal (key, rights, request) searchTomtomBlockMs;
-  // Photon and the BAN answer meanwhile.
-  searchTomtomEnabled: TOMTOM_ON && /^(1|true)$/i.test(process.env.SEARCH_TOMTOM_ENABLED || ''),
-  searchTomtomApiKey: process.env.SEARCH_TOMTOM_API_KEY || process.env.TOMTOM_API_KEY || null,
-  searchTomtomDailyMax: count(process.env.SEARCH_TOMTOM_DAILY_MAX, 100),
-  searchTomtomMonthlyMax: count(process.env.SEARCH_TOMTOM_MONTHLY_MAX, 2000),
-  searchTomtomUsageFile: process.env.SEARCH_TOMTOM_USAGE_FILE || './data/search-tomtom-usage.json',
-  searchTomtomMinChars: 4,
-  searchTomtomPauseMs: MIN,
-  searchTomtomBlockMs: 60 * MIN,
-
   // Identifies us to the open-data servers we download from.
   placeUserAgent: process.env.PLACE_USER_AGENT || 'EONA/1.0 (+https://api.lrda-mercuriale.uk)',
 

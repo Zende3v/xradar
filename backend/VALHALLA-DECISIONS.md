@@ -673,3 +673,14 @@ Péages : violation non mesurable par le banc (pas d'attribut péage dans `signs
 - **Limite de vitesse hors route** : requête tous les 100 m.
 - **Signalements** : rechargés toutes les 30 s, toutes les 90 s après 2 min d'arrêt.
 - **Batterie** (GPS en arrière-plan hors trajet) : pas un sujet pour l'instant (Arthur).
+
+## TomTom remplacé par HERE (30/09, Arthur)
+
+- **Trafic live : HERE Traffic v7**, offre standard ; Deep Coverage plus tard (option `HERE_DEEP_COVERAGE`, tarif Advanced Traffic).
+  Vitesses et incidents dans un couloir autour du reste du trajet, 2 requêtes par rafraîchissement.
+- **Pas de plafond global** (Arthur) : garde par compte, un rafraîchissement HERE par minute et 150 par jour ; `/faster` une fois par minute.
+- **Données EONA d'abord** : vitesses anonymes des conducteurs (« Aide au trafic partagé », clé aléatoire du trajet, 30 min en mémoire).
+  Trajet couvert à 80 % : HERE pas appelé. Plus d'EONA, moins de HERE.
+- `/faster` : temps moteur + retards live ; plus de chronométrage TomTom. Seuil de gain : 3 min et 5 % de l'ETA de l'app.
+- **TomTom retiré** partout : trafic, `/faster`, recherche POI, banc (historique en lecture seule).
+- **Recherche** : Photon + BAN seuls, en attendant une solution plus fiable (choix d'Arthur).

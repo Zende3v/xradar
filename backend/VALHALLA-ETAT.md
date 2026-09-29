@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **29/09/2026 22:20** (Claude : phase 4 lots 1 à 4 déployés, TomTom rallumé). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **30/09/2026** (Claude : TomTom remplacé par HERE + vitesses EONA). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -209,8 +209,24 @@ Revue des autres aspirateurs, décisions d'Arthur :
   TomTom rallumé (drop-in `tomtom-on.conf`, `TOMTOM_ENABLED=1`). `/health` : plafond 2 300, data.gouv 503 stations,
   868 vitesses, 465 événements, aucune erreur.
 
+## TomTom remplacé par HERE (29-30/09, Arthur)
+
+- **HERE Traffic API v7** (offre standard ; Deep Coverage plus tard, `HERE_DEEP_COVERAGE=1`) : vitesses et
+  incidents dans un couloir autour du reste du trajet (`src/traffic/here.js`), 2 requêtes par rafraîchissement.
+  Tarifs relevés sur here.com le 29/09 : Traffic 5 000 gratuites par mois puis 2,33 € les 1 000 ; Advanced
+  Traffic (Deep Coverage) 2 500 gratuites puis 4,66 € les 1 000.
+- Pas de plafond global (Arthur) ; garde par compte : un rafraîchissement par minute, 150 par jour ; `/faster` une
+  vérification par minute. Compteur jour et mois dans `/health` `traffic.here`.
+- **Vitesses EONA** (`src/traffic/speeds.js`, `POST /api/traffic/speeds`) : échantillons anonymes pendant les
+  trajets avec « Aide au trafic partagé » (clé aléatoire du trajet), 30 min en mémoire. Route couverte à 80 % par
+  les conducteurs : HERE pas appelé. Plus d'EONA, moins de HERE.
+- `/faster` : temps = temps moteur + retards live (HERE + conducteurs), plus de chronométrage TomTom.
+- **TomTom retiré** : trafic, `/faster`, recherche POI, banc (historique gardé, lecture seule).
+- Apps : source « here », vitesses partagées, `etaS` envoyé à `/faster`, « À propos ». Android 1.0.1 (16), iOS 1.0.0 (15).
+- **Recherche** : TomTom retiré, Photon + BAN seuls ; solution plus fiable à proposer à Arthur.
+
 ## Prochaine étape
 
-1. Arthur : Codemagic iOS 1.0.0 (14), puis tests téléphone Android 1.0.1 (15) et iOS : ETA, bouchons, ferries, « À propos ».
-2. Suivre la conso TomTom (`/health` `traffic.tomtom`) et caler les seuils de recalage sur mesures.
-3. Phase 5 (CGU, politique), puis phase 6 (fermetures et travaux data.gouv dans Valhalla).
+1. Arthur : accord pour déployer (HERE, suppression TomTom côté VPS : drop-ins et compteurs en quarantaine).
+2. Arthur : moyen de paiement HERE (Base Plan), pour passer le gratuit quand il faudra.
+3. Recherche : choisir la solution (proposée en réponse).

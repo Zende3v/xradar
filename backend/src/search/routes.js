@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
 import { haversine } from '../radars/geo.js';
-import { fold, looksLikeAddress, score } from './rank.js';
-import { tomtomPlaces } from './tomtom.js';
+import { fold, score } from './rank.js';
 
 export const searchRouter = Router();
 
@@ -16,12 +15,10 @@ export const searchRouter = Router();
  *
  *   • Photon (OpenStreetMap): places by name — schools, shops, stations, town halls…
  *   • Base Adresse Nationale: French addresses, official and precise to the house number.
- *   • TomTom POI Search, once turned on (search/tomtom.js): the shops and gyms OpenStreetMap
- *     misses, for what is not plainly an address, within its own daily and monthly budget.
  *
- * Photon and the BAN are free and take no key; their answers are kept a few minutes so a driver
- * typing letter by letter does not hammer them. TomTom's come without Cache-Control: never kept,
- * nor is the answer (no-store). Each account has a ceiling.
+ * Both are free and take no key; their answers are kept a few minutes so a driver typing letter
+ * by letter does not hammer them. The answer itself is never kept (no-store). Each account has a
+ * ceiling. (TomTom POI Search left on 29/09.)
  */
 searchRouter.get('/', async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -49,10 +46,6 @@ searchRouter.get('/', async (req, res) => {
 export async function searchPlaces(query, around, allow = () => true) {
   const key = cacheKey(query, around);
   const asked = [photon, ban];
-  // TomTom for a place's name, long enough to mean something, if it may be asked now.
-  if (query.length >= config.searchTomtomMinChars && !looksLikeAddress(query) && tomtomPlaces.available()) {
-    asked.push(tomtom);
-  }
   const known = asked.map((source) => source.cached(key));
   const cached = known.every(Boolean);
   if (!cached && !allow()) return null;
@@ -186,7 +179,7 @@ function merge(lists, around, query) {
   return out.map((item) => ({
     id: item.id,
     name: item.name,
-    // One line under the name: what it is, its street, its town — and whose data (© TomTom).
+    // One line under the name: what it is, its street, its town — and whose data when it says.
     subtitle: [item.category, item.address, item.city, item.attribution].filter(Boolean).join(' · '),
     lat: item.lat,
     lon: item.lon,
@@ -281,22 +274,13 @@ function source(label, ask) {
 
 const photon = source('photon', fromPhoton);
 const ban = source('adresse', fromBAN);
-/**
- * TomTom's answers come without Cache-Control: none is kept, none is shared between two searches.
- * Nothing sent (off, resting, budget spent): no places.
- */
-const tomtom = {
-  cached: () => null,
-  ask: (key, query, around) => tomtomPlaces.search(query, around).then((items) => items ?? [], (e) => failed('tomtom', e)),
-};
-
 /** A source that failed: no places, and why in the logs. */
 function failed(label, e) {
   console.warn(`[search] ${label} —`, reason(e));
   return [];
 }
 
-/** Why a source failed, for the logs: never its URL (the query, TomTom's key are in it), never its message. */
+/** Why a source failed, for the logs: never its URL (the query is in it), never its message. */
 function reason(e) {
   if (e?.name === 'TimeoutError' || e?.name === 'AbortError') return 'timeout';
   if (Number.isInteger(e?.status)) return `HTTP ${e.status}`;

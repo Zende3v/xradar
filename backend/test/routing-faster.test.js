@@ -3,8 +3,8 @@ import { after, before, describe, it } from 'node:test';
 import { checkFaster, closestTo, drawVariants } from '../src/routing/faster.js';
 import { appRoute, line, trapNetwork } from './helpers/routing.js';
 
-// /api/route/faster's check (faster.js) with a fake TomTom ([time]) and fake engines ([draw]):
-// the same check whatever the engine; the shadow's drawing never times anything.
+// /api/route/faster's check (faster.js) with a fake live traffic ([traffic]) and fake engines
+// ([draw]): the same check whatever the engine; the shadow's drawing never times anything.
 const net = trapNetwork(before, after);
 
 const A = { lat: 48.0, lon: 2.0 };
@@ -13,17 +13,16 @@ const B = { lat: 48.0, lon: 2.2 };
 const ROUTE = line(A, B, 150);
 const DETOUR = line(A, B, 150, 0.02);
 const POINTS = ROUTE.map(([lon, lat]) => [lat, lon]);
-const noPause = async () => {};
 
-/** TomTom: the route now (20 min, a 10 min jam from 5 to 8 km), then any variant (800 s). */
-function tomtom() {
+/** The live traffic: on the route now, a 10 min jam from 5 to 8 km; on any variant, nothing. */
+function live() {
   const calls = [];
-  const time = async (points) => {
+  const traffic = async (points) => {
     calls.push(points.length);
-    if (calls.length === 1) return { travelS: 1200, crowdS: 0, sections: [{ fromM: 5000, toM: 8000, delayS: 600, level: 'heavy' }] };
-    return { travelS: 800, crowdS: 0, sections: [] };
+    if (calls.length === 1) return { delayS: 600, crowdS: 0, sections: [{ fromM: 5000, toM: 8000, delayS: 600, level: 'heavy' }] };
+    return { delayS: 0, crowdS: 0, sections: [] };
   };
-  return { time, calls };
+  return { traffic, calls };
 }
 
 /** An engine drawing the detour around the jams, and the route itself plus the detour as alternatives. */
@@ -44,14 +43,16 @@ function engine(name, { outage = null } = {}) {
 const shapeOf = ({ label, from, to, bearings, avoid, polygons, alternatives }) => ({ label, from, to, bearings, avoid, polygons, alternatives });
 
 describe('faster check', () => {
-  it('draws with any engine, times with TomTom, and hands back the detour with its engine', async () => {
+  it('draws with any engine, times with the live traffic, and hands back the detour with its engine', async () => {
     for (const name of ['ors', 'valhalla']) {
-      const t = tomtom();
+      const t = live();
       const e = engine(name);
-      const { answer, compare } = await checkFaster(POINTS, { avoid: ['tolls'], draw: e.draw, time: t.time, pause: noPause });
+      const { answer, compare } = await checkFaster(POINTS, { avoid: ['tolls'], draw: e.draw, traffic: t.traffic });
       assert.equal(answer.better.route.engine, name);
-      assert.equal(answer.better.gainS, 400);
-      assert.equal(answer.better.route.durationS, 800);
+      // The route over the window: its engine time (900 s) and the jam (600 s); the detour: 1000 s.
+      assert.equal(answer.currentS, 1500);
+      assert.equal(answer.better.gainS, 500);
+      assert.equal(answer.better.route.durationS, 1000);
       assert.equal(answer.variants, 1);
       assert.deepEqual(e.asks.map((ask) => ask.label), ['around', 'alternatives']);
       const [around, alternatives] = e.asks;
@@ -72,12 +73,12 @@ describe('faster check', () => {
   });
 
   it('answers "fallback" when the engine is down, before timing any variant (D5.2)', async () => {
-    const t = tomtom();
+    const t = live();
     const e = engine('valhalla', { outage: 'unavailable' });
     const warn = console.warn;
     console.warn = () => {};
     try {
-      const { answer, compare } = await checkFaster(POINTS, { draw: e.draw, time: t.time, pause: noPause });
+      const { answer, compare } = await checkFaster(POINTS, { draw: e.draw, traffic: t.traffic });
       assert.equal(answer.better, null);
       assert.equal(answer.reason, 'fallback');
       assert.equal(compare, null);
@@ -89,12 +90,11 @@ describe('faster check', () => {
 
   it('asks no engine during the cooldown nor without a jam worth it', async () => {
     const e = engine('ors');
-    const cool = await checkFaster(POINTS, { sinceRerouteS: 10, draw: e.draw, time: tomtom().time, pause: noPause });
+    const cool = await checkFaster(POINTS, { sinceRerouteS: 10, draw: e.draw, traffic: live().traffic });
     assert.deepEqual(cool, { answer: { better: null, reason: 'cooldown' }, compare: null });
     const calm = await checkFaster(POINTS, {
       draw: e.draw,
-      time: async () => ({ travelS: 1200, crowdS: 0, sections: [{ fromM: 5000, toM: 6000, delayS: 30, level: 'slow' }] }),
-      pause: noPause,
+      traffic: async () => ({ delayS: 30, crowdS: 0, sections: [{ fromM: 5000, toM: 6000, delayS: 30, level: 'slow' }] }),
     });
     assert.equal(calm.answer.reason, 'no significant jam');
     assert.equal(calm.compare, null);
@@ -103,10 +103,10 @@ describe('faster check', () => {
 });
 
 describe('shadow drawing', () => {
-  it('draws the same asks with the other engine and sifts them the same way, never asking TomTom', async () => {
-    const t = tomtom();
+  it('draws the same asks with the other engine and sifts them the same way, never asking the live traffic', async () => {
+    const t = live();
     const served = engine('ors');
-    const { compare } = await checkFaster(POINTS, { avoid: ['tolls'], draw: served.draw, time: t.time, pause: noPause });
+    const { compare } = await checkFaster(POINTS, { avoid: ['tolls'], draw: served.draw, traffic: t.traffic });
     const timed = t.calls.length;
     const other = engine('valhalla');
     const drawn = await drawVariants(compare.plan, other.draw);
@@ -123,7 +123,7 @@ describe('shadow drawing', () => {
   });
 
   it('says how far the other engine\'s closest candidate is from the detour', async () => {
-    const { compare } = await checkFaster(POINTS, { draw: engine('ors').draw, time: tomtom().time, pause: noPause });
+    const { compare } = await checkFaster(POINTS, { draw: engine('ors').draw, traffic: live().traffic });
     // The other engine only finds a detour bent the other way (south).
     const south = line(A, B, 150, -0.02);
     const drawn = await drawVariants(compare.plan, async () => ({ engine: 'valhalla', routes: [appRoute('valhalla', south, { durationS: 1000 })], error: null }));

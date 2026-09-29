@@ -8,6 +8,7 @@ import com.eona.app.BuildConfig
 import com.eona.app.core.drive.AlertBeeps
 import com.eona.app.core.drive.EtaEstimator
 import com.eona.app.core.drive.EtaPair
+import com.eona.app.core.drive.SpeedSampler
 import com.eona.app.core.drive.StopTraffic
 import com.eona.app.core.drive.TrafficRefresh
 import com.eona.app.core.drive.TripProgress
@@ -146,6 +147,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** Radars + reports + radar-car zones, pre-combined so the main combine stays ≤5 flows. */
     private val roadObjects = combine(radars, reports, zones) { r, rep, z -> Triple(r, rep, z) }
 
+    /** The trip's speeds for EONA's own traffic ("Aide au trafic partagé"); null without a trip. */
+    private var speedSampler: SpeedSampler? = null
     /** The route's traffic by source (D2.6, D2.7): the map and the ETA read it merged ([traffic]). */
     private var trafficParts: TrafficParts? = null
     /** When the ETA asks TomTom again (D2.2). */
@@ -561,6 +564,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 val current = trip ?: return@collect
                 if (sample == null) return@collect
                 current.add(sample) { stopTraffic(sample) }
+                sendSpeeds(sample)
                 // The arrival the dock announces, kept at 25, 50 and 75 % of the way (D1.1).
                 if (current.awaitsCheckpoint) {
                     ActiveTripRepository.route.value?.let { route -> current.checkpoint(route, remainingShare(route), shownArrival(route), etaPair(route)) }
@@ -870,7 +874,12 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Another trip: the last arrival card goes, never two at once.
         arrival.value = null
         val current = trip
-        if (current == null) trip = TripRecorder(destination.name, PLATFORM, APP_VERSION) else current.retarget(destination.name)
+        if (current == null) {
+            trip = TripRecorder(destination.name, PLATFORM, APP_VERSION)
+            speedSampler = SpeedSampler()
+        } else {
+            current.retarget(destination.name)
+        }
         // A navigation bug report joins this trip, to this destination, from now on.
         trip?.let { BugTripTrace.driving(it, GeoPoint(destination.lat, destination.lon)) }
     }
@@ -895,6 +904,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private fun finalizeTrip() {
         val finished = trip ?: return
         trip = null
+        speedSampler = null
         arrivalClock.reset()
         BugTripTrace.ended()
         // Arrived, or stopped by the driver once under way: the HUD shows the trip's summary
@@ -1004,7 +1014,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val previous = trafficParts?.takeIf { it.routeMeters == rp.totalMeters }
         val parts = TrafficParts(
             routeMeters = rp.totalMeters,
-            tomtom = if (answer.tomtom) placed.filter { it.source == TrafficStretch.TOMTOM } else previous?.tomtom.orEmpty(),
+            tomtom = if (answer.tomtom) placed.filter { it.source == TrafficStretch.HERE || it.source == TrafficStretch.TOMTOM } else previous?.tomtom.orEmpty(),
             travelSeconds = if (answer.tomtom) answer.travelSeconds else previous?.travelSeconds,
             tomtomFrom = if (answer.tomtom) start else previous?.tomtomFrom ?: 0.0,
             crowd = placed.filter { it.source == TrafficStretch.CROWD },
@@ -1048,7 +1058,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         lastFasterCheckAt = now
         try {
             val since = lastTrafficRerouteAt?.let { ((now - it) / 1000).toInt() }
-            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since) ?: return
+            val etaSeconds = ActiveTripRepository.route.value?.let { secondsLeft(it).roundToInt() }
+            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since, etaSeconds) ?: return
             if (version != routeVersion || ActiveTripRepository.destination.value != destination) return
             lastTrafficRerouteAt = System.currentTimeMillis()
             trip?.tookFaster()
@@ -1519,6 +1530,19 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
      * go. Off the route for a moment (a detour before the recalculation), the last place known on it
      * holds; a new route starts whole again.
      */
+    /**
+     * A fix of the trip under way goes to EONA's own traffic with "Aide au trafic partagé":
+     * anonymous, a sample every few seconds, sent by batches (SpeedSampler).
+     */
+    private fun sendSpeeds(fix: LocationSample) {
+        val sampler = speedSampler ?: return
+        if (!AppPreferences.settings.value.sharedTraffic || !_tripUnderway.value || ActiveTripRepository.start.value != null) return
+        val now = System.currentTimeMillis()
+        sampler.add(fix, driveState.value.speedLimitKmh, now)
+        val batch = sampler.due(now) ?: return
+        viewModelScope.launch { trafficApi.speeds(sampler.tripKey, batch, AccountRepository.token) }
+    }
+
     /** Seconds left on [route] for the driver now: the dynamic ETA (EtaEstimator, D2.1), with [with] traffic. */
     private fun secondsLeft(route: Route, with: RouteTraffic? = traffic.value): Double {
         val routeMeters = routeMetersOf(route)

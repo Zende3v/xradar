@@ -30,8 +30,10 @@ data class TrafficStretch(
     val kind: String? = null,
 ) {
     companion object {
-        /** A section the backend sends without a source is TomTom's. */
+        /** A section the backend sends without a source is TomTom's (the live source before HERE). */
         const val TOMTOM = "tomtom"
+        /** HERE's live traffic, since 30/09. */
+        const val HERE = "here"
         const val CROWD = "crowd"
         const val DATAGOUV = "datagouv"
     }
@@ -84,7 +86,8 @@ data class TrafficAnswer(
 
 /**
  * The traffic of the route being followed, by source (D2.6, D2.7), in metres of the app's own
- * route ([routeMeters] long): TomTom's last answer ([tomtom], [travelSeconds] from [tomtomFrom]),
+ * route ([routeMeters] long): the live source's last answer ([tomtom]: HERE's since 30/09,
+ * [travelSeconds] from [tomtomFrom] when it gives one),
  * the drivers' jams and data.gouv's, each whole. [merged] joins them the way the backend does: the
  * drivers' jams where they cost more than TomTom, then data.gouv for its extra only (a closure
  * always), and only when asked: with and without it, the two ETAs. Same rules as the iOS app.
@@ -105,10 +108,11 @@ data class TrafficParts(
         return RouteTraffic(routeMeters, all.sortedBy { it.fromMeters }, worthChecking, travelSeconds, tomtomFrom)
     }
 
-    /** The sources that said something on this route ("tomtom" once it answered). */
+    /** The sources that said something on this route (the live one by its own name: here, tomtom). */
     val sources: Set<String>
         get() = buildSet {
-            if (travelSeconds != null || tomtom.isNotEmpty()) add(TrafficStretch.TOMTOM)
+            tomtom.forEach { add(it.source) }
+            if (travelSeconds != null && tomtom.isEmpty()) add(TrafficStretch.TOMTOM)
             if (crowd.isNotEmpty()) add(TrafficStretch.CROWD)
             if (datagouv.isNotEmpty()) add(TrafficStretch.DATAGOUV)
         }

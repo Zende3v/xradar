@@ -3,7 +3,7 @@ import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 /**
- * A small JSON state kept on disk so it survives a restart (the ORS keys' counters, TomTom's):
+ * A small JSON state kept on disk so it survives a restart (the ORS keys' counters, HERE's):
  * read once, the first time it is needed; written a moment after it changes ([snapshot] gives
  * what to write then), through a temporary file renamed over the old one — a crash mid-write
  * never leaves half a file. A second change within [delayMs] joins the same write.

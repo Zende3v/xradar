@@ -13,7 +13,7 @@ import {
 } from './helpers/routing.js';
 
 // /api/route and /api/route/faster over HTTP (127.0.0.1, an ephemeral port), with the real
-// façade, shadow and cache over fake engines, a fake TomTom and fake accounts: no network, no
+// façade, shadow and cache over fake engines, a fake live traffic and fake accounts: no network, no
 // database.
 const net = trapNetwork(before, after);
 
@@ -29,7 +29,7 @@ const STEP_KEYS = ['distanceM', 'durationS', 'exit', 'exitNumber', 'location', '
 const servers = [];
 after(() => Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve)))));
 
-async function setup({ mode = 'ors', ors = fakeOrs(), valhalla = fakeValhalla(), faster, time } = {}) {
+async function setup({ mode = 'ors', ors = fakeOrs(), valhalla = fakeValhalla(), faster, traffic } = {}) {
   let current = mode;
   const routing = createRoutingEngine({
     ors,
@@ -54,8 +54,8 @@ async function setup({ mode = 'ors', ors = fakeOrs(), valhalla = fakeValhalla(),
     accounts: { accessFor: () => ({ canNavigate: true }), tripCheck: () => ({ allowed: true, isNew: false }), countTrip: () => {} },
     guard: { cachedRoute, keepRoute, spendRoute: () => ({ ok: true }) },
     log: (entry) => { events.push('answered'); logs.push(entry); },
-    faster: faster ?? ((points, options) => checkFaster(points, { ...options, time, pause: async () => {} })),
-    tomtomReady: () => true,
+    faster: faster ?? ((points, options) => checkFaster(points, { ...options, traffic })),
+    liveReady: () => true,
   });
   const app = express();
   app.use(express.json({ limit: '3mb' }));
@@ -183,14 +183,15 @@ describe('/api/route/faster', () => {
   const DETOUR = line(A, B, 150, 0.02);
   const body = { coordinates: ROUTE, avoid: ['tolls'] };
 
-  function tomtom() {
+  /** The live traffic: a 10 min jam from 5 to 8 km on the route, nothing on any variant. */
+  function live() {
     const calls = [];
-    const time = async (points) => {
+    const traffic = async (points) => {
       calls.push(points.length);
-      if (calls.length === 1) return { travelS: 1200, crowdS: 0, sections: [{ fromM: 5000, toM: 8000, delayS: 600, level: 'heavy' }] };
-      return { travelS: 800, crowdS: 0, sections: [] };
+      if (calls.length === 1) return { delayS: 600, crowdS: 0, sections: [{ fromM: 5000, toM: 8000, delayS: 600, level: 'heavy' }] };
+      return { delayS: 0, crowdS: 0, sections: [] };
     };
-    return { time, calls };
+    return { traffic, calls };
   }
   const orsDrawing = () => fakeOrs({
     respond: (b) => (b.alternative_routes
@@ -203,19 +204,19 @@ describe('/api/route/faster', () => {
       : [appRoute('valhalla', DETOUR, { durationS: 1000 })]),
   });
 
-  it('mode ors: ORS draws as in phase 1; Valhalla draws the same in shadow, without TomTom', async () => {
-    const t = tomtom();
-    const ctx = await setup({ ors: orsDrawing(), valhalla: valhallaDrawing(), time: t.time });
+  it('mode ors: ORS draws as in phase 1; Valhalla draws the same in shadow, without live traffic', async () => {
+    const t = live();
+    const ctx = await setup({ ors: orsDrawing(), valhalla: valhallaDrawing(), traffic: t.traffic });
     const r = await call(ctx.server, 'POST', '/api/route/faster', { ...as('driver'), body });
     assert.equal(r.status, 200);
     assert.equal(r.json.better.route.engine, 'ors');
-    assert.equal(r.json.better.gainS, 400);
+    assert.equal(r.json.better.gainS, 500);
     assert.deepEqual(Object.keys(r.json.better.route).sort(), ROUTE_KEYS);
     assert.equal(ctx.ors.bodies.length, 2);
     assert.deepEqual(ctx.ors.bodies[0].options.avoid_features, ['tollways']);
     assert.equal(t.calls.length, 2);
     await ctx.queue.idle();
-    assert.equal(t.calls.length, 2); // no TomTom for the shadow
+    assert.equal(t.calls.length, 2); // no live traffic for the shadow
     assert.deepEqual(ctx.valhalla.calls.map((c) => c.options.alternates), [0, 3]);
     assert.equal(ctx.lines.length, 1);
     const [measure] = ctx.lines;
@@ -228,15 +229,15 @@ describe('/api/route/faster', () => {
   });
 
   it('mode all: Valhalla draws, no ORS key needed; "fallback" when Valhalla fails or served the route through ORS', async () => {
-    const t = tomtom();
-    const ctx = await setup({ mode: 'all', ors: fakeOrs({ configured: false }), valhalla: valhallaDrawing(), time: t.time });
+    const t = live();
+    const ctx = await setup({ mode: 'all', ors: fakeOrs({ configured: false }), valhalla: valhallaDrawing(), traffic: t.traffic });
     const r = await call(ctx.server, 'POST', '/api/route/faster', { ...as('admin'), body });
     assert.equal(r.status, 200);
     assert.equal(r.json.better.route.engine, 'valhalla');
     await ctx.queue.idle();
     assert.equal(ctx.lines[0].ors.error, 'not_configured');
 
-    // A driver whose route ORS served for a failing Valhalla gets no detour, and TomTom is not asked.
+    // A driver whose route ORS served for a failing Valhalla gets no detour, and the live traffic is not asked.
     let fail = true;
     const flaky = fakeValhalla({
       routes: (from, to) => {
@@ -244,8 +245,8 @@ describe('/api/route/faster', () => {
         return [appRoute('valhalla', line(from, to))];
       },
     });
-    const t2 = tomtom();
-    const ctx2 = await setup({ mode: 'all', valhalla: flaky, time: t2.time });
+    const t2 = live();
+    const ctx2 = await setup({ mode: 'all', valhalla: flaky, traffic: t2.traffic });
     const route = await call(ctx2.server, 'GET', trip().path, as('driver'));
     assert.equal(route.json.engine, 'ors');
     fail = false;
@@ -258,10 +259,10 @@ describe('/api/route/faster', () => {
     assert.notEqual(other.json.reason, 'fallback');
     await ctx2.queue.idle();
 
-    // Valhalla down (its breaker open): "fallback" for everyone, before TomTom.
-    const t3 = tomtom();
+    // Valhalla down (its breaker open): "fallback" for everyone, before the live traffic.
+    const t3 = live();
     const down = fakeValhalla({ routes: () => { throw new ValhallaError(VALHALLA_ERROR.UNAVAILABLE, 'x'); } });
-    const ctx3 = await setup({ mode: 'all', valhalla: down, time: t3.time });
+    const ctx3 = await setup({ mode: 'all', valhalla: down, traffic: t3.traffic });
     for (let i = 0; i < 3; i++) await call(ctx3.server, 'GET', trip().path, as('driver'));
     const blocked = await call(ctx3.server, 'POST', '/api/route/faster', { ...as('other'), body });
     assert.deepEqual(blocked.json, { better: null, reason: 'fallback' });
@@ -269,7 +270,7 @@ describe('/api/route/faster', () => {
     await ctx3.queue.idle();
   });
 
-  it('refuses as before: 503 without TomTom, or without ORS when ORS draws; 400 on bad coordinates', async () => {
+  it('refuses as before: 503 without live traffic, or without ORS when ORS draws; 400 on bad coordinates', async () => {
     const ctx = await setup({ ors: fakeOrs({ configured: false }), valhalla: null });
     const r = await call(ctx.server, 'POST', '/api/route/faster', { ...as('driver'), body });
     assert.equal(r.status, 503);

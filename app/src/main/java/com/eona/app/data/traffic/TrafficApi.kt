@@ -2,6 +2,7 @@ package com.eona.app.data.traffic
 
 import com.eona.app.BuildConfig
 import com.eona.app.core.drive.Slowdown
+import com.eona.app.core.drive.SpeedSampler
 import com.eona.app.core.model.GeoPoint
 import com.eona.app.core.model.TrafficAnswer
 import com.eona.app.core.model.TrafficLevel
@@ -40,9 +41,11 @@ class TrafficApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         points.forEach { coords.put(JSONArray().put(it.lon).put(it.lat)) }
         val body = JSONObject()
             .put("coordinates", coords)
+            // "live" for today's backend, "tomtom" for one from before HERE.
+            .put("live", tomtom)
             .put("tomtom", tomtom)
             .put("raw", true)
-            .put("sources", JSONArray().put(TrafficStretch.DATAGOUV))
+            .put("sources", JSONArray().put(TrafficStretch.DATAGOUV).put(TrafficStretch.HERE))
         if (aheadMeters != null) body.put("aheadM", Math.round(aheadMeters))
         runCatching {
             client.newCall(post("/api/traffic/route", body, token)).execute().use { r ->
@@ -68,6 +71,30 @@ class TrafficApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 if (r.isSuccessful) JSONObject(r.body?.string() ?: "").optBoolean("known") else null
             }
         }.getOrNull()
+    }
+
+    /**
+     * The driver's speeds during a trip ("Aide au trafic partagé"), anonymous: only [tripKey], a
+     * random key of the trip, goes with them. False when the backend did not take them.
+     */
+    suspend fun speeds(tripKey: String, samples: List<SpeedSampler.Sample>, token: String?): Boolean = withContext(Dispatchers.IO) {
+        if (samples.isEmpty()) return@withContext true
+        val list = JSONArray()
+        samples.forEach { s ->
+            list.put(
+                JSONObject()
+                    .put("lat", s.lat)
+                    .put("lon", s.lon)
+                    .put("course", Math.round(s.course))
+                    .put("speedKmh", Math.round(s.speedKmh))
+                    .put("limitKmh", s.limitKmh ?: JSONObject.NULL)
+                    .put("t", s.timeMs),
+            )
+        }
+        val body = JSONObject().put("tripKey", tripKey).put("samples", list)
+        runCatching {
+            client.newCall(post("/api/traffic/speeds", body, token)).execute().use { it.isSuccessful }
+        }.getOrDefault(false)
     }
 
     /** "Non" to "Ralentissement du trafic ?": the driver's recent probes are taken back. */
@@ -102,8 +129,13 @@ class TrafficApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 kind = if (s.isNull("kind")) null else s.optString("kind").ifBlank { null },
             )
         }
-        // An older backend answers without "tomtom": it asked TomTom whenever it had a key.
-        val tomtom = if (o.has("tomtom")) o.optBoolean("tomtom") else !o.isNull("travelS")
+        // Whether the live source answered: "live" since HERE, "tomtom" before; an older backend
+        // says neither: it asked TomTom whenever it had a key.
+        val tomtom = when {
+            o.has("live") -> o.optBoolean("live")
+            o.has("tomtom") -> o.optBoolean("tomtom")
+            else -> !o.isNull("travelS")
+        }
         return TrafficAnswer(
             totalMeters = o.optDouble("totalM", 0.0),
             stretches = stretches,

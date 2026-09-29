@@ -82,7 +82,7 @@ function tripEventsShape(value) {
 const TRIP_MEASURE_KEYS = ['arrived', 'departedAt', 'manualStart', 'retargeted', 'plannedMeters', 'pausedSeconds', 'uncertainSeconds',
   'etaChecks', 'recalcCount', 'fasterCount', 'engines', 'mapVersion', 'appVersion', 'platform', 'etaMode', 'trafficSources'];
 const TRIP_ENGINES = ['ors', 'osrm', 'valhalla', 'unknown'];
-const TRIP_TRAFFIC_SOURCES = ['tomtom', 'crowd', 'datagouv', 'sytadin'];
+const TRIP_TRAFFIC_SOURCES = ['tomtom', 'here', 'crowd', 'datagouv', 'sytadin'];
 const TRIP_PLATFORMS = ['android', 'ios'];
 // The ETA is noted at departure and at 25, 50 and 75 % of the trip, once each.
 const TRIP_ETA_CHECKPOINTS = [0, 25, 50, 75];

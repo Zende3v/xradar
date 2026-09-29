@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
 import { accountStore } from '../accounts/store.js';
-import { tomtomAllows } from '../traffic/budget.js';
+import { hereAllows } from '../traffic/budget.js';
 import { routing as defaultRouting } from './engine.js';
 import { checkFaster } from './faster.js';
 import { cachedRoute, keepRoute, spendRoute } from './guard.js';
@@ -21,9 +21,11 @@ export function createRouteRouter({
   guard = { cachedRoute, keepRoute, spendRoute },
   log = logRoute,
   faster = checkFaster,
-  tomtomReady = () => Boolean(config.tomtomApiKey) && tomtomAllows('faster'),
+  liveReady = () => hereAllows(),
 } = {}) {
   const router = Router();
+  /** When each account last had a faster-route check (rerouteCheckGapS). */
+  const lastCheckAt = new Map();
 
   /**
    * GET /api/route?from=lat,lon&to=lat,lon[&avoid=tolls,highways,ferries,traffic]
@@ -108,15 +110,16 @@ export function createRouteRouter({
   });
 
   /**
-   * POST /api/route/faster  { coordinates: [[lon, lat], …], avoid?: ["tolls", "highways"], sinceRerouteS? }
+   * POST /api/route/faster  { coordinates: [[lon, lat], …], avoid?: ["tolls", "highways"], sinceRerouteS?, etaS? }
    * The rest of the route being followed (from the driver to the destination) against variants
    * around its big traffic jams, drawn by the engine that serves this account (ORS or Valhalla),
-   * all timed by TomTom with today's traffic: a variant comes back (`better`) only when it saves
-   * enough time. See faster.js. When this account's engine is Valhalla and Valhalla fails, or
+   * each timed as the engine's time plus the live traffic on it (HERE, the drivers'): a variant
+   * comes back (`better`) only when it saves enough time ([etaS], the app's ETA, sets the share of
+   * the time left). One check per account a rerouteCheckGapS at most (429). See faster.js. When this account's engine is Valhalla and Valhalla fails, or
    * served its last route through ORS, no detour: `reason: "fallback"` (D5.2). Its route carries
    * `engine` and `mapVersion` like /api/route. Every answer to an account goes to the route
    * log: why there is no detour (`reason`) as its error. Then the other engine draws the same
-   * variants in shadow, without TomTom.
+   * variants in shadow, without live traffic.
    */
   router.post('/faster', async (req, res) => {
     const facts = { kind: 'faster' };
@@ -127,11 +130,15 @@ export function createRouteRouter({
     if (!accounts.accessFor(account).canNavigate) {
       return answer(403, { error: 'subscription required' });
     }
-    // TomTom times the variants; the engine of this account draws them.
+    // The live traffic times the variants; the engine of this account draws them.
     const plan = routing.plan(account);
-    if (!tomtomReady() || (plan.primary === 'ors' && !routing.orsConfigured())) {
+    if (!liveReady() || (plan.primary === 'ors' && !routing.orsConfigured())) {
       return answer(503, { error: 'rerouting unavailable' });
     }
+    // One check at a time per account: a check asks the live traffic for each variant.
+    const now = Date.now();
+    if (now - (lastCheckAt.get(account.id) ?? 0) < config.rerouteCheckGapS * 1000) return answer(429, { error: 'too many checks' });
+    lastCheckAt.set(account.id, now);
     const coords = req.body?.coordinates;
     if (!Array.isArray(coords) || coords.length < 2 || coords.length > config.trafficMaxPoints) {
       return answer(400, { error: 'coordinates [[lon,lat],...] required' });
@@ -146,6 +153,7 @@ export function createRouteRouter({
     const avoid = Array.isArray(req.body.avoid) ? req.body.avoid.map(String) : [];
     facts.avoid = avoid;
     const since = Number(req.body.sinceRerouteS);
+    const etaS = Number(req.body.etaS);
     // A failing Valhalla, or a route ORS served in its place: no detour, nothing spent (D5.2).
     if (plan.primary === 'valhalla' && (routing.valhallaBlocked() || routing.servedFallback(account.id))) {
       return answer(200, { better: null, reason: 'fallback' }, { error: 'fallback' });
@@ -154,6 +162,7 @@ export function createRouteRouter({
       const { answer: result, compare } = await faster(points, {
         avoid,
         sinceRerouteS: Number.isFinite(since) && since >= 0 ? since : null,
+        etaS: Number.isFinite(etaS) && etaS > 0 ? etaS : null,
         draw: routing.drawer(plan.primary),
       });
       answer(200, result, result.better ? routeFacts(result.better.route) : { error: result.reason ?? null });

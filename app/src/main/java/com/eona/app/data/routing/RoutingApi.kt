@@ -63,12 +63,14 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
      * [sinceRerouteSeconds], the time since the last switch for traffic, makes it stricter for
      * a while. Null otherwise, or when the check failed.
      */
-    suspend fun faster(remaining: List<GeoPoint>, avoid: List<String>, sinceRerouteSeconds: Int?): FasterRoute? = withContext(Dispatchers.IO) {
+    suspend fun faster(remaining: List<GeoPoint>, avoid: List<String>, sinceRerouteSeconds: Int?, etaSeconds: Int? = null): FasterRoute? = withContext(Dispatchers.IO) {
         if (remaining.size < 2) return@withContext null
         val coords = JSONArray()
         remaining.forEach { coords.put(JSONArray().put(it.lon).put(it.lat)) }
         val body = JSONObject().put("coordinates", coords).put("avoid", JSONArray(avoid))
         if (sinceRerouteSeconds != null) body.put("sinceRerouteS", sinceRerouteSeconds)
+        // The app's ETA: the backend weighs the gain against the time left.
+        if (etaSeconds != null) body.put("etaS", etaSeconds)
         val request = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/api/route/faster")
             .post(body.toString().toRequestBody(JSON))
