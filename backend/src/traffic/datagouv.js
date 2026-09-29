@@ -11,7 +11,8 @@ import { angleDiff, gridOf, headingAt, project } from '../routing/geometry.js';
  * - Events (DATEX II situations): closures, works, incidents and queues, placed by their TPEG
  *   points. They say where, not how long: a closure is `closed`, the rest `slow` or `jam`, no delay.
  * All in memory, each fetch replacing the last; a feed that fails keeps what it had until it is
- * too old (datagouvSpeedsMaxAgeMs, the events' own end). Served behind the switch
+ * too old (datagouvSpeedsMaxAgeMs, the events' own end). Fetched with their ETag: the events'
+ * file, rebuilt hourly by Bison Futé, is not downloaded again every 6 min. Served behind the switch
  * trafficDatagouv (D2.6): its stretches carry `source: "datagouv"`.
  */
 
@@ -163,19 +164,22 @@ class DatagouvStore {
     this.timers = [];
   }
 
+  // A feed unchanged since the last fetch (304) keeps what it gave: nothing downloaded again.
   async refreshStations() {
     const csv = await fetchText(config.datagouvStationsUrl, 'latin1');
-    this.stations = await placeStations(parseStations(csv));
+    if (csv != null) this.stations = await placeStations(parseStations(csv));
     this.at.stations = Date.now();
   }
 
   async refreshSpeeds() {
-    this.speeds = parseSpeeds(await fetchText(config.datagouvSpeedsUrl));
+    const xml = await fetchText(config.datagouvSpeedsUrl);
+    if (xml != null) this.speeds = parseSpeeds(xml);
     this.at.speeds = Date.now();
   }
 
   async refreshEvents() {
-    this.events = parseEvents(await fetchText(config.datagouvEventsUrl));
+    const xml = await fetchText(config.datagouvEventsUrl);
+    if (xml != null) this.events = parseEvents(xml);
     this.at.events = Date.now();
   }
 
@@ -213,10 +217,21 @@ class DatagouvStore {
 
 export const datagouvStore = new DatagouvStore();
 
+/** Each feed's ETag and date, sent back so an unchanged file is not downloaded again. */
+const validators = new Map();
+
+/** The feed's text; null when unchanged since the last fetch (HTTP 304). */
 async function fetchText(url, encoding = 'utf-8') {
-  const res = await fetch(url, { signal: AbortSignal.timeout(config.datagouvTimeoutMs) });
+  const known = validators.get(url);
+  const headers = {};
+  if (known?.etag) headers['if-none-match'] = known.etag;
+  if (known?.modified) headers['if-modified-since'] = known.modified;
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(config.datagouvTimeoutMs) });
+  if (res.status === 304) return null;
   if (!res.ok) throw new Error(`${url} ${res.status}`);
-  return new TextDecoder(encoding).decode(await res.arrayBuffer());
+  const text = new TextDecoder(encoding).decode(await res.arrayBuffer());
+  validators.set(url, { etag: res.headers.get('etag'), modified: res.headers.get('last-modified') });
+  return text;
 }
 
 // ---- On a route --------------------------------------------------------------------------------
