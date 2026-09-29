@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { avatarRouter } from './accounts/avatar.js';
 import { accountRouter, adminAccountRouter } from './accounts/routes.js';
 import { adminRouter } from './admin/routes.js';
+import { settingsStore } from './accounts/settings.js';
 import { accountStore } from './accounts/store.js';
 import { fuelStore } from './fuel/store.js';
 import { liveRouter } from './live/routes.js';
@@ -26,6 +27,7 @@ import { shareStore } from './trips/shares.js';
 import { groupStore } from './trips/groups.js';
 import { groupPage, sharePage } from './trips/page.js';
 import { tomtomUsage } from './traffic/budget.js';
+import { datagouvStore } from './traffic/datagouv.js';
 import { probeStore } from './traffic/probes.js';
 import { trafficRouter } from './traffic/routes.js';
 
@@ -96,7 +98,12 @@ export function createApp() {
       // What ORS and TomTom were asked today (UTC day), kept on disk across restarts; Valhalla's
       // state and map (read off the requests), the routes it left to ORS and why, the shadow.
       routing: routingHealth(),
-      traffic: { provider: config.tomtomApiKey ? 'tomtom' : null, probes: probeStore.meta.count, tomtom: tomtomUsage() },
+      traffic: {
+        provider: config.tomtomApiKey ? 'tomtom' : null,
+        probes: probeStore.meta.count,
+        tomtom: tomtomUsage(),
+        datagouv: { shown: settingsStore.trafficDatagouv, ...datagouvStore.meta },
+      },
       trips: { ...shareStore.meta, ...groupStore.meta },
       signs: { published },
       speedLimits: speedLimitStore.meta,

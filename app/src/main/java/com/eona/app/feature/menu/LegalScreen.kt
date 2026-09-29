@@ -81,7 +81,11 @@ fun LegalRoute(onBack: () -> Unit) {
                 RowDivider()
                 Source("Base Adresse Nationale", "Recherche d'adresses", "https://adresse.data.gouv.fr/")
                 RowDivider()
-                Source("openrouteservice", "Calcul des itinéraires (© HeiGIT, données OpenStreetMap)", "https://openrouteservice.org/")
+                Source("Valhalla", "Calcul des itinéraires sur les serveurs EONA (données OpenStreetMap) ; openrouteservice (© HeiGIT) en secours", "https://valhalla.github.io/valhalla/")
+                RowDivider()
+                Source("TomTom", "Trafic en temps réel sur le trajet", "https://www.tomtom.com/")
+                RowDivider()
+                Source("DIR – data.gouv.fr", "Vitesses et événements du réseau national non concédé (Bison Futé, Licence Ouverte 2.0), toutes les 6 min", "https://transport.data.gouv.fr/datasets/etat-de-circulation-en-temps-reel-sur-le-reseau-national-routier-non-concede")
                 RowDivider()
                 Source("data.gouv.fr", "Position des radars automatiques", "https://www.data.gouv.fr/")
             }

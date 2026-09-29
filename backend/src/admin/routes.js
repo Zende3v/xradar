@@ -7,6 +7,7 @@ import { reportStore } from '../reports/store.js';
 import { BENCH_SLOTS, benchRuns, runBench } from '../routing/bench.js';
 import { routing } from '../routing/engine.js';
 import { shadow, shadowStore } from '../routing/shadow.js';
+import { datagouvStore } from '../traffic/datagouv.js';
 import { adminAudit } from './audit.js';
 
 /**
@@ -141,6 +142,18 @@ adminRouter.put('/routing/engine', (req, res) => {
   const changed = settingsStore.setRoutingEngine(engine, req.actor.name);
   adminAudit.log(req.actor, 'routing.engine', 'setting', 'routingEngine', changed);
   res.json({ routingEngine: settingsStore.routingEngine, changed, valhalla: routing.health().valhalla });
+});
+
+/**
+ * PUT /api/admin/traffic/datagouv  { enabled: true | false }
+ * Whether the ETA the apps show uses data.gouv's traffic (D2.6), from their next traffic request
+ * on: they compute both ETAs anyway. Written to the settings' log and to the admins' journal.
+ */
+adminRouter.put('/traffic/datagouv', (req, res) => {
+  if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'enabled true|false required' });
+  const changed = settingsStore.setTrafficDatagouv(req.body.enabled, req.actor.name);
+  adminAudit.log(req.actor, 'traffic.datagouv', 'setting', 'trafficDatagouv', changed);
+  res.json({ trafficDatagouv: settingsStore.trafficDatagouv, changed, datagouv: datagouvStore.meta });
 });
 
 /**

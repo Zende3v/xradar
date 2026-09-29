@@ -545,7 +545,9 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                         .put("shownAt", c.shownAt)
                         .put("arrivalAt", c.arrivalAt)
                         .put("pausedBefore", c.pausedBefore)
-                        .put("uncertainBefore", c.uncertainBefore),
+                        .put("uncertainBefore", c.uncertainBefore)
+                        .put("withDatagouvAt", c.withDatagouvAt ?: JSONObject.NULL)
+                        .put("withoutDatagouvAt", c.withoutDatagouvAt ?: JSONObject.NULL),
                 )
             }
             o.put("arrived", m.arrived)
@@ -590,6 +592,8 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                         arrivalAt = c.optLong("arrivalAt"),
                         pausedBefore = c.optInt("pausedBefore"),
                         uncertainBefore = c.optInt("uncertainBefore"),
+                        withDatagouvAt = if (c.isNull("withDatagouvAt")) null else c.optLong("withDatagouvAt"),
+                        withoutDatagouvAt = if (c.isNull("withoutDatagouvAt")) null else c.optLong("withoutDatagouvAt"),
                     )
                 },
                 recalcCount = o.optInt("recalcCount"),

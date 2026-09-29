@@ -107,7 +107,8 @@ function knownWords(value, known) {
 
 /**
  * The ETA shown along the trip: one complete snapshot per checkpoint (the first one given),
- * in checkpoint order — { at, shownAt, arrivalAt, pausedBefore, uncertainBefore }.
+ * in checkpoint order — { at, shownAt, arrivalAt, pausedBefore, uncertainBefore }, and the two
+ * ETAs of D2.6 when the app computed them: withDatagouvAt, withoutDatagouvAt (null otherwise).
  */
 function etaChecksShape(value) {
   const byAt = new Map();
@@ -123,6 +124,8 @@ function etaChecksShape(value) {
       arrivalAt,
       pausedBefore: wholeOr(check.pausedBefore, 0),
       uncertainBefore: wholeOr(check.uncertainBefore, 0),
+      withDatagouvAt: wholeOr(check.withDatagouvAt, 0) || null,
+      withoutDatagouvAt: wholeOr(check.withoutDatagouvAt, 0) || null,
     });
   }
   return TRIP_ETA_CHECKPOINTS.filter((at) => byAt.has(at)).map((at) => byAt.get(at));

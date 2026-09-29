@@ -7,7 +7,7 @@ import { stateFile } from '../state-file.js';
  * config.tomtomFreeDailyQuota a day for every TomTom API together; when TomTom starts counting
  * again is not documented (to check), so the day here is the UTC day. Kept on disk
  * (config.tomtomUsageFile): a restart does not start the day again. It only counts — the bench
- * keeps to its own share with it; the shares of D3.1 come in phase 4.
+ * keeps to its own share with it; the other uses to theirs (tomtomAllows, D3.1).
  */
 const USES = ['eta', 'faster', 'bench', 'other'];
 
@@ -46,8 +46,34 @@ export function tomtomUsedFor(use) {
   return today().byUse[use] ?? 0;
 }
 
-/** For /health: { day, used, byUse, freeDailyQuota }. */
+/**
+ * Whether one more request for [use] fits the day (D3.1): under tomtomDailyCap in all, and under
+ * its share (config.tomtomShares; the bench keeps its own, benchTomtomDailyMax).
+ */
+export function tomtomAllows(use) {
+  const s = today();
+  if (s.used >= config.tomtomDailyCap) return false;
+  const share = use === 'bench' ? config.benchTomtomDailyMax : config.tomtomShares[use];
+  return share == null || (s.byUse[use] ?? 0) < share;
+}
+
+/** The gap the apps keep between two TomTom recalages of their ETA, as the `eta` share empties. */
+export function etaMinGapS() {
+  const used = (today().byUse.eta ?? 0) / Math.max(1, config.tomtomShares.eta);
+  let gap = 0;
+  for (const [ratio, seconds] of config.tomtomEtaSpacing) if (used >= ratio) gap = seconds;
+  return gap;
+}
+
+/** For /health: { day, used, byUse, freeDailyQuota, dailyCap, shares }. */
 export function tomtomUsage() {
   const s = today();
-  return { day: s.day, used: s.used, byUse: { ...s.byUse }, freeDailyQuota: config.tomtomFreeDailyQuota };
+  return {
+    day: s.day,
+    used: s.used,
+    byUse: { ...s.byUse },
+    freeDailyQuota: config.tomtomFreeDailyQuota,
+    dailyCap: config.tomtomDailyCap,
+    shares: { ...config.tomtomShares, bench: config.benchTomtomDailyMax },
+  };
 }

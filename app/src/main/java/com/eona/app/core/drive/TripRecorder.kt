@@ -124,14 +124,14 @@ class TripRecorder(
      * map, and the arrival the dock shows ([arrivalAt]) is the 0 % checkpoint; none without a
      * route yet.
      */
-    fun depart(route: Route?, arrivalAt: Long?, manualStart: Boolean, now: Long = System.currentTimeMillis()) {
+    fun depart(route: Route?, arrivalAt: Long?, manualStart: Boolean, both: EtaPair? = null, now: Long = System.currentTimeMillis()) {
         if (departedAt != null) return
         departedAt = now
         departedMeters = distanceMeters
         this.manualStart = manualStart
         plannedMeters = route?.distanceMeters
         mapVersion = route?.mapVersion
-        if (route != null && arrivalAt != null) keepEta(0, arrivalAt, now)
+        if (route != null && arrivalAt != null) keepEta(0, arrivalAt, both, now)
     }
 
     /**
@@ -140,24 +140,26 @@ class TripRecorder(
      * Done: the metres driven since the departure, over those plus the metres of [route] left
      * ([remainingShare] of it).
      */
-    fun checkpoint(route: Route, remainingShare: Double, arrivalAt: Long, now: Long = System.currentTimeMillis()) {
+    fun checkpoint(route: Route, remainingShare: Double, arrivalAt: Long, both: EtaPair? = null, now: Long = System.currentTimeMillis()) {
         if (!awaitsCheckpoint) return
         val driven = distanceMeters - departedMeters
         val total = driven + route.distanceMeters * remainingShare.coerceIn(0.0, 1.0)
         if (total <= 0) return
         val done = driven / total
         while (checkpointsPassed < CHECKPOINTS.size && done >= CHECKPOINTS[checkpointsPassed] / 100.0) {
-            keepEta(CHECKPOINTS[checkpointsPassed], arrivalAt, now)
+            keepEta(CHECKPOINTS[checkpointsPassed], arrivalAt, both, now)
             checkpointsPassed++
         }
     }
 
     /** The arrival the dock announces now, and the pauses and uncertain stops already over. */
-    private fun keepEta(at: Int, arrivalAt: Long, now: Long) {
+    private fun keepEta(at: Int, arrivalAt: Long, both: EtaPair?, now: Long) {
         etaChecks += EtaCheck(
             at = at,
             shownAt = now,
             arrivalAt = arrivalAt,
+            withDatagouvAt = both?.withDatagouvAt,
+            withoutDatagouvAt = both?.withoutDatagouvAt,
             pausedBefore = pausedSeconds.roundToInt(),
             uncertainBefore = uncertainSeconds.roundToInt(),
         )
@@ -275,3 +277,6 @@ class TripRecorder(
         private const val UNKNOWN_ENGINE = "unknown"
     }
 }
+
+/** The two arrivals of D2.6, with and without data.gouv's traffic, for the trip's measures. */
+data class EtaPair(val withDatagouvAt: Long, val withoutDatagouvAt: Long)

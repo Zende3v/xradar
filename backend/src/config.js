@@ -154,6 +154,16 @@ export const config = {
   // starts counting again is not documented (to check: TomTom console or support).
   tomtomFreeDailyQuota: 2500,
   tomtomUsageFile: process.env.TOMTOM_USAGE_FILE || './data/tomtom-usage.json',
+  // The day's budget (D3.1): never more than tomtomDailyCap requests, under the free quota; each
+  // use within its share (the bench keeps benchTomtomDailyMax). Past a share, that use goes on
+  // without TomTom: the ETA with the engine, EONA and data.gouv. The ETA's recalage (D2.2) is
+  // spaced as its share empties: past each ratio of tomtomEtaSpacing, the apps wait at least that
+  // many seconds between two recalages (`minGapS`). One account asks TomTom for its ETA at most
+  // every trafficTomtomAccountGapS.
+  tomtomDailyCap: count(process.env.TOMTOM_DAILY_CAP, 2300),
+  tomtomShares: { eta: count(process.env.TOMTOM_ETA_SHARE, 1700), faster: count(process.env.TOMTOM_FASTER_SHARE, 400), other: 50 },
+  tomtomEtaSpacing: [[0.5, 600], [0.8, 1200]],
+  trafficTomtomAccountGapS: 60,
   // Smart rerouting around traffic (POST /api/route/faster). A variant replaces the route only
   // when TomTom times it, with traffic, at least rerouteMinGainS and rerouteMinGainRatio of the
   // time left faster. No new route within rerouteCooldownS of the last one, and twice the gain
@@ -168,6 +178,30 @@ export const config = {
   rerouteJamGapM: 1000,
   // Variants timed by TomTom per check, at most (one TomTom request each).
   rerouteMaxVariants: 3,
+
+  // data.gouv traffic (traffic/datagouv.js, D3.2): the DIR's open feeds on Bison Futé (Licence
+  // Ouverte 2.0). Speeds every 6 min (older than datagouvSpeedsMaxAgeMs, 2 cycles: ignored), events
+  // as often, the stations' list daily. A station slower than datagouvSlowRatio of its road's
+  // limit is a slowdown: its delay against datagouvFreeFlowRatio of that limit. On a route: within
+  // datagouvOnRouteM; an event given by one point covers datagouvPointHalfM either side, on the
+  // way it says (datagouvSameWayDeg). Served behind the switch trafficDatagouv (settings, D2.6).
+  datagouvSpeedsUrl: process.env.DATAGOUV_SPEEDS_URL || 'http://tipi.bison-fute.gouv.fr/bison-fute-ouvert/publicationsDIR/QTV-DIR/qtvDir.xml',
+  datagouvStationsUrl: process.env.DATAGOUV_STATIONS_URL || 'http://tipi.bison-fute.gouv.fr/bison-fute-ouvert/publicationsDIR/QTV-DIR/refDir.csv',
+  datagouvEventsUrl: process.env.DATAGOUV_EVENTS_URL || 'http://tipi.bison-fute.gouv.fr/bison-fute-ouvert/publicationsDIR/Evenementiel-DIR/grt/RRN/content.xml',
+  datagouvEnabled: !/^(0|false)$/i.test(process.env.DATAGOUV_ENABLED || ''),
+  datagouvSpeedsEveryMs: 6 * MIN,
+  datagouvEventsEveryMs: 6 * MIN,
+  datagouvStationsEveryMs: D,
+  datagouvSpeedsMaxAgeMs: 12 * MIN,
+  datagouvTimeoutMs: 60 * 1000,
+  datagouvRoadMaxM: 40,
+  datagouvDefaultLimitKmh: { motorway: 130, trunk: 110, primary: 80, other: 90 },
+  datagouvSlowRatio: 0.7,
+  datagouvFreeFlowRatio: 0.9,
+  datagouvMinSpeedKmh: 5,
+  datagouvOnRouteM: 60,
+  datagouvPointHalfM: 200,
+  datagouvSameWayDeg: 90,
 
   // Drivers' own traffic, besides TomTom (traffic/crowd.js). A "Bouchon" report weighs on
   // routing once confirmed (2 drivers, an admin's, or made from probes): it covers

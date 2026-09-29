@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { config } from '../config.js';
 import { db } from '../db.js';
-import { tomtomUsedFor } from '../traffic/budget.js';
+import { tomtomAllows, tomtomUsedFor } from '../traffic/budget.js';
 import { bestRoute, trafficAlong } from '../traffic/tomtom.js';
 import { computeRoute, computeValhallaRoute } from './engine.js';
 import { measure } from './geometry.js';
@@ -48,7 +48,7 @@ async function run(slot) {
   const results = [];
   let stopped = null;
   for (let i = 0; i < Math.min(config.benchTripsPerRun, trips.length); i++) {
-    if (tomtomUsedFor('bench') + tomtomPerTrip() > config.benchTomtomDailyMax) {
+    if (!tomtomAllows('bench') || tomtomUsedFor('bench') + tomtomPerTrip() > config.benchTomtomDailyMax) {
       stopped = 'bench TomTom share spent';
       break;
     }

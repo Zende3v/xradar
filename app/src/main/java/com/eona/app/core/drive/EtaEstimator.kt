@@ -27,11 +27,17 @@ object EtaEstimator {
         val along = alongMeters.coerceIn(0.0, routeMeters)
         val stretches = traffic?.stretches.orEmpty()
         val scale = traffic?.totalMeters?.takeIf { it > 0 }?.let { routeMeters / it } ?: 1.0
-        val listed = stretches.filter { it.source == TrafficStretch.TOMTOM }.sumOf { it.delaySeconds ?: 0 }
-        val baseTotal = traffic?.travelSeconds?.takeIf { it > 0 }?.let { (it - listed).coerceAtLeast(0).toDouble() }
-            ?: route.durationSeconds.toDouble()
         val delays = stretches.sumOf { delayAhead(it.fromMeters * scale, it.toMeters * scale, it.delaySeconds ?: 0, along) }
-        return baseTotal * baseShareLeft(route, routeMeters, along) + delays
+        val travel = traffic?.travelSeconds?.takeIf { it > 0 }
+        if (traffic == null || travel == null) return route.durationSeconds * baseShareLeft(route, routeMeters, along) + delays
+        // TomTom timed the route from where the driver was ([startMeters]): its time less the jams
+        // it lists there is the base of that rest, which shrinks along it as the engine's does.
+        val start = (traffic.startMeters * scale).coerceIn(0.0, routeMeters)
+        val listed = stretches.filter { it.source == TrafficStretch.TOMTOM }.sumOf { it.delaySeconds ?: 0 }
+        val base = (travel - listed).coerceAtLeast(0).toDouble()
+        val shareAtStart = baseShareLeft(route, routeMeters, start)
+        val share = if (shareAtStart > 0) (baseShareLeft(route, routeMeters, maxOf(along, start)) / shareAtStart).coerceIn(0.0, 1.0) else 0.0
+        return base * share + delays
     }
 
     /**

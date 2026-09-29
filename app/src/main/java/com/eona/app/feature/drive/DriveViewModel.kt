@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.eona.app.BuildConfig
 import com.eona.app.core.drive.AlertBeeps
 import com.eona.app.core.drive.EtaEstimator
+import com.eona.app.core.drive.EtaPair
 import com.eona.app.core.drive.StopTraffic
+import com.eona.app.core.drive.TrafficRefresh
 import com.eona.app.core.drive.TripProgress
 import com.eona.app.core.drive.TripRecorder
 import com.eona.app.core.geo.Geo
@@ -30,6 +32,8 @@ import com.eona.app.core.model.RouteStep
 import com.eona.app.core.model.SignType
 import com.eona.app.core.model.SpeedLimitChange
 import com.eona.app.core.model.SpeedLimitSource
+import com.eona.app.core.model.TrafficParts
+import com.eona.app.core.model.TrafficStretch
 import com.eona.app.core.model.TripRecord
 import com.eona.app.core.model.UserReport
 import com.eona.app.core.model.isEnforcement
@@ -142,6 +146,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** Radars + reports + radar-car zones, pre-combined so the main combine stays ≤5 flows. */
     private val roadObjects = combine(radars, reports, zones) { r, rep, z -> Triple(r, rep, z) }
 
+    /** The route's traffic by source (D2.6, D2.7): the map and the ETA read it merged ([traffic]). */
+    private var trafficParts: TrafficParts? = null
+    /** When the ETA asks TomTom again (D2.2). */
+    private val trafficRefresh = TrafficRefresh()
     /** The arrival shown on the dock (D2.4), kept for the trip. */
     private val arrivalClock = com.eona.app.core.drive.ArrivalClock()
     /** The trip ends because the driver stopped it, not by the arrival or a refusal. */
@@ -400,12 +408,16 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 if (on && known != null) considerFasterRoute(known, routeVersion)
             }
         }
-        // The traffic on the route being followed, every two minutes while a trip runs (a new
-        // route asks at once). Nothing is fetched without a trip.
+        // The traffic on the route being followed (D2.2): TomTom at once for a new route, then on
+        // an event or after a wait growing with the time left; the drivers' and data.gouv's every
+        // two minutes (TrafficRefresh). Nothing is fetched without a trip.
         viewModelScope.launch {
             while (true) {
-                delay(TRAFFIC_REFRESH_MS)
-                refreshTraffic(routeVersion)
+                delay(TRAFFIC_TICK_MS)
+                val route = ActiveTripRepository.route.value ?: continue
+                val now = System.currentTimeMillis()
+                val ask = trafficRefresh.due(now, alongOn(route), now + (secondsLeft(route) * 1000).toLong()) ?: continue
+                refreshTraffic(routeVersion, tomtom = ask == TrafficRefresh.Ask.WithTomtom)
             }
         }
         // Presence: the app says it is open, and whether a trip runs; a position only during a
@@ -466,7 +478,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Toll / motorway preferences: recompute the live route as soon as they change.
         viewModelScope.launch {
             AppPreferences.settings
-                .map { it.avoidTolls to it.avoidHighways }
+                .map { Triple(it.avoidTolls, it.avoidHighways, it.avoidFerries) }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
@@ -551,7 +563,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 current.add(sample) { stopTraffic(sample) }
                 // The arrival the dock announces, kept at 25, 50 and 75 % of the way (D1.1).
                 if (current.awaitsCheckpoint) {
-                    ActiveTripRepository.route.value?.let { route -> current.checkpoint(route, remainingShare(route), shownArrival(route)) }
+                    ActiveTripRepository.route.value?.let { route -> current.checkpoint(route, remainingShare(route), shownArrival(route), etaPair(route)) }
                 }
                 // Auto-finish when we reach the destination.
                 ActiveTripRepository.destination.value?.let { dest ->
@@ -684,8 +696,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 // Another route, another geometry: its traffic is asked for at once.
                 routeVersion += 1
                 traffic.value = null
+                trafficParts = null
+                trafficRefresh.newRoute()
                 val version = routeVersion
-                viewModelScope.launch { refreshTraffic(version) }
+                viewModelScope.launch { refreshTraffic(version, tomtom = true) }
                 if (route == null || route.steps.size < 2) {
                     guidance.value = null
                     speaker.stop()
@@ -872,6 +886,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         trip?.depart(
             route = route,
             arrivalAt = route?.let { shownArrival(it) },
+            both = route?.let { etaPair(it) },
             manualStart = ActiveTripRepository.start.value != null,
         )
     }
@@ -974,13 +989,43 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
      * A failed request keeps the colours shown; an answer for a route since replaced is dropped.
      * The driver's progress goes along: the backend says whether a faster route may exist ahead.
      */
-    private suspend fun refreshTraffic(version: Int) {
+    private suspend fun refreshTraffic(version: Int, tomtom: Boolean) {
         val route = ActiveTripRepository.route.value?.takeIf { it.points.size >= 2 } ?: return
-        val fresh = trafficApi.route(route.points, progress()?.alongMeters, AccountRepository.token) ?: return
+        val rp = path?.takeIf { it.points === route.points && it.totalMeters > 0 } ?: return
+        // Only the rest of the route goes (D2.2): its answer is placed back from the driver on.
+        val start = alongOn(route)
+        val points = if (start > TRIM_MIN_M) rp.trimFrom(start) else route.points
+        val asked = if (tomtom) TrafficRefresh.Ask.WithTomtom else TrafficRefresh.Ask.WithoutTomtom
+        trafficRefresh.asked(System.currentTimeMillis())
+        val answer = trafficApi.route(points, 0.0, AccountRepository.token, tomtom) ?: return
         if (version != routeVersion) return
-        traffic.value = fresh
-        trip?.sawTraffic(fresh.stretches.map { it.source })
-        considerFasterRoute(fresh, version)
+        val placed = answer.placed(start, rp.totalMeters)
+        // TomTom's last answer holds until the next one; the other sources come fresh each time.
+        val previous = trafficParts?.takeIf { it.routeMeters == rp.totalMeters }
+        val parts = TrafficParts(
+            routeMeters = rp.totalMeters,
+            tomtom = if (answer.tomtom) placed.filter { it.source == TrafficStretch.TOMTOM } else previous?.tomtom.orEmpty(),
+            travelSeconds = if (answer.tomtom) answer.travelSeconds else previous?.travelSeconds,
+            tomtomFrom = if (answer.tomtom) start else previous?.tomtomFrom ?: 0.0,
+            crowd = placed.filter { it.source == TrafficStretch.CROWD },
+            datagouv = placed.filter { it.source == TrafficStretch.DATAGOUV },
+            datagouvShown = answer.datagouvShown,
+            worthChecking = answer.tomtom && answer.worthChecking,
+        )
+        trafficParts = parts
+        val merged = parts.merged()
+        traffic.value = merged
+        trip?.sawTraffic(parts.sources)
+        val now = System.currentTimeMillis()
+        trafficRefresh.answered(
+            now,
+            tomtom = answer.tomtom,
+            asked = asked,
+            arrival = now + (secondsLeft(route) * 1000).toLong(),
+            tomtomJamEnds = parts.tomtom.filter { (it.delaySeconds ?: 0) > 0 && it.toMeters > start }.map { it.toMeters },
+            minGapSeconds = answer.minGapSeconds,
+        )
+        if (answer.tomtom) considerFasterRoute(merged, version)
     }
 
     /**
@@ -1146,6 +1191,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         return buildList {
             if (s.avoidTolls) add("tolls")
             if (s.avoidHighways) add("highways")
+            if (s.avoidFerries) add("ferries")
             // "Éviter les bouchons" no longer avoids every reported jam: the faster-route check
             // weighs the time saved instead (considerFasterRoute).
         }
@@ -1473,12 +1519,27 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
      * go. Off the route for a moment (a detour before the recalculation), the last place known on it
      * holds; a new route starts whole again.
      */
-    /** Seconds left on [route] for the driver now: the dynamic ETA (EtaEstimator, D2.1). */
-    private fun secondsLeft(route: Route): Double {
-        val rp = path?.takeIf { it.points === route.points && it.totalMeters > 0 }
-        val routeMeters = rp?.totalMeters ?: route.distanceMeters.toDouble()
-        return EtaEstimator.secondsLeft(route, routeMeters, routeMeters * (1 - remainingShare(route)), traffic.value)
+    /** Seconds left on [route] for the driver now: the dynamic ETA (EtaEstimator, D2.1), with [with] traffic. */
+    private fun secondsLeft(route: Route, with: RouteTraffic? = traffic.value): Double {
+        val routeMeters = routeMetersOf(route)
+        return EtaEstimator.secondsLeft(route, routeMeters, routeMeters * (1 - remainingShare(route)), with)
     }
+
+    /** The two arrivals of D2.6, with and without data.gouv, for the trip's measures; null before any traffic. */
+    private fun etaPair(route: Route, now: Long = System.currentTimeMillis()): EtaPair? {
+        val parts = trafficParts ?: return null
+        return EtaPair(
+            withDatagouvAt = now + (secondsLeft(route, parts.merged(true)) * 1000).toLong(),
+            withoutDatagouvAt = now + (secondsLeft(route, parts.merged(false)) * 1000).toLong(),
+        )
+    }
+
+    /** The app's own length of [route]: its measured path, else the engine's distance. */
+    private fun routeMetersOf(route: Route): Double =
+        path?.takeIf { it.points === route.points && it.totalMeters > 0 }?.totalMeters ?: route.distanceMeters.toDouble()
+
+    /** Where the driver is along [route], in metres (the last place known on it). */
+    private fun alongOn(route: Route): Double = routeMetersOf(route) * (1 - remainingShare(route))
 
     /** The arrival the dock shows for [route] now: it moves only by a minute or more (D2.4). */
     private fun shownArrival(route: Route, now: Long = System.currentTimeMillis()): Long =
@@ -1555,7 +1616,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         /** The app tells the backend it is open this often (the backend forgets it after 90 s). */
         const val PRESENCE_MS = 30_000L
         /** The route's traffic is asked for again this often during a trip. */
-        const val TRAFFIC_REFRESH_MS = 120_000L
+        /** How often the traffic's next request is looked at (TrafficRefresh decides). */
+        const val TRAFFIC_TICK_MS = 10_000L
+        /** Closer than this to the start, the whole route goes for its traffic. */
+        const val TRIM_MIN_M = 50.0
         /** No faster route within this long of the last switch; checks this far apart at most. */
         const val FASTER_COOLDOWN_MS = 300_000L
         const val FASTER_RECHECK_MS = 300_000L

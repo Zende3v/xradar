@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
 import { accountStore } from '../accounts/store.js';
+import { tomtomAllows } from '../traffic/budget.js';
 import { routing as defaultRouting } from './engine.js';
 import { checkFaster } from './faster.js';
 import { cachedRoute, keepRoute, spendRoute } from './guard.js';
@@ -20,7 +21,7 @@ export function createRouteRouter({
   guard = { cachedRoute, keepRoute, spendRoute },
   log = logRoute,
   faster = checkFaster,
-  tomtomReady = () => Boolean(config.tomtomApiKey),
+  tomtomReady = () => Boolean(config.tomtomApiKey) && tomtomAllows('faster'),
 } = {}) {
   const router = Router();
 

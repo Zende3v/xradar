@@ -113,6 +113,8 @@ data class AppSettings(
     val avoidTolls: Boolean = false,
     /** Ask the router to keep the trip off motorways. */
     val avoidHighways: Boolean = false,
+    /** Ask the router to keep the trip off ferries (D4.2). */
+    val avoidFerries: Boolean = false,
     /** "Éviter les bouchons": a faster way around the traffic ahead, taken only when it saves
      *  enough time (or goes around a closed road). */
     val avoidTraffic: Boolean = false,
@@ -172,6 +174,7 @@ object AppPreferences {
             vehicleType = VehicleType.fromWire(p.getString("vehicleType", null)),
             avoidTolls = p.getBoolean("avoidTolls", false),
             avoidHighways = p.getBoolean("avoidHighways", false),
+            avoidFerries = p.getBoolean("avoidFerries", false),
             avoidTraffic = p.getBoolean("avoidTraffic", false),
             preferredFuel = enumOrDefault(p.getString("preferredFuel", null), FuelType.Gazole),
             fuelNearestOnly = p.getBoolean("fuelNearestOnly", false),
@@ -247,6 +250,7 @@ object AppPreferences {
             remove("mapStyle")
             putBoolean("avoidTolls", updated.avoidTolls)
             putBoolean("avoidHighways", updated.avoidHighways)
+            putBoolean("avoidFerries", updated.avoidFerries)
             putBoolean("avoidTraffic", updated.avoidTraffic)
             putString("preferredFuel", updated.preferredFuel.name)
             putBoolean("fuelNearestOnly", updated.fuelNearestOnly)

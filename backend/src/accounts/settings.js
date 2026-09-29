@@ -16,7 +16,7 @@ export const ROUTING_ENGINES = ['ors', 'admins', 'all'];
 
 export class SettingsStore {
   constructor() {
-    this.values = { referralValidityMonths: config.referralValidityMonths, routingEngine: 'ors' };
+    this.values = { referralValidityMonths: config.referralValidityMonths, routingEngine: 'ors', trafficDatagouv: true };
     /** Who changed what, newest first; kept to settingsHistoryMax entries. */
     this.history = [];
     this.saveTimer = null;
@@ -29,6 +29,7 @@ export class SettingsStore {
       if (Number.isFinite(months)) this.values.referralValidityMonths = this.clampMonths(months);
       // Anything else than a known value keeps ORS: a damaged file never moves the routes.
       if (ROUTING_ENGINES.includes(raw?.routingEngine)) this.values.routingEngine = raw.routingEngine;
+      if (typeof raw?.trafficDatagouv === 'boolean') this.values.trafficDatagouv = raw.trafficDatagouv;
       if (Array.isArray(raw?.history)) this.history = raw.history.slice(0, config.settingsHistoryMax);
     } catch (e) {
       if (e.code !== 'ENOENT') console.error('[settings] load failed:', e.message);
@@ -75,6 +76,21 @@ export class SettingsStore {
     return { before, after: engine };
   }
 
+  /**
+   * Whether the ETA shown uses data.gouv's traffic (D2.6): the apps compute both ETAs on every
+   * trip and show the one this says. On by default; changed live from the admin.
+   */
+  get trafficDatagouv() {
+    return this.values.trafficDatagouv;
+  }
+
+  setTrafficDatagouv(enabled, by) {
+    const before = this.values.trafficDatagouv;
+    this.values.trafficDatagouv = Boolean(enabled);
+    this.note({ action: 'traffic-datagouv', before, after: this.values.trafficDatagouv, by });
+    return { before, after: this.values.trafficDatagouv };
+  }
+
   /** One line in the log: what, who, when. */
   note(entry) {
     this.history.unshift({ ...entry, at: new Date().toISOString() });
@@ -104,6 +120,7 @@ export class SettingsStore {
       referralValidityMaxMonths: config.referralValidityMaxMonths,
       routingEngine: this.values.routingEngine,
       routingEngines: ROUTING_ENGINES,
+      trafficDatagouv: this.values.trafficDatagouv,
       history: this.history,
     };
   }

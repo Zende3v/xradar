@@ -10,12 +10,15 @@ import { routing } from './routing/engine.js';
 import { ensureRoutingSchema } from './routing/schema.js';
 import { shadowStore } from './routing/shadow.js';
 import { speedLimitStore } from './speedlimits/store.js';
+import { datagouvStore } from './traffic/datagouv.js';
 
 // Opening hours are read on the French clock, whatever the host's timezone.
 process.env.TZ = 'Europe/Paris';
 
 // Load the radar dataset (and schedule refreshes), then start the HTTP server.
 radarStore.start();
+// data.gouv's traffic (D3.2): the DIR's feeds, kept in memory.
+if (config.datagouvEnabled) datagouvStore.start();
 // Official fuel prices (refreshed every 10 min) — they only enrich the fuel search.
 fuelStore.start();
 // Load persisted accounts.

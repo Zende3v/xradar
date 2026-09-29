@@ -545,6 +545,7 @@ Authentification admin section 1, commune à toutes routes suivantes. Aucune gé
 |---|---|
 | `GET /api/admin/routing` | `routingEngine`, valeurs autorisées, santé moteur, état file ombre |
 | `PUT /api/admin/routing/engine` avec `{"engine":"ors"}` | règle `ors`, `admins` ou `all`, historisée ; effet requêtes suivantes |
+| `PUT /api/admin/traffic/datagouv` avec `{"enabled":false}` | ETA affichée sans data.gouv (D2.6), historisé ; les apps calculent et enregistrent les deux ETA (`etaChecks[].withDatagouvAt`, `withoutDatagouvAt`) ; état dans `/health` `traffic.datagouv.shown` |
 | `GET /api/admin/routing/shadow?since=&kind=&limit=` | mesures ; `kind=route` ou `faster`, limite 200, maximum 1000 |
 | `GET /api/admin/routing/shadow/summary?since=` | totaux par type, secours, divergences, erreurs, latences p50/p95 |
 | `GET /api/admin/routing/traces?before=&limit=` | traces admin divergentes, sans géométrie ; limite 50, maximum 200 |

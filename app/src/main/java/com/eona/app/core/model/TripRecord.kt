@@ -51,6 +51,9 @@ data class EtaCheck(
     val arrivalAt: Long,
     val pausedBefore: Int,
     val uncertainBefore: Int,
+    /** The two ETAs (D2.6), with and without data.gouv; null when they were not computed. */
+    val withDatagouvAt: Long? = null,
+    val withoutDatagouvAt: Long? = null,
 )
 
 /**

@@ -227,6 +227,18 @@ object EonaIcons {
         moveTo(17f, 11f); lineTo(17.6f, 13.1f)
     }
 
+    val Ferry = line("Ferry", width = 1.9f) {
+        // hull and cabin
+        moveTo(3.5f, 14f); lineTo(20.5f, 14f); lineTo(18.5f, 18f); lineTo(5.5f, 18f); close()
+        moveTo(8f, 14f); lineTo(8f, 10f); lineTo(16f, 10f); lineTo(16f, 14f)
+        moveTo(12f, 10f); lineTo(12f, 6.5f)
+        // waves
+        moveTo(3f, 21f); arcTo(2.2f, 2.2f, 0f, false, false, 7.5f, 21f)
+        arcTo(2.2f, 2.2f, 0f, false, false, 12f, 21f)
+        arcTo(2.2f, 2.2f, 0f, false, false, 16.5f, 21f)
+        arcTo(2.2f, 2.2f, 0f, false, false, 21f, 21f)
+    }
+
     // ---- Signalisation ----
     val TrafficLight = line("TrafficLight", width = 1.8f) {
         moveTo(8f, 3f); lineTo(16f, 3f); lineTo(16f, 21f); lineTo(8f, 21f); close()

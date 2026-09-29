@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **29/09/2026** (Claude : `all` actif, phase 4 lot 1 ETA dynamique). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **29/09/2026** (Claude : phase 4 lots 1 à 4 codés, lot 1 déployé 14:46). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -191,11 +191,23 @@ Revue des autres aspirateurs, décisions d'Arthur :
     mesures (`etaChecks`) sur la même ETA ; mode d'ETA enregistré `dynamic` ;
   - backend : `/api/traffic/route` sans TomTom rend les bouchons EONA (plus de 503), `source` sur chaque section ;
   - Android 1.0.1 (14), iOS 1.0.0 (12).
-- Lots suivants : 2) recalage TomTom sur événement (D2.2, D3.1), accord Arthur pour rallumer TomTom ;
-  3) data.gouv derrière interrupteur, deux ETA (D2.6, D3.2) ; 4) option ferries, « À propos ».
+- **Lot 1 déployé** le 29/09 à 14:46 (sauvegarde `/opt/eona-backend-src-backup-20260929-1446.tgz`).
+- **Lot 2 : recalage TomTom sur événement** (D2.2, D3.1) : `TrafficRefresh` (Kotlin, Swift) ; TomTom à la nouvelle route,
+  écart d'arrivée ≥ 2 min et ≥ 10 % du restant, bouchon TomTom dépassé, ou au plus tard 5/10/15 min selon le restant
+  (valeurs de départ, à mesurer) ; reste du trajet seulement ; EONA et data.gouv toutes les 2 min sans TomTom.
+  Backend : budget du jour 2 300 (ETA 1 700, `/faster` 400, banc à part), une requête TomTom par minute et par compte,
+  `minGapS` 10 min passé 50 % de la part ETA, 20 min passé 80 %, puis plus de TomTom.
+- **Lot 3 : data.gouv** (D2.6, D3.2) : `src/traffic/datagouv.js` ; vitesses QTV (507 stations placées, retard contre 90 %
+  de la limite OSM) et événements DIR (fermetures, travaux, incidents, files) ; interrupteur `trafficDatagouv` (admin,
+  actif par défaut) ; apps : chaque source entière (`raw`), fusion côté app, deux ETA enregistrées par relevé.
+- **Sytadin** : pas de flux ouvert trouvé (data.gouv, transport.data.gouv, Bison Futé sans station IDF, Cerema).
+  sytadin.fr : « Toute reproduction interdite sans l'accord écrit préalable de la DiRIF ». Source prête à brancher
+  dès qu'Arthur donne l'adresse d'un jeu ouvert ou l'accord DiRIF.
+- **Lot 4** : option « Éviter les ferries » (D4.2) ; « À propos » : Valhalla, TomTom, DIR data.gouv (D8.1).
+- Android 1.0.1 (15), iOS 1.0.0 (13). Backend lots 2 à 4 **pas déployés** : accord Arthur (et TomTom rallumé).
 
 ## Prochaine étape
 
-1. Arthur : trajets avec Android 1.0.1 (14) et iOS 1.0.0 (12) ; l'ETA doit baisser régulièrement.
-2. Déployer le backend du lot 1 (bouchons EONA sans TomTom), accord Arthur.
-3. Lot 2 : recalage TomTom sur événement, TomTom rallumé (accord Arthur).
+1. Arthur : accord pour déployer lots 2 à 4 et rallumer TomTom (`TOMTOM_ENABLED=1`).
+2. Tests téléphone Android 1.0.1 (15), iOS 1.0.0 (13) : ETA, bouchons, option ferries, « À propos ».
+3. Sytadin : adresse du jeu ouvert ou accord DiRIF.
