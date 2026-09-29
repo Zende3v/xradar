@@ -104,7 +104,7 @@ export function placeOnRoute(path, flow, incidents) {
     return fromM != null && toM != null && toM - fromM >= 1 ? [fromM, toM] : null;
   };
 
-  const sections = [];
+  const pieces = [];
   for (const item of flow) {
     const place = range(item.location);
     const current = item.currentFlow;
@@ -116,10 +116,11 @@ export function placeOnRoute(path, flow, incidents) {
     for (const part of parts) {
       const length = total > 0 ? ((place[1] - place[0]) * (part.length ?? 0)) / total : place[1] - place[0];
       const slowed = slowdownOf(part, length);
-      if (slowed) sections.push({ fromM: Math.round(at), toM: Math.round(at + length), ...slowed, source: SOURCE, kind: 'speed' });
+      if (slowed) pieces.push({ fromM: Math.round(at), toM: Math.round(at + length), ...slowed, source: SOURCE, kind: 'speed' });
       at += length;
     }
   }
+  const sections = withoutOverlaps(pieces.filter((p) => p.toM > p.fromM));
   for (const item of incidents) {
     const place = range(item.location);
     const details = item.incidentDetails;
@@ -136,6 +137,35 @@ export function placeOnRoute(path, flow, incidents) {
     });
   }
   return sections.filter((s) => s.toM > s.fromM).sort((a, b) => a.fromM - b.fromM);
+}
+
+const LEVEL_RANK = { slow: 1, jam: 2, heavy: 3, closed: 4 };
+
+/**
+ * Flow pieces without overlaps: HERE sends one road under several items (a crossing under each
+ * street's name, a quay under two descriptions), seen in Paris on 30/09. Each metre keeps the
+ * worst piece over it only (level, then delay per metre), so no delay counts twice.
+ */
+function withoutOverlaps(pieces) {
+  const worse = (a, b) =>
+    LEVEL_RANK[a.level] - LEVEL_RANK[b.level] || a.delayS / (a.toM - a.fromM) - b.delayS / (b.toM - b.fromM);
+  const cuts = [...new Set(pieces.flatMap((p) => [p.fromM, p.toM]))].sort((a, b) => a - b);
+  const kept = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const [fromM, toM] = [cuts[i], cuts[i + 1]];
+    let worst = null;
+    for (const p of pieces) if (p.fromM <= fromM && p.toM >= toM && (!worst || worse(p, worst) > 0)) worst = p;
+    if (!worst) continue;
+    const last = kept[kept.length - 1];
+    if (last?.of === worst && last.toM === fromM) last.toM = toM;
+    else kept.push({ of: worst, fromM, toM });
+  }
+  return kept.map(({ of, fromM, toM }) => ({
+    ...of,
+    fromM,
+    toM,
+    delayS: Math.round((of.delayS * (toM - fromM)) / (of.toM - of.fromM)),
+  }));
 }
 
 /** HERE's incident types, as the apps name them (closures apart: roadClosed says so). */

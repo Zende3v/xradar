@@ -36,6 +36,20 @@ describe('HERE traffic', () => {
       ['closed', 'closed', 0, 'here'],
     ]);
   });
+
+  it('counts a road HERE sends twice, or under overlapping items, once: the worst piece per metre', () => {
+    const jam = { speed: 10, speedUncapped: 10, freeFlow: 25, jamFactor: 6, traversability: 'open' };
+    const start = 48.02;
+    const flow = [
+      // The same 2 km twice (120 s lost each), then 2 km slow over its second half: 100 - 80 = 20 s.
+      { location: link(start, start + 2000 / M_PER_DEG), currentFlow: jam },
+      { location: link(start, start + 2000 / M_PER_DEG), currentFlow: jam },
+      { location: link(start + 1000 / M_PER_DEG, start + 3000 / M_PER_DEG), currentFlow: { speed: 20, freeFlow: 25, jamFactor: 3, traversability: 'open' } },
+    ];
+    const sections = placeOnRoute(ROUTE, flow, []);
+    // The jam once, then only the slow piece's last 1 000 m: 10 s.
+    assert.deepEqual(sections.map((s) => [s.level, s.delayS]), [['jam', 120], ['slow', 10]]);
+  });
 });
 
 describe('the drivers\' speeds', () => {
