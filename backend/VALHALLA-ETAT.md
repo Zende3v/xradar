@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **29/09/2026** (Claude : phase 4 lots 1 à 4 codés, lot 1 déployé 14:46). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **29/09/2026 22:20** (Claude : phase 4 lots 1 à 4 déployés, TomTom rallumé). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -204,10 +204,13 @@ Revue des autres aspirateurs, décisions d'Arthur :
   sytadin.fr : « Toute reproduction interdite sans l'accord écrit préalable de la DiRIF ». Source prête à brancher
   dès qu'Arthur donne l'adresse d'un jeu ouvert ou l'accord DiRIF.
 - **Lot 4** : option « Éviter les ferries » (D4.2) ; « À propos » : Valhalla, TomTom, DIR data.gouv (D8.1).
-- Android 1.0.1 (15), iOS 1.0.0 (13). Backend lots 2 à 4 **pas déployés** : accord Arthur (et TomTom rallumé).
+- Android 1.0.1 (15), iOS 1.0.0 (14) (build 13 : test `AccountAPITests` cassé par un NSNull dans `etaChecks`, corrigé).
+- **Lots 2 à 4 déployés le 29/09 à 22:19** (accord Arthur) : sauvegarde `/opt/eona-backend-src-backup-20260929-2219.tgz`,
+  TomTom rallumé (drop-in `tomtom-on.conf`, `TOMTOM_ENABLED=1`). `/health` : plafond 2 300, data.gouv 503 stations,
+  868 vitesses, 465 événements, aucune erreur.
 
 ## Prochaine étape
 
-1. Arthur : accord pour déployer lots 2 à 4 et rallumer TomTom (`TOMTOM_ENABLED=1`).
-2. Tests téléphone Android 1.0.1 (15), iOS 1.0.0 (13) : ETA, bouchons, option ferries, « À propos ».
-3. Sytadin : adresse du jeu ouvert ou accord DiRIF.
+1. Arthur : Codemagic iOS 1.0.0 (14), puis tests téléphone Android 1.0.1 (15) et iOS : ETA, bouchons, ferries, « À propos ».
+2. Suivre la conso TomTom (`/health` `traffic.tomtom`) et caler les seuils de recalage sur mesures.
+3. Phase 5 (CGU, politique), puis phase 6 (fermetures et travaux data.gouv dans Valhalla).
