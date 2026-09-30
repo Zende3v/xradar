@@ -243,7 +243,7 @@ Revue des autres aspirateurs, décisions d'Arthur :
   de Tailscale, sauvegardes 14 jours.
 - CGU 1.2, article 11.1 : Valhalla, ORS en secours, HERE, data.gouv (DIR), BAN, Photon, Spotify. Sans nouvelle
   acceptation (D8.3).
-- **Pages en ligne pas encore mises à jour** : accord d'Arthur pour copier `privacy/` et `cgu/` sur le VPS.
+- **Pages en ligne le 30/09 à 22:18** (accord Arthur).
 
 ## Constat ETA (30/09, 15:00, trajet d'Arthur Choisy → Tour Eiffel)
 
@@ -266,10 +266,10 @@ Mesuré sur le VPS, même route (Valhalla, 22,9 km) :
   rafraîchissement HERE, notre route chronométrée par HERE Route Import (1 requête, 0,5 s ; testé Paris-Marseille
   775 km, 3 000 points acceptés) renvoyée en `travelS` ; les apps partent de ce temps moins les bouchons HERE listés
   (comme avec TomTom). Correspondance refusée si la longueur HERE s'écarte de plus de 10 %. Coût : 2 500 gratuites
-  par mois, puis 4,66 € les 1 000. Android 1.0.1 (19), iOS build 18. **Backend pas encore déployé.**
+  par mois, puis 4,66 € les 1 000. Android 1.0.1 (19), iOS build 18. **Déployé 30/09 22:18** (sauvegarde `/opt/eona-backend-src-backup-20260930-2218.tgz`).
 
 ## Prochaine étape
 
-1. Arthur : accord pour mettre en ligne les pages CGU et confidentialité.
-2. Arthur : accord pour déployer le correctif ETA (backend), puis tests téléphone.
+1. Arthur : tests téléphone de l'ETA (Android 19, iOS 18), puis bilan.
+2. Phase 6 : fermetures et travaux dans Valhalla.
 3. Arthur : moyen de paiement HERE (Base Plan), plus tard. Clé HERE gardée (choix d'Arthur). ORS gardé en secours.
