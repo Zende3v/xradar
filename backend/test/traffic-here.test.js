@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { measure } from '../src/routing/geometry.js';
-import { corridorOf, flexiblePolyline, placeOnRoute } from '../src/traffic/here.js';
+import { corridorOf, flexiblePolyline, hereTravel, placeOnRoute } from '../src/traffic/here.js';
 import { speedStore } from '../src/traffic/speeds.js';
 
 // A road due north along 2°E, from 48.00° to 48.10° (about 11.1 km).
@@ -49,6 +49,28 @@ describe('HERE traffic', () => {
     const sections = placeOnRoute(ROUTE, flow, []);
     // The jam once, then only the slow piece's last 1 000 m: 10 s.
     assert.deepEqual(sections.map((s) => [s.level, s.delayS]), [['jam', 120], ['slow', 10]]);
+  });
+});
+
+describe('HERE\'s time for our route (Route Import)', () => {
+  const points = ROUTE.points;
+  const answer = (sections, status = 200) => async (url, init) => {
+    answer.sent = { url: String(url), trace: JSON.parse(init.body).trace };
+    return { ok: status === 200, status, json: async () => ({ routes: [{ sections }] }) };
+  };
+  const section = (length, duration) => ({ summary: { length, duration, baseDuration: duration - 60, typicalDuration: duration - 30 } });
+
+  it('adds up its sections, the traffic included, from a trace of our own route', async () => {
+    const half = ROUTE.total / 2;
+    const travel = await hereTravel(points, { fetchImpl: answer([section(half, 600), section(half, 900)]) });
+    assert.deepEqual(travel, { travelS: 1500, baseS: 1380, typicalS: 1440, lengthM: Math.round(ROUTE.total) });
+    assert.ok(answer.sent.url.includes('/import?') && answer.sent.url.includes('transportMode=car'));
+    assert.ok(answer.sent.trace.length > 100 && answer.sent.trace.length <= 2000);
+  });
+
+  it('gives no time when HERE matched another road, and throws when it does not answer', async () => {
+    assert.equal(await hereTravel(points, { fetchImpl: answer([section(ROUTE.total * 1.3, 900)]) }), null);
+    await assert.rejects(hereTravel(points, { fetchImpl: answer([], 503) }), /HERE import 503/);
   });
 });
 

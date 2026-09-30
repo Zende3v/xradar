@@ -9,7 +9,8 @@ import kotlin.math.abs
  * The dynamic ETA (D2.1, D2.4): time left = the route's base time still ahead + the delays of the
  * jams still ahead, recomputed at each fix without a request. The base is the engine's time,
  * spread along the route by its steps' durations (a motorway kilometre is not a town's); with
- * TomTom's time for the route, that time less the jams TomTom lists, so the rush hour stays in it.
+ * the live source's time for the route (HERE's since 30/09, TomTom's before), that time less the
+ * jams it lists, so the rush hour stays in it: the engine's alone is far too quick in towns.
  * A jam counts whole ahead of the driver, pro rata once inside it, not at all behind. The HUD,
  * the shared trip, the group and the trip's measures all read this one. Same rules as the iOS app.
  */
@@ -30,10 +31,10 @@ object EtaEstimator {
         val delays = stretches.sumOf { delayAhead(it.fromMeters * scale, it.toMeters * scale, it.delaySeconds ?: 0, along) }
         val travel = traffic?.travelSeconds?.takeIf { it > 0 }
         if (traffic == null || travel == null) return route.durationSeconds * baseShareLeft(route, routeMeters, along) + delays
-        // TomTom timed the route from where the driver was ([startMeters]): its time less the jams
-        // it lists there is the base of that rest, which shrinks along it as the engine's does.
+        // The live source timed the route from where the driver was ([startMeters]): its time less
+        // the jams it lists there is the base of that rest, which shrinks along it as the engine's does.
         val start = (traffic.startMeters * scale).coerceIn(0.0, routeMeters)
-        val listed = stretches.filter { it.source == TrafficStretch.TOMTOM }.sumOf { it.delaySeconds ?: 0 }
+        val listed = stretches.filter { it.source == TrafficStretch.HERE || it.source == TrafficStretch.TOMTOM }.sumOf { it.delaySeconds ?: 0 }
         val base = (travel - listed).coerceAtLeast(0).toDouble()
         val shareAtStart = baseShareLeft(route, routeMeters, start)
         val share = if (shareAtStart > 0) (baseShareLeft(route, routeMeters, maxOf(along, start)) / shareAtStart).coerceIn(0.0, 1.0) else 0.0

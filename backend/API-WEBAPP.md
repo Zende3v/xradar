@@ -485,13 +485,13 @@ Même chose sur une réponse du cache d'une minute. Rien d'autre ne change.
 "routing": { "provider": "ors", "keys": 2, "ready": 2, "budgetLeft": 2950,
   "usage": { "day": "2026-09-25", "keys": [{ "used": 50, "blockedUntil": null }, { "used": 0, "blockedUntil": null }] } },
 "traffic": { "provider": "here", "probes": 0,
-  "here": { "day": "2026-09-30", "used": 130, "byUse": { "eta": 110, "faster": 20 }, "byKind": { "flow": 65, "incidents": 65 },
+  "here": { "day": "2026-09-30", "used": 130, "byUse": { "eta": 110, "faster": 20 }, "byKind": { "flow": 65, "incidents": 65, "import": 65 },
     "month": "2026-09", "monthUsed": 130, "dailyCap": null, "accountDailyMax": 150, "deepCoverage": false },
   "speeds": { "samples": 0, "trips": 0 } }
 ```
 
 - ORS : `usage.keys` dans l'ordre des clés ; `blockedUntil` = clé écartée jusqu'à (ISO), `null` = sert.
-- HERE : toute requête envoyée compte, 2 par rafraîchissement (`flow` + `incidents`). `eta` =
+- HERE : toute requête envoyée compte, 3 par rafraîchissement (`flow` + `incidents` + `import` : Route Import, le temps HERE de la route, base de l'ETA depuis le 30/09). `eta` =
   `/api/traffic/route`, `faster` = `/api/route/faster`. Mois (`monthUsed`) : sa facturation. `dailyCap`
   `null` = aucun plafond global ; `accountDailyMax` = rafraîchissements HERE par compte et par jour.
 - `speeds` : échantillons de vitesse des conducteurs en mémoire (30 min), trajets distincts.

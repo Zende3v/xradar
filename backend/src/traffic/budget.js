@@ -3,12 +3,14 @@ import { stateFile } from '../state-file.js';
 
 /**
  * HERE requests sent, per UTC day and per UTC month, by use (`eta`: /api/traffic/route, `faster`:
- * /api/route/faster) and by kind (flow, incidents): what the Base Plan bills past its free tier.
+ * /api/route/faster) and by kind (flow, incidents: Traffic API; import: Route Import, the ETA's
+ * time): what the Base Plan bills past its free tier.
  * Kept on disk (config.hereUsageFile): a restart does not start the day again. No cap unless
  * HERE_DAILY_CAP (Arthur, 29/09); each account keeps to its own gap and daily count
  * (hereAccountAllows), so no app loop can drain the account.
  */
 const USES = ['eta', 'faster'];
+const KINDS = ['flow', 'incidents', 'import'];
 
 const utcDay = () => new Date().toISOString().slice(0, 10);
 const whole = (value) => Math.max(0, Math.round(Number(value) || 0));
@@ -16,7 +18,7 @@ const fresh = (day, month = day.slice(0, 7), monthUsed = 0) => ({
   day,
   used: 0,
   byUse: Object.fromEntries(USES.map((use) => [use, 0])),
-  byKind: { flow: 0, incidents: 0 },
+  byKind: Object.fromEntries(KINDS.map((kind) => [kind, 0])),
   month,
   monthUsed,
 });
@@ -33,7 +35,7 @@ function today() {
     if (saved?.month === day.slice(0, 7)) state.monthUsed = whole(saved.monthUsed);
     if (saved?.day === day) {
       for (const use of USES) state.byUse[use] = whole(saved.byUse?.[use]);
-      for (const kind of ['flow', 'incidents']) state.byKind[kind] = whole(saved.byKind?.[kind]);
+      for (const kind of KINDS) state.byKind[kind] = whole(saved.byKind?.[kind]);
       state.used = whole(saved.used);
     }
   }
@@ -41,7 +43,7 @@ function today() {
   return state;
 }
 
-/** One request about to be sent to HERE, for [use] and of [kind] (flow | incidents). */
+/** One request about to be sent to HERE, for [use] and of [kind] (flow | incidents | import). */
 export function countHere(use, kind) {
   const s = today();
   s.used += 1;

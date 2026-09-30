@@ -17,6 +17,46 @@ import { countHere } from './budget.js';
 const SOURCE = 'here';
 const ENCODING = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
+/**
+ * Our own route ([points], [lat, lon], from the driver on) timed by HERE with the live traffic
+ * (Route Import): { travelS, baseS, typicalS, lengthM }, or null when HERE matched another road
+ * (its length off ours by more than hereImportMaxLengthGap). Throws when HERE does not answer.
+ * The ETA's time: the engine's alone is far too quick in towns (config.js, 30/09).
+ */
+export async function hereTravel(points, { use = 'eta', fetchImpl = globalThis.fetch } = {}) {
+  const path = measure(points);
+  const step = Math.max(config.hereImportStepM, path.total / (config.hereImportMaxPoints - 1));
+  const trace = samplesBetween(path, 0, path.total, step)
+    .slice(0, config.hereImportMaxPoints)
+    .map(([lat, lng]) => ({ lat, lng }));
+  if (trace.length < 2) return null;
+  const query = new URLSearchParams({
+    transportMode: 'car',
+    return: 'summary,typicalDuration',
+    departureTime: `${new Date().toISOString().slice(0, 19)}Z`,
+    apiKey: config.hereApiKey,
+  });
+  countHere(use, 'import');
+  const res = await fetchImpl(`${config.hereRouterUrl.replace(/\/$/, '')}/import?${query}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ trace }),
+    signal: AbortSignal.timeout(config.hereTimeoutMs),
+  });
+  if (!res.ok) throw new Error(`HERE import ${res.status}`);
+  const sections = (await res.json()).routes?.[0]?.sections ?? [];
+  if (!sections.length) return null;
+  const sum = (key) => sections.reduce((total, section) => total + (Number(section.summary?.[key]) || 0), 0);
+  const lengthM = sum('length');
+  if (!(lengthM > 0) || Math.abs(lengthM - path.total) > path.total * config.hereImportMaxLengthGap) return null;
+  return {
+    travelS: Math.round(sum('duration')),
+    baseS: Math.round(sum('baseDuration')),
+    typicalS: sections.every((section) => section.summary?.typicalDuration != null) ? Math.round(sum('typicalDuration')) : null,
+    lengthM: Math.round(lengthM),
+  };
+}
+
 /** HERE's Flexible Polyline (github.com/heremaps/flexible-polyline), 2D, for [lat, lon] points. */
 export function flexiblePolyline(points, precision = 5) {
   const unsigned = (value) => {

@@ -9,7 +9,7 @@ import { measure } from '../routing/geometry.js';
 import { hereAccountAllows, hereAllows } from './budget.js';
 import { crowdAlong, withCrowd } from './crowd.js';
 import { datagouvAlong, withDatagouv } from './datagouv.js';
-import { hereAlong } from './here.js';
+import { hereAlong, hereTravel } from './here.js';
 import { probeStore } from './probes.js';
 import { speedStore } from './speeds.js';
 
@@ -27,6 +27,9 @@ const PROBES_AUTHOR = 'system:traffic';
  *   the drivers' own speeds do not already cover the route (speedCoverageSkipRatio), and once a
  *   hereAccountGapS per account, hereAccountDailyMax a day. `live` in the answer says whether it
  *   did (`tomtom` too, for those apps), `eonaCoverage` how much of the route the drivers covered.
+ *   With it, `travelS`: HERE's time for the route sent, live traffic included (Route Import,
+ *   hereTravel), the ETA's base since 30/09 — the engine's alone is far too quick in towns; null
+ *   when HERE could not time it.
  * - `crowd`: the drivers' own jams and speeds; `datagouv`: the DIR's speeds and events (D3.2).
  * Merged (the default): the drivers' where they cost more than HERE, then data.gouv for its extra
  * only and only while the switch trafficDatagouv is on (D2.6). With `raw: true` (apps that merge
@@ -54,12 +57,22 @@ trafficRouter.post('/route', async (req, res) => {
   let traffic = { totalM: Math.round(path.total), travelS: null, delayS: null, updatedAt: new Date().toISOString(), sections: [] };
   let live = false;
   if (wantsLive && !covered && hereAllows() && hereAccountAllows(account.id)) {
-    try {
-      traffic = await hereAlong(points, { use: 'eta' });
+    // The slowdowns and incidents on the route, and HERE's time for the route itself (the ETA's
+    // base: the engine's alone is far too quick in towns), at once.
+    const [along, travel] = await Promise.all([
+      hereAlong(points, { use: 'eta' }).catch((e) => {
+        // HERE silent: the other sources still answer, the ETA goes on without it.
+        console.warn('[traffic] HERE unavailable —', String(e.message || e));
+        return null;
+      }),
+      hereTravel(points, { use: 'eta' }).catch((e) => {
+        console.warn('[traffic] HERE import unavailable —', String(e.message || e));
+        return null;
+      }),
+    ]);
+    if (along) {
+      traffic = { ...along, travelS: travel?.travelS ?? null };
       live = true;
-    } catch (e) {
-      // HERE silent: the other sources still answer, the ETA goes on without it.
-      console.warn('[traffic] HERE unavailable —', String(e.message || e));
     }
   }
   const liveSections = traffic.sections.map((section) => ({ ...section, source: liveName }));

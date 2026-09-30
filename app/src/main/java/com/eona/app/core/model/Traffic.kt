@@ -112,7 +112,7 @@ data class TrafficParts(
     val sources: Set<String>
         get() = buildSet {
             tomtom.forEach { add(it.source) }
-            if (travelSeconds != null && tomtom.isEmpty()) add(TrafficStretch.TOMTOM)
+            if (travelSeconds != null && tomtom.isEmpty()) add(TrafficStretch.HERE)
             if (crowd.isNotEmpty()) add(TrafficStretch.CROWD)
             if (datagouv.isNotEmpty()) add(TrafficStretch.DATAGOUV)
         }

@@ -262,12 +262,14 @@ Mesuré sur le VPS, même route (Valhalla, 22,9 km) :
 - EONA ne compte que le surplus des bouchons (facteur ≥ 2) contre la vitesse fluide HERE : l'écart de base reste.
 - Rues hors couverture HERE (6,9 km) : feux et carrefours sous-estimés.
 - `/faster` jamais appelé le 30/09 (compteur 0) : option « Éviter les bouchons » sans doute coupée.
-- Correctif proposé à Arthur : chronométrer notre route par HERE Route Import (1 requête, 0,5 s) et l'utiliser
-  comme `travelS` (champ déjà lu par les apps) ; apps : retirer les retards HERE de ce temps (comme TomTom).
-  Coût : 2 500 gratuites par mois, puis 4,66 € les 1 000.
+- **Correctif codé (30/09, Arthur : « 27 min pour la tour Eiffel depuis Choisy c'est impossible »)** : à chaque
+  rafraîchissement HERE, notre route chronométrée par HERE Route Import (1 requête, 0,5 s ; testé Paris-Marseille
+  775 km, 3 000 points acceptés) renvoyée en `travelS` ; les apps partent de ce temps moins les bouchons HERE listés
+  (comme avec TomTom). Correspondance refusée si la longueur HERE s'écarte de plus de 10 %. Coût : 2 500 gratuites
+  par mois, puis 4,66 € les 1 000. Android 1.0.1 (19), iOS build 18. **Backend pas encore déployé.**
 
 ## Prochaine étape
 
 1. Arthur : accord pour mettre en ligne les pages CGU et confidentialité.
-2. Arthur : correctif ETA (HERE Route Import), oui ou non.
+2. Arthur : accord pour déployer le correctif ETA (backend), puis tests téléphone.
 3. Arthur : moyen de paiement HERE (Base Plan), plus tard. Clé HERE gardée (choix d'Arthur). ORS gardé en secours.

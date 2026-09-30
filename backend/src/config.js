@@ -148,6 +148,16 @@ export const config = {
   hereOnRouteM: 25,
   hereMinJamFactor: 2,
   hereMinSpeedMs: 1,
+  // HERE Route Import (Routing API v8, traffic/here.js hereTravel, 30/09): our own route timed by
+  // HERE with the live traffic, the ETA's time (travelS), asked with each HERE refresh (1 request
+  // more). Valhalla alone is far too quick in towns: Choisy-le-Roi to the Eiffel Tower on 30/09
+  // at 15:00, 26.7 min against 53.1 by HERE on the same 22.9 km (Waze 50). A point every
+  // hereImportStepM at least, hereImportMaxPoints at most (3 000 accepted over 775 km, 30/09);
+  // HERE's match off our length by more than hereImportMaxLengthGap is not our route: no time.
+  hereRouterUrl: process.env.HERE_ROUTER_URL || 'https://router.hereapi.com/v8',
+  hereImportStepM: 100,
+  hereImportMaxPoints: 2000,
+  hereImportMaxLengthGap: 0.1,
   trafficMaxPoints: 50_000,
   // The drivers' own speeds (traffic/speeds.js, "Aide au trafic partagé"): anonymous samples during
   // trips, kept speedSampleKeepMs in memory. Fresh (speedSampleFreshMs) samples within
