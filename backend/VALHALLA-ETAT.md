@@ -1,6 +1,6 @@
 # Valhalla : état du chantier
 
-Mis à jour : **30/09/2026** (Claude : TomTom remplacé par HERE + vitesses EONA). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
+Mis à jour : **30/09/2026** (Claude : phase 5, constat ETA). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
 itinéraires plus malins, sans casser les apps.
@@ -229,8 +229,45 @@ Revue des autres aspirateurs, décisions d'Arthur :
 - Déployé 30/09 nuit : HERE (TomTom en quarantaine `/root/eona-quarantaine-20260930-here/`), doublons HERE
   corrigés, recherche EONA. Android 1.0.1 (17), iOS 1.0.0 (16) : crédit OSM pour la recherche.
 
+## Icônes de signalement (30/09)
+
+- Les 15 SVG d'Arthur (`Downloads/assets/newsvg`) partout : marqueurs carte (un par type de signalement,
+  radars compris), boutons Signaler, alertes, interrupteurs. Android 1.0.1 (18) `8cb51c2`, iOS build 17 `84fce33`.
+
+## Phase 5 faite (30/09)
+
+- Politique de confidentialité (30/09/2026) : HERE à la place de TomTom, Valhalla sur nos serveurs, ORS en
+  secours et en comparaison, vitesses partagées, avis « Pas dans mon sens », rapports de bug et trajet joint,
+  présence (position seulement en trajet, une fois à la fermeture), mesures d'ETA des trajets, journal de
+  routage, mode ombre, recherche (index EONA, BAN et Photon reçoivent texte + position), Cloudflare à la place
+  de Tailscale, sauvegardes 14 jours.
+- CGU 1.2, article 11.1 : Valhalla, ORS en secours, HERE, data.gouv (DIR), BAN, Photon, Spotify. Sans nouvelle
+  acceptation (D8.3).
+- **Pages en ligne pas encore mises à jour** : accord d'Arthur pour copier `privacy/` et `cgu/` sur le VPS.
+
+## Constat ETA (30/09, 15:00, trajet d'Arthur Choisy → Tour Eiffel)
+
+Mesuré sur le VPS, même route (Valhalla, 22,9 km) :
+
+| Source | Durée |
+|---|---|
+| Valhalla seul (ce que l'app affichait) | 26,7 min |
+| EONA avec retards HERE (bouchons seulement, contre vitesse fluide HERE) | 34,1 min |
+| Valhalla + vitesse HERE mesurée sur les 16 km couverts | 40 min |
+| **HERE Route Import sur notre route, trafic compris** | **53,1 min** (sans trafic 30,6, habituel 40,4) |
+| HERE Routing, meilleure route (27,5 km) | 47,8 min |
+| Waze (capture d'Arthur) | 50 min, 30 km |
+
+- Valhalla trop optimiste : sur les 16 km couverts par HERE, 18,1 min contre 22,7 min à vitesse fluide HERE.
+- EONA ne compte que le surplus des bouchons (facteur ≥ 2) contre la vitesse fluide HERE : l'écart de base reste.
+- Rues hors couverture HERE (6,9 km) : feux et carrefours sous-estimés.
+- `/faster` jamais appelé le 30/09 (compteur 0) : option « Éviter les bouchons » sans doute coupée.
+- Correctif proposé à Arthur : chronométrer notre route par HERE Route Import (1 requête, 0,5 s) et l'utiliser
+  comme `travelS` (champ déjà lu par les apps) ; apps : retirer les retards HERE de ce temps (comme TomTom).
+  Coût : 2 500 gratuites par mois, puis 4,66 € les 1 000.
+
 ## Prochaine étape
 
-1. Arthur : tests téléphone (trafic HERE, ETA, recherche).
-2. Arthur : moyen de paiement HERE (Base Plan), pour passer le gratuit quand il faudra ; régénérer la clé HERE.
-3. Phase 5 : CGU et politique de confidentialité (HERE, vitesses EONA, data.gouv, recherche EONA).
+1. Arthur : accord pour mettre en ligne les pages CGU et confidentialité.
+2. Arthur : correctif ETA (HERE Route Import), oui ou non.
+3. Arthur : moyen de paiement HERE (Base Plan), plus tard. Clé HERE gardée (choix d'Arthur). ORS gardé en secours.

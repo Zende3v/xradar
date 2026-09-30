@@ -13,7 +13,7 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 </head>
 <body>
 <h1>Politique de confidentialité — EONA</h1>
-<p><strong>Dernière mise à jour : </strong><strong>24/09/2026.</strong></p>
+<p><strong>Dernière mise à jour : </strong><strong>30/09/2026.</strong></p>
 <p>La présente politique de confidentialité explique comment EONA collecte, utilise, transmet et protège les données à caractère personnel utilisées dans le cadre de l'application et de ses services.</p>
 <p>EONA applique les principes de minimisation des données et ne conserve pas les données de localisation plus longtemps que nécessaire au fonctionnement des fonctionnalités qui les utilisent. Les informations présentées ci-dessous correspondent au fonctionnement actuellement prévu de l'application.</p>
 <p>Conformément aux exigences d'information du RGPD, cette politique précise notamment les données traitées, leurs finalités, les destinataires, les durées de conservation et les droits des utilisateurs.</p>
@@ -36,10 +36,12 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>vitesse et informations nécessaires au fonctionnement de la navigation et des fonctionnalités de trafic ;</li>
 <li>destination et informations saisies dans la recherche ;</li>
 <li>signalements effectués par l'utilisateur ;</li>
+<li>avis « Pas dans mon sens » donnés sur un radar fixe ;</li>
+<li>rapports de bug envoyés par l'utilisateur, avec, pour un problème de navigation, le trajet concerné ;</li>
 <li>données relatives aux trajets et statistiques de conduite lorsque cette fonctionnalité est activée ;</li>
 <li>données techniques et de télémétrie limitées nécessaires au fonctionnement du service.</li>
 </ul>
-<p>EONA ne conserve pas de trace GPS ou de coordonnées correspondant à l'historique complet des déplacements, sauf lorsque l'utilisateur active lui-même la fonction « Présence et position » (section 8), qui enregistre ses positions pendant 30 jours.</p>
+<p>EONA ne conserve pas de trace GPS ou de coordonnées correspondant à l'historique complet des déplacements, sauf lorsque l'utilisateur active lui-même la fonction « Présence et position » (section 8), qui enregistre ses positions pendant 30 jours, ou lorsqu'il joint lui-même un trajet à un rapport de bug (section 7 bis).</p>
 <p>Ces données sont traitées pour fournir le service demandé (compte, navigation, alertes, signalements, statistiques) et, au titre de l'intérêt légitime de EONA, pour prévenir les abus (un seul essai gratuit par téléphone, limites des comptes invités, modération) et faire fonctionner le trafic partagé.</p>
 <p>Aucune publicité, aucun pistage publicitaire, aucune vente de données.</p>
 <h2>3. Utilisation de la position</h2>
@@ -50,9 +52,11 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>l'affichage des éléments proches de l'utilisateur ;</li>
 <li>l'affichage de la limitation de vitesse applicable à l'emplacement ;</li>
 <li>l'affichage des panneaux, radars et autres éléments de navigation ;</li>
+<li>le trafic sur l'itinéraire et l'heure d'arrivée estimée ;</li>
+<li>la recherche de lieux et d'adresses, pour proposer d'abord les résultats proches ;</li>
 <li>certaines fonctions liées au trafic et à l'évitement des bouchons, lorsque l'utilisateur y participe.</li>
 </ul>
-<p>La position reçue par le serveur pour ces fonctions n'est pas conservée sous forme d'historique GPS. Le seul cas où des positions sont enregistrées et rattachées au compte est la fonction « Présence et position », désactivée par défaut, décrite à la section 8.</p>
+<p>La position reçue par le serveur pour ces fonctions n'est pas conservée sous forme d'historique GPS. Les seuls cas où des positions sont enregistrées et rattachées au compte sont la fonction « Présence et position », désactivée par défaut, décrite à la section 8, et le trajet joint par l'utilisateur à un rapport de bug, décrit à la section 7 bis.</p>
 <p>Les systèmes d'exploitation iOS et Android contrôlent par ailleurs l'autorisation accordée à l'application d'accéder à la localisation.</p>
 <h2>4. Suggestions de trajets</h2>
 <p>La fonctionnalité de suggestions de trajets garde les destinations choisies dans la recherche (« Récents ») afin de les proposer à nouveau. Ces destinations sont conservées uniquement sur le téléphone et ne sont jamais envoyées au serveur. Une copie est gardée dans le trousseau sécurisé du téléphone, là où se trouve déjà la session du compte, afin qu'une mise à jour ou une réinstallation de l'application ne les perde pas. Elle est activée par défaut.</p>
@@ -70,8 +74,9 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>les informations nécessaires à l'analyse du trafic.</li>
 </ul>
 <p>Ces données permettent notamment d'identifier des ralentissements et des zones de circulation perturbée à partir des informations provenant de plusieurs utilisateurs.</p>
-<p>Ces informations ne sont envoyées que lorsqu'un ralentissement est détecté sur une route limitée à 70 km/h ou plus (vitesse nettement inférieure à la limitation), au plus une fois toutes les cinq minutes. Elles sont conservées uniquement en mémoire pendant 30 minutes, sous un pseudonyme qui change chaque jour, sans lien avec le compte, et ne forment aucun historique GPS individuel. Lorsque plusieurs conducteurs ralentissent au même endroit, un signalement « Bouchon » anonyme peut être créé.</p>
-<p>Lorsque la fonctionnalité est désactivée, plus aucune de ces informations n'est envoyée, les informations récentes de l'utilisateur sont retirées et la question « Ralentissement du trafic ? » n'est plus posée. Le trafic sur le trajet et l'évitement des bouchons restent disponibles.</p>
+<p><strong>Ralentissements.</strong> Ces informations ne sont envoyées que lorsqu'un ralentissement est détecté sur une route limitée à 70 km/h ou plus (vitesse nettement inférieure à la limitation), au plus une fois toutes les cinq minutes. Elles sont conservées uniquement en mémoire pendant 30 minutes, sous un pseudonyme qui change chaque jour, sans lien avec le compte, et ne forment aucun historique GPS individuel. Lorsque plusieurs conducteurs ralentissent au même endroit, un signalement « Bouchon » anonyme peut être créé.</p>
+<p><strong>Vitesses partagées.</strong> Pendant un trajet, l'application relève environ toutes les 15 secondes la position, la direction, la vitesse, la limitation affichée et l'heure, et les envoie au serveur par lots, au plus une fois par minute. Ces relevés partent avec une clé tirée au hasard pour chaque trajet, jamais avec le compte ni l'identifiant de l'appareil. Le serveur les garde uniquement en mémoire pendant 30 minutes, puis les efface. Ils servent à mesurer le trafic sur les itinéraires des autres conducteurs : plus ils couvrent une route, moins EONA interroge son fournisseur de trafic (HERE, section 10). Ils ne forment aucun historique GPS individuel. Rien n'est envoyé lors d'un trajet simulé.</p>
+<p>Lorsque la fonctionnalité est désactivée, plus aucune de ces informations n'est envoyée (ni ralentissements, ni vitesses), les informations récentes de l'utilisateur sont retirées et la question « Ralentissement du trafic ? » n'est plus posée. Le trafic sur le trajet et l'évitement des bouchons restent disponibles.</p>
 <p>Les paramètres de participation sont accessibles depuis :</p>
 <p><strong>Menu → Confidentialité → Aide au trafic partagé</strong></p>
 <h2>6. Signalements</h2>
@@ -84,6 +89,7 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <p>Les autres utilisateurs ne voient jamais l'auteur d'un signalement. Pour la modération, les administrateurs d'EONA voient son pseudo et son compte, dans un outil interne réservé ; la plaque d'une voiture radar, elle, n'est montrée à personne.</p>
 <p>Les signalements sont conservés pendant <strong>90 jours après leur clôture</strong>.</p>
 <p>Lorsqu'un compte est supprimé, les données des signalements qui doivent être conservées sont <strong>anonymisées</strong> afin de ne plus être rattachées au compte supprimé.</p>
+<p><strong>« Pas dans mon sens ».</strong> Lorsqu'un utilisateur indique qu'un radar fixe ne contrôle pas son sens de circulation, EONA conserve son avis : le radar concerné, la direction dans laquelle il roulait, la date et son compte (un seul avis par radar et par compte, le plus récent). Lorsque plusieurs conducteurs s'accordent sur une même direction, le radar n'est plus annoncé dans ce sens. Les autres utilisateurs ne voient jamais qui a donné un avis. Les avis sont conservés <strong>365 jours</strong>.</p>
 <h2>7. Statistiques de conduite</h2>
 <p>Lorsque <strong>« Statistiques de conduite »</strong> est activé, EONA conserve certaines informations relatives aux trajets.</p>
 <p>Elle est activée par défaut. Lorsqu'elle est désactivée, les trajets suivants ne sont plus enregistrés ni envoyés ; ceux déjà enregistrés restent jusqu'à la suppression du compte.</p>
@@ -97,7 +103,8 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>la durée estimée ;</li>
 <li>la vitesse maximale ;</li>
 <li>le nombre et la durée des arrêts ;</li>
-<li>le nombre d'alertes par type.</li>
+<li>le nombre d'alertes par type ;</li>
+<li>des mesures de la qualité de l'heure d'arrivée estimée et du calcul d'itinéraire : le vrai moment du départ, la longueur prévue de l'itinéraire, l'heure d'arrivée affichée au départ puis à 25, 50 et 75 % du trajet, la durée des pauses et des arrêts, le nombre de recalculs et de changements d'itinéraire, un éventuel changement de destination, le moteur de calcul et la version de la carte utilisés, la version de l'application, le système (Android ou iOS) et les sources de trafic utilisées.</li>
 </ul>
 <p>Les totaux du compte peuvent également comprendre :</p>
 <ul>
@@ -108,14 +115,19 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <p>Ces données sont transmises périodiquement pendant le trajet afin de mettre à jour les statistiques.</p>
 <p>Aucune trace GPS ni coordonnée GPS historique n'est conservée dans les statistiques de conduite.</p>
 <p>Une copie des statistiques peut également être conservée localement sur le téléphone de l'utilisateur.</p>
+<h2>7 bis. Signaler un bug</h2>
+<p>Depuis le menu, l'utilisateur peut envoyer un rapport de bug. Il comprend la catégorie choisie, la description et les étapes qu'il a saisies, son compte, ainsi que le système, la version de l'application, la version du système et le modèle de l'appareil.</p>
+<p>Pour un problème de navigation, l'utilisateur peut y joindre le trajet concerné (celui en cours, ou le dernier depuis l'ouverture de l'application) : le moteur de calcul et la version de la carte, le nom de la destination et ses coordonnées, l'itinéraire suivi (600 points au plus), les heures de début et de départ, la distance parcourue et la longueur prévue. L'application indique clairement ce qui est joint.</p>
+<p>Les rapports ne sont visibles que des administrateurs d'EONA, dans un outil interne réservé. Ils sont conservés jusqu'à leur résolution, puis <strong>90 jours</strong> après celle-ci.</p>
 <h2>8. Présence et position</h2>
 <p>La fonction <strong>« Présence et position »</strong> est <strong>désactivée par défaut</strong>. Elle ne transmet rien tant que l'utilisateur ne l'active pas lui-même depuis Menu → Confidentialité.</p>
-<p>Lorsqu'elle est active, l'application transmet toutes les 30 secondes :</p>
+<p>Lorsqu'elle est active, l'application transmet environ toutes les 30 secondes, tant qu'elle est affichée ou qu'un trajet est en cours :</p>
 <ul>
 <li>l'information qu'une application EONA est ouverte ;</li>
 <li>si l'utilisateur est actuellement en trajet ou non ;</li>
-<li>sa position géographique et sa vitesse à cet instant.</li>
+<li>pendant un trajet uniquement, sa position géographique et sa vitesse à cet instant.</li>
 </ul>
+<p>En dehors d'un trajet, aucune position n'est envoyée, sauf une seule fois lorsque l'utilisateur quitte l'application : l'endroit où elle a été utilisée pour la dernière fois. Rien n'est envoyé en arrière-plan en dehors d'un trajet.</p>
 <p>Le décompte des applications ouvertes et des trajets en cours reste conservé en mémoire pendant 90 secondes, puis supprimé.</p>
 <p>Les positions transmises, elles, sont enregistrées dans la base de données et <strong>rattachées au compte</strong>. Elles sont conservées <strong>30 jours</strong>, puis supprimées automatiquement.</p>
 <p>Pendant cette durée, l'équipe EONA peut consulter, depuis un outil d'administration interne réservé aux administrateurs, la position actuelle des utilisateurs ayant activé la fonction ainsi que l'historique de leurs positions. Cet accès sert à l'exploitation du service : comprendre un incident signalé, vérifier la qualité de la signalisation et des alertes sur le terrain, et assister un utilisateur qui le demande.</p>
@@ -166,15 +178,17 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>aucun outil de rapport de crash externe.</li>
 </ul>
 <p>La télémétrie actuellement utilisée comprend le décompte des applications ouvertes et des trajets en cours, les positions et le temps d'utilisation lorsque les fonctions correspondantes sont activées, et, lorsque les statistiques de conduite sont activées, les secondes et mètres parcourus transmis périodiquement ainsi que le résumé du trajet.</p>
+<p>Le serveur tient aussi un journal technique de chaque calcul d'itinéraire (durée de calcul, moteur utilisé, distance, durée, nombre d'étapes, options d'évitement, éventuelle erreur), <strong>sans compte ni coordonnée</strong>, conservé 90 jours. Pour comparer les moteurs de calcul, chaque itinéraire peut être recalculé par un second moteur et comparé : ces mesures ne contiennent ni compte ni coordonnée et sont conservées 90 jours ; seuls les itinéraires des comptes administrateurs de l'équipe sont gardés avec leur tracé, 30 jours.</p>
 <p>Les statistiques de conduite sont activées par défaut. « Présence et position » et « Temps d'utilisation » sont désactivées par défaut. Toutes peuvent être activées ou désactivées à tout moment depuis Menu → Confidentialité.</p>
 <h2>10. Données transmises à des services externes</h2>
 <p>EONA utilise différents services externes pour fournir certaines fonctions.</p>
-<h3>TomTom</h3>
-<p>Le serveur EONA peut transmettre à TomTom le tracé du trajet suivi, sous forme de points espacés d'au moins environ 30 mètres, avec une limite de 1 000 points, ainsi que les variantes calculées.</p>
-<p>Ces données sont transmises pendant la navigation, notamment environ toutes les deux minutes.</p>
-<p>EONA ne transmet pas le compte ou l'identifiant utilisateur à TomTom dans ce cadre.</p>
+<h3>Calcul des itinéraires (serveurs EONA)</h3>
+<p>Les itinéraires sont calculés sur les serveurs d'EONA, en France, par le logiciel libre Valhalla à partir d'une copie locale des données OpenStreetMap. Le départ, la destination et les options choisies ne sont transmis à aucun tiers pour ce calcul.</p>
+<h3>HERE</h3>
+<p>Pour connaître le trafic sur l'itinéraire (vitesses et incidents), le serveur EONA transmet à HERE le reste de l'itinéraire, sous forme d'un tracé simplifié (300 points au plus). Il le fait à la création de l'itinéraire puis lorsque la situation change pendant le trajet, au plus une fois par minute et 150 fois par jour pour un même compte, sauf lorsque les vitesses partagées des conducteurs EONA (section 5) couvrent déjà l'essentiel de l'itinéraire. Il le fait aussi pour évaluer les itinéraires de contournement d'un bouchon, au plus une fois par minute pour un même compte.</p>
+<p>La requête part du serveur EONA : ni le compte, ni l'identifiant de l'appareil, ni l'adresse IP du téléphone ne sont transmis à HERE.</p>
 <h3>OpenRouteService (ORS)</h3>
-<p>EONA peut transmettre à ORS :</p>
+<p>ORS n'est plus utilisé qu'en secours, lorsque le calcul sur les serveurs EONA échoue, et pour comparer la qualité des deux moteurs de calcul (section 9). Dans ces cas, EONA peut transmettre à ORS :</p>
 <ul>
 <li>les coordonnées du départ ;</li>
 <li>les coordonnées de destination ;</li>
@@ -193,20 +207,19 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <h3>OpenMapTiles</h3>
 <p>OpenMapTiles est utilisé pour le format et les données nécessaires aux tuiles correspondantes. EONA n'effectue pas de transmission directe de données personnelles à ce service dans ce cadre.</p>
 <h3>OpenStreetMap</h3>
-<p>EONA utilise une copie locale de certaines données OpenStreetMap, notamment pour les lieux et éléments cartographiques.</p>
+<p>EONA utilise une copie locale des données OpenStreetMap de la France, téléchargée chaque semaine, notamment pour le calcul des itinéraires, la recherche de lieux, les services autour, la signalisation et les limitations de vitesse.</p>
 <p>Aucune donnée personnelle de l'utilisateur n'est envoyée à OpenStreetMap dans ce cadre.</p>
-<h3>Base Adresse Nationale / data.gouv.fr</h3>
-<p>Lors d'une recherche d'adresse, le texte saisi peut être transmis à la Base Adresse Nationale.</p>
-<p>La recherche est effectuée à partir d'au moins trois caractères et peut être accompagnée de l'adresse IP du terminal.</p>
-<p>La position de l'utilisateur n'est pas transmise avec cette requête.</p>
+<h3>Recherche : Base Adresse Nationale, Photon</h3>
+<p>La recherche passe par le serveur EONA, à partir de deux caractères saisis. Les lieux (commerces, écoles, gares, etc.) viennent de l'index d'EONA, construit à partir d'OpenStreetMap sur ses propres serveurs : rien n'est transmis à un tiers pour eux.</p>
+<p>Pour les adresses, le serveur transmet à la Base Adresse Nationale (État français) le texte saisi et la position de l'utilisateur, afin de proposer d'abord les adresses proches. Si l'index d'EONA ne répond pas, le serveur transmet le même texte et la même position à Photon (komoot), un service de recherche fondé sur OpenStreetMap, en secours.</p>
+<p>Ces requêtes partent du serveur EONA : ni le compte, ni l'adresse IP du téléphone ne sont transmis. La réponse n'est pas conservée ; le serveur garde en mémoire, quelques minutes, les résultats d'une même recherche faite au même endroit, sans le compte.</p>
 <h3>Données publiques de data.gouv.fr</h3>
-<p>Certaines données publiques, notamment relatives aux radars et aux prix des carburants, sont téléchargées par EONA afin d'être utilisées dans ses propres services.</p>
+<p>Certaines données publiques, notamment relatives aux radars, aux prix des carburants et à l'état de la circulation sur le réseau routier national non concédé (Bison Futé, directions interdépartementales des routes), sont téléchargées par EONA afin d'être utilisées dans ses propres services.</p>
 <p>Aucune donnée personnelle de l'utilisateur n'est transmise à data.gouv.fr pour ces téléchargements.</p>
 <h3>Envoi des e-mails</h3>
 <p>Pour la vérification de l'adresse e-mail et la réinitialisation du mot de passe, l'adresse e-mail et le code envoyé sont transmis au prestataire d'envoi des e-mails.</p>
-<h3>Tailscale</h3>
-<p>Tailscale est utilisé comme infrastructure réseau/tunnel.</p>
-<p>Les communications transitant par cette infrastructure sont chiffrées. Les adresses IP nécessaires au fonctionnement du réseau peuvent être traitées.</p>
+<h3>Cloudflare</h3>
+<p>Les connexions entre l'application et le serveur d'EONA passent par Cloudflare, qui les achemine jusqu'au serveur. Elles sont chiffrées (HTTPS). Cloudflare traite pour cela l'adresse IP du téléphone et les requêtes, conformément au fonctionnement de son service.</p>
 <h2>11. Conservation des données</h2>
 <p>EONA applique des durées de conservation limitées aux finalités concernées. Une donnée personnelle ne doit pas être conservée au-delà de la durée nécessaire à la finalité pour laquelle elle est utilisée.</p>
 <p>Les principales durées actuellement définies sont :</p>
@@ -223,7 +236,15 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <tr><td>Informations techniques de l'appareil (modèle, système, version, langue)</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
 <tr><td>Compte Google rattaché</td><td>Jusqu'à dissociation ou suppression du compte</td></tr>
 <tr><td>Temps d'utilisation cumulé</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
-<tr><td>Sondes de trafic</td><td>30 minutes en mémoire</td></tr>
+<tr><td>Sondes de trafic (ralentissements)</td><td>30 minutes en mémoire</td></tr>
+<tr><td>Vitesses partagées (clé de trajet aléatoire, sans compte)</td><td>30 minutes en mémoire</td></tr>
+<tr><td>Avis « Pas dans mon sens » sur un radar fixe</td><td>365 jours</td></tr>
+<tr><td>Rapports de bug, trajet joint compris</td><td>Jusqu'à leur résolution, puis 90 jours</td></tr>
+<tr><td>Journal des calculs d'itinéraire (sans compte ni coordonnée)</td><td>90 jours</td></tr>
+<tr><td>Comparaison des moteurs de calcul (sans compte ni coordonnée)</td><td>90 jours</td></tr>
+<tr><td>Itinéraires comparés des comptes administrateurs, avec leur tracé</td><td>30 jours</td></tr>
+<tr><td>Trafic sur l'itinéraire (HERE, data.gouv.fr)</td><td>Pas de conservation, hors décompte des requêtes par compte, en mémoire pour la journée</td></tr>
+<tr><td>Sauvegardes du serveur</td><td>14 jours, sur le serveur</td></tr>
 <tr><td>Statistiques de conduite</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
 <tr><td>Données de compte</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
 <tr><td>Compte invité</td><td>Supprimé 7 jours après l'inscription</td></tr>
