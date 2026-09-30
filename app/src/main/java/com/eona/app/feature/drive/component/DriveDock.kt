@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.eona.app.core.model.AlertType
 import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.SpeedStatus
 import com.eona.app.core.model.TripInfo
@@ -455,12 +456,12 @@ private fun ColumnScope.OptionsBody() {
             .fadedEdges(scroll)
             .verticalScroll(scroll),
     ) {
-        Toggle("Radar fixe", EonaIcons.Radar, colors.radarFixed, prefs.radarFixed) {
+        Toggle("Radar fixe", AlertType.RadarFixed.icon(), colors.radarFixed, prefs.radarFixed) {
             AppPreferences.updateAlerts { it.copy(radarFixed = !it.radarFixed) }
         }
         ReportType.ALERT_OPTIONS.forEach { type ->
             RowDivider()
-            Toggle(type.label, type.alertType.icon(), type.alertType.color(), prefs.shows(type)) {
+            Toggle(type.label, type.icon(), type.alertType.color(), prefs.shows(type)) {
                 AppPreferences.updateAlerts { it.toggled(type) }
             }
         }

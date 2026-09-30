@@ -34,12 +34,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.eona.app.core.model.GeoPoint
 import com.eona.app.core.model.LocationSample
+import com.eona.app.core.model.AlertType
 import com.eona.app.core.model.Radar
+import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.UserReport
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.designsystem.theme.EonaTheme
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -71,8 +71,8 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toArgb
@@ -88,7 +88,6 @@ import com.eona.app.core.model.RadarZone
 import com.eona.app.core.model.RoadSign
 import com.eona.app.core.model.RouteTraffic
 import com.eona.app.core.model.TrafficLevel
-import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.core.geo.LineSimplifier
 import com.eona.app.feature.drive.group.GroupMapLayer
 import com.eona.app.feature.drive.group.GroupMapRenderer
@@ -201,9 +200,9 @@ fun DriveMap(
     val routeFrom = remember { DoubleArray(1) }
     val nav = remember { NavHolder() }
 
-    // Per-type map markers, using each type's own icon + color (same as the settings
-    // toggles): radar fixe = needle in red, mobile = yellow, caméra, zone, danger…
-    // The key is the AlertType name, matched by each feature's "icon" property.
+    // Per-kind map markers (Arthur's report icons, 30/09): a disc in the kind's colour (the
+    // settings toggles' one) with its icon. "m-<AlertType>" for the radars, "r-<wire>" for each
+    // report kind, matched by each feature's "icon" property.
     val colors = EonaTheme.colors
     val density = LocalDensity.current
     val markerPx = with(density) { 30.dp.roundToPx() }
@@ -211,15 +210,9 @@ fun DriveMap(
     val clusterSignPx = with(density) { 30.dp.roundToPx() }
     val cursorPx = with(density) { CURSOR_SIZE.roundToPx() }
     val densityDpi = context.resources.displayMetrics.densityDpi
-    val markerSpecs = listOf(
-        Triple("RadarFixed", rememberVectorPainter(EonaIcons.Radar), colors.radarFixed),
-        Triple("RadarMobile", rememberVectorPainter(EonaIcons.Radar), colors.radarMobile),
-        Triple("Camera", rememberVectorPainter(EonaIcons.Camera), colors.radarFixed),
-        Triple("ControlZone", rememberVectorPainter(EonaIcons.Shield), colors.controlZone),
-        Triple("Hazard", rememberVectorPainter(EonaIcons.Warning), colors.hazard),
-        Triple("Accident", rememberVectorPainter(EonaIcons.Accident), colors.hazard),
-        Triple("Roadwork", rememberVectorPainter(EonaIcons.Construction), colors.controlZone),
-    )
+    val markerSpecs =
+        AlertType.entries.map { Triple("m-${it.name}", rememberVectorPainter(it.icon()), it.color()) } +
+            ReportType.entries.map { Triple("r-${it.wire}", rememberVectorPainter(it.icon()), it.alertType.color()) }
 
     // Smooth device heading (rotation-vector sensor), anchored to the GPS bearing
     // so the camera rotates naturally through turns regardless of phone mounting.
@@ -338,34 +331,8 @@ fun DriveMap(
                     PropertyFactory.lineOpacity(0.85f),
                 ),
             )
-            // Custom PNG markers (map display only); vector fallback for the rest.
-            val assetMarkers = mapOf(
-                "RadarFixed" to R.drawable.marker_radar_fix,
-                "RadarMobile" to R.drawable.marker_radar_mobile,
-                "Camera" to R.drawable.marker_camera,
-                "ControlZone" to R.drawable.marker_zone_controle,
-                "Hazard" to R.drawable.marker_danger,
-                "Accident" to R.drawable.marker_accident,
-                "RadarCar" to R.drawable.marker_voiture_radar,
-            )
-            // Baseline vector markers for every type (always works)…
             markerSpecs.forEach { (key, painter, color) ->
-                style.addImage("m-$key", markerBitmap(painter, markerPx, color, density))
-            }
-            // …then override with the custom PNGs (guarded so a decode issue can't
-            // abort the whole style and blank the map).
-            runCatching {
-                assetMarkers.forEach { (key, resId) ->
-                    BitmapFactory.decodeResource(context.resources, resId)?.let {
-                        style.addImage("m-$key", Bitmap.createScaledBitmap(it, markerPx, markerPx, true))
-                    }
-                }
-            }
-            // Radars, camera and control: the colour artwork, as supplied; a jam has its own.
-            runCatching {
-                artworkMarkers.forEach { (key, resId) ->
-                    ContextCompat.getDrawable(context, resId)?.let { style.addImage(key, it.toBitmap(markerPx, markerPx)) }
-                }
+                style.addImage(key, markerBitmap(painter, markerPx, color, density))
             }
             // Cluster badges (Arthur's icons), scaled to a fixed height. The width that
             // comes out drives where the count sits, so a swapped asset stays aligned.
@@ -817,15 +784,6 @@ private fun lerpAngle(from: Double, to: Float, t: Float): Double {
     return (from + diff * t + 360.0) % 360.0
 }
 
-/** The colour artwork used as map markers, drawn as supplied (image name → drawable). */
-private val artworkMarkers = mapOf(
-    "m-RadarFixed" to R.drawable.ic_hud_radar_fixe,
-    "m-RadarMobile" to R.drawable.ic_hud_radar_mobile,
-    "m-Camera" to R.drawable.ic_hud_camera,
-    "m-ControlZone" to R.drawable.ic_hud_zone_controle,
-    JAM_MARKER to R.drawable.ic_hud_bouchon,
-)
-
 private fun setRadars(style: Style, radars: List<Radar>) {
     val features = radars.map {
         Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)).apply {
@@ -861,8 +819,8 @@ private fun setControlZones(style: Style, reports: List<UserReport>) {
 private fun setReports(style: Style, reports: List<UserReport>) {
     val features = reports.map {
         Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat)).apply {
-            // A jam has its own artwork; the other reports share their alert's marker.
-            addStringProperty("icon", if (it.type == com.eona.app.core.model.ReportType.TrafficJam) JAM_MARKER else "m-${it.type.alertType.name}")
+            // Each report kind its own marker (a jam, a stopped vehicle, an object…).
+            addStringProperty("icon", "r-${it.type.wire}")
             addStringProperty("rid", it.id)
         }
     }
@@ -1052,23 +1010,33 @@ private fun circlePolygon(lat: Double, lon: Double, radiusM: Double, steps: Int 
     return Polygon.fromLngLats(listOf(ring))
 }
 
-/** Rasterize an icon into a round map marker: white chip + colored ring + colored glyph. */
-private fun markerBitmap(painter: Painter, sizePx: Int, iconColor: ComposeColor, density: Density): Bitmap {
+/**
+ * A map marker: a disc in the kind's [color] inside a white rim and a hairline (clear on a light
+ * or a dark map), the kind's icon on it in white, dark on a light colour (a danger's yellow).
+ */
+private fun markerBitmap(painter: Painter, sizePx: Int, color: ComposeColor, density: Density): Bitmap {
     val image = ImageBitmap(sizePx, sizePx)
     val canvas = ComposeCanvas(image)
     val size = Size(sizePx.toFloat(), sizePx.toFloat())
     CanvasDrawScope().draw(density, LayoutDirection.Ltr, canvas, size) {
-        val ring = 2.dp.toPx()
-        drawCircle(ComposeColor.White, radius = size.minDimension / 2f - ring / 2f, center = center)
-        drawCircle(iconColor, radius = size.minDimension / 2f - ring / 2f, center = center, style = Stroke(width = ring))
-        val iconPx = size.minDimension * 0.56f
+        val outer = size.minDimension / 2f
+        val hairline = 0.75.dp.toPx()
+        val rim = 1.75.dp.toPx()
+        drawCircle(ComposeColor.Black.copy(alpha = 0.22f), radius = outer, center = center)
+        drawCircle(ComposeColor.White, radius = outer - hairline, center = center)
+        drawCircle(color, radius = outer - hairline - rim, center = center)
+        val glyph = if (color.luminance() > 0.5f) MARKER_DARK_GLYPH else ComposeColor.White
+        val iconPx = size.minDimension * 0.62f
         val pad = (size.minDimension - iconPx) / 2f
         translate(pad, pad) {
-            with(painter) { draw(Size(iconPx, iconPx), colorFilter = ColorFilter.tint(iconColor)) }
+            with(painter) { draw(Size(iconPx, iconPx), colorFilter = ColorFilter.tint(glyph)) }
         }
     }
     return image.asAndroidBitmap()
 }
+
+/** The icon on a light marker colour. */
+private val MARKER_DARK_GLYPH = ComposeColor(0xFF1C1C1E)
 
 /**
  * The route line's colours along it: its own ([routeColor], the app's colour), and the traffic's
@@ -1213,7 +1181,6 @@ private const val ROUTE_CORE = "xr-route-core"
 /** How far the traffic colours blend into the route's own colour. */
 private const val TRAFFIC_BLEND_M = 25.0
 /** The marker of an "Embouteillage" report. */
-private const val JAM_MARKER = "m-jam"
 /** The zoom on a road limited to [FAST_ROAD_KMH] or more (the camera's far distance). */
 private const val NAV_ZOOM = 17.6
 /** Camera distances as on iOS: far on fast roads, closer in town. */

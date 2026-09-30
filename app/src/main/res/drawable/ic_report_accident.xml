@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arthur's report icon (Downloads/assets/newsvg), 32x32, tinted wherever it is used. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <group android:rotation="17" android:pivotX="8.5" android:pivotY="21">
+        <path
+            android:pathData="m3.5 20 1.2-4.2a1 1 0 0 1 1-.8h5.6a1 1 0 0 1 1 .8l1.2 4.2v6a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1Z"
+            android:fillColor="#000000"
+            android:fillAlpha="0.12"
+            android:strokeColor="#000000"
+            android:strokeWidth="1.65"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+    <group android:rotation="17" android:pivotX="8.5" android:pivotY="21">
+        <path
+            android:pathData="M5 19.2h7l-.8-2.8H5.8Z"
+            android:fillColor="#000000"
+            android:fillAlpha="0.24" />
+    </group>
+    <group android:rotation="17" android:pivotX="8.5" android:pivotY="21">
+        <path
+            android:pathData="M3.5 20h10M5.5 27v2M11.5 27v2M6 23h1M10 23h1"
+            android:strokeColor="#000000"
+            android:strokeWidth="1.65"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+    <group android:rotation="-17" android:pivotX="23.5" android:pivotY="21">
+        <path
+            android:pathData="m18.5 20 1.2-4.2a1 1 0 0 1 1-.8h5.6a1 1 0 0 1 1 .8l1.2 4.2v6a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1Z"
+            android:fillColor="#000000"
+            android:fillAlpha="0.12"
+            android:strokeColor="#000000"
+            android:strokeWidth="1.65"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+    <group android:rotation="-17" android:pivotX="23.5" android:pivotY="21">
+        <path
+            android:pathData="M20 19.2h7l-.8-2.8h-5.4Z"
+            android:fillColor="#000000"
+            android:fillAlpha="0.24" />
+    </group>
+    <group android:rotation="-17" android:pivotX="23.5" android:pivotY="21">
+        <path
+            android:pathData="M18.5 20h10M20.5 27v2M26.5 27v2M21 23h1M25 23h1"
+            android:strokeColor="#000000"
+            android:strokeWidth="1.65"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+    <path
+        android:pathData="M16 4v3M10 6l2 2M22 6l-2 2"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.65"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

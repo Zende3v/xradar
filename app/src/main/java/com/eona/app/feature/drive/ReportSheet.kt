@@ -3,7 +3,6 @@ package com.eona.app.feature.drive
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,14 +39,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.eona.app.R
 import com.eona.app.core.model.JamSeverity
 import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.Role
@@ -362,46 +358,11 @@ private fun SheetField(
     }
 }
 
-/**
- * The icon of each category in the picker. Supplied artwork where there is some; control
- * zone, roadworks, camera (and the legacy hazard) keep their drawn icon. All of them are
- * painted in one colour by the tile. Reduced visibility has no icon yet.
- */
-@Composable
-private fun ReportType.pickerPainter(): Painter? = when (this) {
-    ReportType.RadarMobile -> painterResource(R.drawable.ic_report_radar_mobile)
-    ReportType.VoitureRadar -> painterResource(R.drawable.ic_report_radar_car)
-    ReportType.StoppedVehicle -> painterResource(R.drawable.ic_report_stopped_vehicle)
-    ReportType.Accident -> painterResource(R.drawable.ic_report_accident)
-    ReportType.ObjectOnRoad -> painterResource(R.drawable.ic_report_object_on_road)
-    ReportType.TrafficJam -> painterResource(R.drawable.ic_report_traffic_jam)
-    ReportType.DamagedRoad -> painterResource(R.drawable.ic_report_damaged_road)
-    ReportType.SlipperyRoad -> painterResource(R.drawable.ic_report_slippery_road)
-    ReportType.RoadCrew -> painterResource(R.drawable.ic_report_road_crew)
-    ReportType.WrongWay -> painterResource(R.drawable.ic_report_wrong_way)
-    ReportType.ControlZone,
-    ReportType.Roadworks,
-    ReportType.Camera,
-    ReportType.Hazard,
-    -> rememberVectorPainter(alertType.icon())
-    ReportType.LowVisibility -> null
-}
-
-/** The colour artwork of the kinds that have one, shown bare in the picker, as supplied. */
-private fun ReportType.artwork(): Int? = when (this) {
-    ReportType.RadarMobile -> R.drawable.ic_hud_radar_mobile
-    ReportType.Camera -> R.drawable.ic_hud_camera
-    ReportType.ControlZone -> R.drawable.ic_hud_zone_controle
-    ReportType.TrafficJam -> R.drawable.ic_hud_bouchon
-    else -> null
-}
-
 @Composable
 private fun ReportTile(type: ReportType, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
     val colors = EonaTheme.colors
-    val artwork = type.artwork()
-    val painter = if (artwork == null) type.pickerPainter() else null
+    val painter = rememberVectorPainter(type.icon())
     Column(
         modifier = modifier
             .height(TILE_SLOT_HEIGHT)
@@ -411,23 +372,14 @@ private fun ReportTile(type: ReportType, onClick: () -> Unit, modifier: Modifier
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.sm, Alignment.CenterVertically),
     ) {
-        if (artwork != null) {
-            // The kinds with colour artwork show it bare, untinted.
-            Box(modifier = Modifier.size(60.dp), contentAlignment = Alignment.Center) {
-                Image(painter = painterResource(artwork), contentDescription = null, modifier = Modifier.size(46.dp))
-            }
-        } else {
-            // Every other category on the same disc; the icon in white with a soft glow.
-            Box(
-                modifier = Modifier
-                    .size(60.dp)
-                    .background(colors.glowTile, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (painter != null) {
-                    EonaGlowIcon(painter = painter, contentDescription = null, tint = colors.glowIcon, size = 30.dp)
-                }
-            }
+        // Every category on the same disc: its icon (Arthur's set, 30/09) in white with a soft glow.
+        Box(
+            modifier = Modifier
+                .size(60.dp)
+                .background(colors.glowTile, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            EonaGlowIcon(painter = painter, contentDescription = null, tint = colors.glowIcon, size = 32.dp)
         }
         EonaText(
             type.label,

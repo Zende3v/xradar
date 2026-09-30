@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arthur's report icon (Downloads/assets/newsvg), 32x32, tinted wherever it is used. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path
+        android:pathData="M4 10V6a2 2 0 0 1 2-2h4M22 4h4a2 2 0 0 1 2 2v4M28 22v4a2 2 0 0 1-2 2h-4M10 28H6a2 2 0 0 1-2-2v-4"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.65"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M12 7h8l4.5 18h-17Z"
+        android:fillColor="#000000"
+        android:fillAlpha="0.12" />
+    <path
+        android:pathData="M12 7 7.5 25M20 7l4.5 18M16 8v3M16 21v4"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.65"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M8 13.5h16a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1 -1.5 1.5h-16a1.5 1.5 0 0 1 -1.5 -1.5v-1a1.5 1.5 0 0 1 1.5 -1.5Z"
+        android:fillColor="#000000"
+        android:fillAlpha="0.24" />
+    <path
+        android:pathData="M7.5 15.5h17"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeAlpha="0.6" />
+</vector>
