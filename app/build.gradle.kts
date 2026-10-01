@@ -16,7 +16,12 @@ val googleWebClientId: String = Properties().run {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
     getProperty("google.webClientId")
-} ?: "860999659689-do66gkvaddkq543dl4dg86rildt6fpna.apps.googleusercontent.com"
+} ?: "860999659689-6ul8q6spgdjkfb3a2irv9b4i4q2l2gns.apps.googleusercontent.com"
+
+// Credential Manager exige client Web. Refuse anciens identifiants Android/iOS.
+require(googleWebClientId !in setOf("860999659689-do66gkvaddkq543dl4dg86rildt6fpna.apps.googleusercontent.com", "860999659689-kelca38pj5na7v90qpp6h1p3a1o5kt70.apps.googleusercontent.com")) {
+    "google.webClientId doit désigner un client OAuth de type Application Web."
+}
 
 plugins {
     // Kotlin support is built into AGP 9+ (do NOT apply org.jetbrains.kotlin.android).
@@ -33,7 +38,7 @@ android {
         applicationId = "com.eona.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 21
+        versionCode = 22
         versionName = "1.0.1"
         buildConfigField("String", "STADIA_API_KEY", "\"$stadiaApiKey\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
