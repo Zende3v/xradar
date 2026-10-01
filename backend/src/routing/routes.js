@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
 import { accountStore } from '../accounts/store.js';
-import { hereAllows } from '../traffic/budget.js';
+import { hereAllows, hereAccountAllows } from '../traffic/budget.js';
 import { routing as defaultRouting } from './engine.js';
 import { checkFaster } from './faster.js';
 import { cachedRoute, keepRoute, spendRoute } from './guard.js';
@@ -22,6 +22,7 @@ export function createRouteRouter({
   log = logRoute,
   faster = checkFaster,
   liveReady = () => hereAllows(),
+  accountAllows = hereAccountAllows,
 } = {}) {
   const router = Router();
   /** When each account last had a faster-route check (rerouteCheckGapS). */
@@ -113,7 +114,7 @@ export function createRouteRouter({
    * POST /api/route/faster  { coordinates: [[lon, lat], …], avoid?: ["tolls", "highways"], sinceRerouteS?, etaS? }
    * The rest of the route being followed (from the driver to the destination) against variants
    * around its big traffic jams, drawn by the engine that serves this account (ORS or Valhalla),
-   * each timed as the engine's time plus the live traffic on it (HERE, the drivers'): a variant
+   * durations come from HERE on the same window, completed by EONA/data.gouv: a variant
    * comes back (`better`) only when it saves enough time ([etaS], the app's ETA, sets the share of
    * the time left). One check per account a rerouteCheckGapS at most (429). See faster.js. When this account's engine is Valhalla and Valhalla fails, or
    * served its last route through ORS, no detour: `reason: "fallback"` (D5.2). Its route carries
@@ -158,6 +159,7 @@ export function createRouteRouter({
     if (plan.primary === 'valhalla' && (routing.valhallaBlocked() || routing.servedFallback(account.id))) {
       return answer(200, { better: null, reason: 'fallback' }, { error: 'fallback' });
     }
+    if (!accountAllows(account.id, now, 'faster')) return answer(429, { error: 'daily check limit' });
     try {
       const { answer: result, compare } = await faster(points, {
         avoid,

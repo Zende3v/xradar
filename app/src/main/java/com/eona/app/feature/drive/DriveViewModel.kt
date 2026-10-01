@@ -115,8 +115,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** Shown a few seconds after a switch to a faster route. */
     private val fasterNotice = MutableStateFlow<FasterRouteNotice?>(null)
     private val routingApi = com.eona.app.data.routing.RoutingApi()
-    // "Éviter les bouchons": a check running, the last one asked, and the trip's last switch for
-    // traffic, for the destination they were about (the same place chosen again keeps them).
+    // Contrôles trafic et dernier détour, conservés pour une même destination.
     private var checkingFaster = false
     private var lastFasterCheckAt = 0L
     private var lastTrafficRerouteAt: Long? = null
@@ -402,13 +401,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     LocationRepository.location.value?.let { fix -> refreshReports(fix.latitude, fix.longitude) }
                 }
                 delay(REPORT_TICK_MS)
-            }
-        }
-        // "Éviter les bouchons" turned on during a trip: the traffic already known is looked at now.
-        viewModelScope.launch {
-            AppPreferences.settings.map { it.avoidTraffic }.distinctUntilChanged().collect { on ->
-                val known = traffic.value
-                if (on && known != null) considerFasterRoute(known, routeVersion)
             }
         }
         // The traffic on the route being followed (D2.2): TomTom at once for a new route, then on
@@ -1015,12 +1007,12 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val parts = TrafficParts(
             routeMeters = rp.totalMeters,
             tomtom = if (answer.tomtom) placed.filter { it.source == TrafficStretch.HERE || it.source == TrafficStretch.TOMTOM } else previous?.tomtom.orEmpty(),
-            travelSeconds = if (answer.tomtom) answer.travelSeconds else previous?.travelSeconds,
-            tomtomFrom = if (answer.tomtom) start else previous?.tomtomFrom ?: 0.0,
+            travelSeconds = answer.travelSeconds ?: previous?.travelSeconds,
+            tomtomFrom = if (answer.travelSeconds != null) start else previous?.tomtomFrom ?: 0.0,
             crowd = placed.filter { it.source == TrafficStretch.CROWD },
             datagouv = placed.filter { it.source == TrafficStretch.DATAGOUV },
             datagouvShown = answer.datagouvShown,
-            worthChecking = answer.tomtom && answer.worthChecking,
+            worthChecking = answer.worthChecking,
         )
         trafficParts = parts
         val merged = parts.merged()
@@ -1035,19 +1027,12 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             tomtomJamEnds = parts.tomtom.filter { (it.delaySeconds ?: 0) > 0 && it.toMeters > start }.map { it.toMeters },
             minGapSeconds = answer.minGapSeconds,
         )
-        if (answer.tomtom) considerFasterRoute(merged, version)
+        considerFasterRoute(merged, version)
     }
 
-    /**
-     * "Éviter les bouchons": when the backend says the traffic ahead (TomTom's and the drivers'
-     * jams) may be worth going around, it looks for a faster way, and the trip takes it when it
-     * saves enough time (the backend's thresholds, stricter a while after a switch) or goes
-     * around a closed road. Never a detour for a jam alone, never within a few minutes of the
-     * last switch, never for a simulated trip; asked again every few minutes at most (each
-     * check costs several TomTom and ORS requests).
-     */
+    /** Évitement automatique : gain confirmé, délais anti-oscillation, aucun trajet simulé. */
     private suspend fun considerFasterRoute(known: RouteTraffic, version: Int) {
-        if (!known.worthChecking || !AppPreferences.settings.value.avoidTraffic || checkingFaster) return
+        if (!known.worthChecking || checkingFaster) return
         val destination = ActiveTripRepository.destination.value ?: return
         val rp = path ?: return
         val now = System.currentTimeMillis()
@@ -1203,8 +1188,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             if (s.avoidTolls) add("tolls")
             if (s.avoidHighways) add("highways")
             if (s.avoidFerries) add("ferries")
-            // "Éviter les bouchons" no longer avoids every reported jam: the faster-route check
-            // weighs the time saved instead (considerFasterRoute).
+            // Évitement trafic automatique selon gain confirmé par considerFasterRoute.
         }
     }
 

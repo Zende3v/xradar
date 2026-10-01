@@ -78,7 +78,7 @@ fun PrivacyScreen(onBack: () -> Unit) {
                     "moins vite que la limite, l'app envoie la position, le sens et la vitesse de ce moment, sans lien avec ton " +
                     "compte, effacés après 30 minutes. À plusieurs, cela signale un bouchon aux autres ; seul, l'app te demande " +
                     "« Ralentissement du trafic ? ». Désactivé : ta position n'alimente plus le trafic partagé. Le trafic sur ton " +
-                    "trajet et « Éviter les bouchons » restent disponibles.",
+                    "trajet et évitement automatique des bouchons restent disponibles.",
             ) {
                 Switch("Aide au trafic partagé", settings.sharedTraffic, { s, on -> s.copy(sharedTraffic = on) }) {
                     // Its recent slowdowns leave the shared traffic too.

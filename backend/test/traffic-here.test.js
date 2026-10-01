@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { measure } from '../src/routing/geometry.js';
-import { corridorOf, flexiblePolyline, hereTravel, placeOnRoute } from '../src/traffic/here.js';
+import { corridorOf, flexiblePolyline, hereTravel as liveHereTravel, placeOnRoute } from '../src/traffic/here.js';
 import { speedStore } from '../src/traffic/speeds.js';
+
+const hereTravel = (points, options) => liveHereTravel(points, { reserve: () => true, cache: null, ...options });
 
 // A road due north along 2°E, from 48.00° to 48.10° (about 11.1 km).
 const ROUTE = measure(Array.from({ length: 11 }, (_, i) => [48 + i * 0.01, 2]));

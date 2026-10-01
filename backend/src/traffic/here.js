@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { gridOf, measure, project, samplesBetween } from '../routing/geometry.js';
-import { countHere } from './budget.js';
+import { reserveHere } from './budget.js';
+import { hereCache, hereCacheKey } from './here-cache.js';
 
 /**
  * HERE Traffic API v7 on our own route (the live traffic provider since 30/09, in place of
@@ -16,6 +17,13 @@ import { countHere } from './budget.js';
 
 const SOURCE = 'here';
 const ENCODING = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const importStatus = { evaluations: 0, valid: 0, lastReason: null, rejected: {} };
+function rejectImport(reason) {
+  importStatus.lastReason = reason;
+  importStatus.rejected[reason] = (importStatus.rejected[reason] ?? 0) + 1;
+  return null;
+}
+export const hereQuality = () => ({ import: { ...importStatus, rejected: { ...importStatus.rejected } } });
 
 /**
  * Our own route ([points], [lat, lon], from the driver on) timed by HERE with the live traffic
@@ -23,20 +31,23 @@ const ENCODING = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
  * (its length off ours by more than hereImportMaxLengthGap). Throws when HERE does not answer.
  * The ETA's time: the engine's alone is far too quick in towns (config.js, 30/09).
  */
-export async function hereTravel(points, { use = 'eta', fetchImpl = globalThis.fetch } = {}) {
+export async function hereTravel(points, { use = 'eta', fetchImpl = globalThis.fetch, reserve = reserveHere, cache = hereCache } = {}) {
+  importStatus.evaluations++;
   const path = measure(points);
   const step = Math.max(config.hereImportStepM, path.total / (config.hereImportMaxPoints - 1));
-  const trace = samplesBetween(path, 0, path.total, step)
-    .slice(0, config.hereImportMaxPoints)
-    .map(([lat, lng]) => ({ lat, lng }));
-  if (trace.length < 2) return null;
+  const sampled = samplesBetween(path, 0, path.total, step);
+  const tracePoints = sampled.slice(0, config.hereImportMaxPoints);
+  tracePoints[tracePoints.length - 1] = points[points.length - 1];
+  const trace = tracePoints.map(([lat, lng]) => ({ lat, lng }));
+  if (trace.length < 2 || !(path.total > 0)) return rejectImport('invalid trace');
   const query = new URLSearchParams({
     transportMode: 'car',
     return: 'summary,typicalDuration',
     departureTime: `${new Date().toISOString().slice(0, 19)}Z`,
     apiKey: config.hereApiKey,
   });
-  countHere(use, 'import');
+  const load = async () => {
+  if (!reserve(use, 'import')) throw new Error('HERE budget unavailable');
   const res = await fetchImpl(`${config.hereRouterUrl.replace(/\/$/, '')}/import?${query}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -44,11 +55,21 @@ export async function hereTravel(points, { use = 'eta', fetchImpl = globalThis.f
     signal: AbortSignal.timeout(config.hereTimeoutMs),
   });
   if (!res.ok) throw new Error(`HERE import ${res.status}`);
-  const sections = (await res.json()).routes?.[0]?.sections ?? [];
-  if (!sections.length) return null;
+  return await res.json();
+  };
+  let json;
+  try { json = cache ? await cache.get(hereCacheKey('import', [config.hereRouterUrl, trace]), load) : await load(); }
+  catch (error) { rejectImport(error.message === 'HERE budget unavailable' ? 'budget unavailable' : 'request unavailable'); throw error; }
+  const route = json.routes?.[0];
+  const sections = route?.sections ?? [];
+  if ([...(route?.notices ?? []), ...sections.flatMap(s=>s.notices ?? [])].some(n=>n.severity === 'critical' || /^violated/i.test(n.code ?? ''))) return rejectImport('notice');
+  if (!sections.every(s=>Number.isFinite(s.summary?.duration) && s.summary.duration > 0 && Number.isFinite(s.summary?.length) && s.summary.length > 0)) return rejectImport('invalid summary');
+  if (!sections.length) return rejectImport('no sections');
   const sum = (key) => sections.reduce((total, section) => total + (Number(section.summary?.[key]) || 0), 0);
   const lengthM = sum('length');
-  if (!(lengthM > 0) || Math.abs(lengthM - path.total) > path.total * config.hereImportMaxLengthGap) return null;
+  if (!(lengthM > 0) || Math.abs(lengthM - path.total) > path.total * config.hereImportMaxLengthGap) return rejectImport('length mismatch');
+  importStatus.valid++;
+  importStatus.lastReason = null;
   return {
     travelS: Math.round(sum('duration')),
     baseS: Math.round(sum('baseDuration')),
@@ -89,13 +110,14 @@ export function corridorOf(path) {
 }
 
 /** One HERE Traffic request (flow | incidents) over [corridor], counted for [use]. */
-async function ask(kind, corridor, use, fetchImpl = globalThis.fetch) {
+async function ask(kind, corridor, use, fetchImpl = globalThis.fetch, reserve = reserveHere, cache = hereCache) {
   const body = {
     in: { type: 'corridor', corridor: corridor.polyline, radius: config.hereCorridorRadiusM },
     locationReferencing: ['shape'],
     ...(kind === 'flow' && config.hereDeepCoverage ? { advancedFeatures: ['deepCoverage'] } : {}),
   };
-  countHere(use, kind);
+  const load = async () => {
+  if (!reserve(use, kind)) throw new Error('HERE budget unavailable');
   const res = await fetchImpl(`${config.hereTrafficUrl.replace(/\/$/, '')}/${kind}?apiKey=${encodeURIComponent(config.hereApiKey)}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -103,7 +125,11 @@ async function ask(kind, corridor, use, fetchImpl = globalThis.fetch) {
     signal: AbortSignal.timeout(config.hereTimeoutMs),
   });
   if (!res.ok) throw new Error(`HERE ${kind} ${res.status}`);
-  return (await res.json()).results ?? [];
+  const json = await res.json();
+  if (!Array.isArray(json.results)) throw new Error('HERE invalid ' + kind);
+  return json.results;
+  };
+  return cache ? cache.get(hereCacheKey(kind, [config.hereTrafficUrl, body]), load) : load();
 }
 
 /**
@@ -111,20 +137,20 @@ async function ask(kind, corridor, use, fetchImpl = globalThis.fetch) {
  * delayS, sections } — flow slowdowns and incidents in metres along [points]. Throws when HERE
  * does not answer. [fetchImpl] stands for the network in the tests.
  */
-export async function hereAlong(points, { use = 'eta', fetchImpl } = {}) {
+export async function hereAlong(points, { use = 'eta', fetchImpl, reserve = reserveHere, cache = hereCache } = {}) {
   const path = measure(points);
   const corridor = corridorOf(path);
-  const [flow, incidents] = await Promise.all([
-    ask('flow', corridor, use, fetchImpl),
-    ask('incidents', corridor, use, fetchImpl).catch((e) => {
-      // Without its incidents, the flow still tells the delays.
-      console.warn('[here] incidents —', String(e.message || e));
-      return [];
-    }),
+  const [flow, incidents] = await Promise.allSettled([
+    ask('flow', corridor, use, fetchImpl, reserve, cache),
+    ask('incidents', corridor, use, fetchImpl, reserve, cache),
   ]);
-  const sections = placeOnRoute(path, flow, incidents);
+  if (flow.status === 'rejected' && incidents.status === 'rejected') throw flow.reason;
+  const sections = placeOnRoute(path, flow.status === 'fulfilled' ? flow.value : [], incidents.status === 'fulfilled' ? incidents.value : []);
   return {
     totalM: Math.round(path.total),
+    flowAvailable: flow.status === 'fulfilled',
+    incidentsAvailable: incidents.status === 'fulfilled',
+    coverageM: corridor.endM,
     travelS: null,
     delayS: sections.reduce((sum, s) => sum + (s.delayS ?? 0), 0),
     updatedAt: new Date().toISOString(),
@@ -235,4 +261,16 @@ function slowdownOf(part, length) {
   if (delayS <= 0) return null;
   const level = part.jamFactor >= 8 ? 'heavy' : part.jamFactor >= 5 ? 'jam' : 'slow';
   return { level, delayS, speedKmh: Math.round(speed * 3.6) };
+}
+
+/** Instantané partiel accepté pour l'ETA ; jamais suffisant pour imposer un détour. */
+export async function hereSnapshot(points, { along = hereAlong, travel = hereTravel } = {}) {
+  const [flow, timing] = await Promise.allSettled([along(points, { use: 'eta' }), travel(points, { use: 'eta' })]);
+  const sections = flow.status === 'fulfilled' ? flow.value : null;
+  const duration = timing.status === 'fulfilled' ? timing.value : null;
+  return {
+    live: Boolean(sections || duration),
+    traffic: { totalM: Math.round(measure(points).total), delayS: null, sections: [], updatedAt: new Date().toISOString(),
+      ...sections, travelS: duration?.travelS ?? null },
+  };
 }

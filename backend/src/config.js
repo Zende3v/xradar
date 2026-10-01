@@ -137,6 +137,14 @@ export const config = {
   hereTrafficUrl: process.env.HERE_TRAFFIC_URL || 'https://data.traffic.hereapi.com/v7',
   hereDeepCoverage: /^(1|true)$/i.test(process.env.HERE_DEEP_COVERAGE || ''),
   hereDailyCap: count(process.env.HERE_DAILY_CAP, null),
+  // Plafond estimé : tarifs configurables, aucune franchise supposée, marge de 20 %.
+  hereMonthlyBudgetEUR: Number(process.env.HERE_MONTHLY_BUDGET_EUR ?? 5),
+  hereTrafficEURPer1000: Number(process.env.HERE_TRAFFIC_EUR_PER_1000 ?? 2.33),
+  hereImportEURPer1000: Number(process.env.HERE_IMPORT_EUR_PER_1000 ?? 4.66),
+  herePriceMargin: Number(process.env.HERE_PRICE_MARGIN ?? 1.2),
+  hereCacheMs: 60_000,
+  hereCacheEntries: 128,
+  hereFasterAccountDailyMax: count(process.env.HERE_FASTER_ACCOUNT_DAILY_MAX, 30),
   hereAccountGapS: 60,
   hereAccountDailyMax: count(process.env.HERE_ACCOUNT_DAILY_MAX, 150),
   hereUsageFile: process.env.HERE_USAGE_FILE || './data/here-usage.json',
@@ -190,7 +198,7 @@ export const config = {
   rerouteJamMinDelayS: 60,
   rerouteJamGapM: 1000,
   // Variants timed per check, at most (one HERE refresh each).
-  rerouteMaxVariants: 3,
+  rerouteMaxVariants: 2,
 
   // data.gouv traffic (traffic/datagouv.js, D3.2): the DIR's open feeds on Bison Futé (Licence
   // Ouverte 2.0). Speeds every 6 min (older than datagouvSpeedsMaxAgeMs, 2 cycles: ignored), events

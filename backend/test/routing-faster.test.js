@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { checkFaster, closestTo, drawVariants } from '../src/routing/faster.js';
+import { checkFaster as actualCheckFaster, closestTo, drawVariants } from '../src/routing/faster.js';
 import { appRoute, line, trapNetwork } from './helpers/routing.js';
+
+// Durées HERE indépendantes des moteurs : trajet 1500 s, détour 1000 s.
+const checkFaster = (points, options) => actualCheckFaster(points, {
+  travel: async line => ({ travelS: line.some(p=>p[0] > 48.00001) ? 1000 : 1500 }), ...options,
+});
 
 // /api/route/faster's check (faster.js) with a fake live traffic ([traffic]) and fake engines
 // ([draw]): the same check whatever the engine; the shadow's drawing never times anything.
@@ -19,8 +24,8 @@ function live() {
   const calls = [];
   const traffic = async (points) => {
     calls.push(points.length);
-    if (calls.length === 1) return { delayS: 600, crowdS: 0, sections: [{ fromM: 5000, toM: 8000, delayS: 600, level: 'heavy' }] };
-    return { delayS: 0, crowdS: 0, sections: [] };
+    if (calls.length === 1) return { reliable: true, delayS: 600, crowdS: 0, sections: [{ fromM: 5000, toM: 8000, delayS: 600, level: 'heavy' }] };
+    return { reliable: true, delayS: 0, crowdS: 0, sections: [] };
   };
   return { traffic, calls };
 }
@@ -94,7 +99,7 @@ describe('faster check', () => {
     assert.deepEqual(cool, { answer: { better: null, reason: 'cooldown' }, compare: null });
     const calm = await checkFaster(POINTS, {
       draw: e.draw,
-      traffic: async () => ({ delayS: 30, crowdS: 0, sections: [{ fromM: 5000, toM: 6000, delayS: 30, level: 'slow' }] }),
+      traffic: async () => ({ reliable: true, delayS: 30, crowdS: 0, sections: [{ fromM: 5000, toM: 6000, delayS: 30, level: 'slow' }] }),
     });
     assert.equal(calm.answer.reason, 'no significant jam');
     assert.equal(calm.compare, null);
@@ -137,3 +142,64 @@ describe('shadow drawing', () => {
     assert.equal(net.count(), 0);
   });
 });
+
+
+describe('Détours fiables',()=>{
+  it('refuse variante plus lente selon HERE malgré durée moteur favorable',async()=>{
+    const result=await checkFaster(POINTS,{draw:engine('valhalla').draw,traffic:live().traffic,
+      travel:async points=>({travelS:points.some(p=>p[0]>48.00001)?1600:1500})});
+    assert.equal(result.answer.better,null);
+    assert.equal(result.answer.reason,'not enough gain');
+  });
+  it('refuse nouvelle fermeture sur variante, même avec retard nul',async()=>{
+    let n=0, imports=0;
+    const first=live().traffic;
+    const result=await checkFaster(POINTS,{draw:engine('valhalla').draw,
+      traffic:async points=>++n===1?first(points):({reliable:true,delayS:0,crowdS:0,sections:[{fromM:1000,toM:1500,level:'closed',delayS:0}]}),
+      travel:async()=>{imports++;return {travelS:1500};}});
+    assert.equal(result.answer.better,null);assert.equal(imports,1);
+  });
+  it('aucun détour sans durée actuelle fiable ou sans incidents',async()=>{
+    const e=engine('valhalla');
+    const missing=await checkFaster(POINTS,{draw:e.draw,traffic:live().traffic,travel:async()=>null});
+    assert.equal(missing.answer.reason,'HERE baseline unavailable');assert.equal(e.asks.length,0);
+    let n=0;const first=live().traffic;
+    const partial=await checkFaster(POINTS,{draw:e.draw,
+      traffic:async points=>++n===1?first(points):({reliable:false,sections:[],delayS:0,crowdS:0})});
+    assert.equal(partial.answer.better,null);
+  });
+});
+
+
+testLongWindow();
+function testLongWindow(){
+  describe('Fenêtre sur trajet long',()=>{
+    it('compare mêmes extrémités, conserve suite du trajet et tous évitements',async()=>{
+      const far={lat:48,lon:4};
+      const long=line(A,far,300).map(([lon,lat])=>[lat,lon]);
+      const timings=[], constraints=[];
+      const traffic=async points=>({reliable:true,coverageM:Infinity,crowdS:0,delayS:points===long?600:0,
+        sections:points===long?[{fromM:5000,toM:8000,delayS:600,level:'heavy'}]:[]});
+      const draw=async ask=>{
+        constraints.push(ask.avoid);
+        const shape=line(ask.from,ask.to,80,ask.label==='rest'?0:0.02);
+        return {engine:'valhalla',routes:[appRoute('valhalla',shape,{durationS:1000})],outage:false};
+      };
+      const result=await actualCheckFaster(long,{traffic,draw,avoid:['tolls','highways','ferries'],
+        travel:async points=>{timings.push(points);return {travelS:timings.length===1?1500:1000};}});
+      assert.ok(result.answer.better);
+      assert.equal(timings.length,2);
+      assert.deepEqual(timings[0][0],timings[1][0]);
+      assert.deepEqual(timings[0].at(-1),timings[1].at(-1));
+      assert.ok(timings[0].at(-1)[1]<long.at(-1)[1]);
+      assert.deepEqual(result.answer.better.route.coordinates.at(-1),[far.lon,far.lat]);
+      assert.ok(constraints.every(a=>JSON.stringify(a)===JSON.stringify(['tolls','highways','ferries'])));
+    });
+    it('refuse variante partiellement couverte par les incidents',async()=>{
+      let n=0;const first=live().traffic;
+      const result=await checkFaster(POINTS,{draw:engine('valhalla').draw,
+        traffic:async points=>++n===1?first(points):({reliable:true,coverageM:1000,sections:[],crowdS:0,delayS:0})});
+      assert.equal(result.answer.better,null);
+    });
+  });
+}

@@ -1,8 +1,12 @@
 import { config } from '../config.js';
 import { crowdAlong, crowdExtraS, withCrowd } from '../traffic/crowd.js';
-import { hereAlong } from '../traffic/here.js';
+import { hereAlong, hereTravel } from '../traffic/here.js';
+import { datagouvAlong, withDatagouv } from '../traffic/datagouv.js';
+import { speedStore } from '../traffic/speeds.js';
+import { settingsStore } from '../accounts/settings.js';
 import { gridOf, headingAt, measure, samplesBetween, share, sliceOf } from './geometry.js';
 import { square } from './providers/ors.js';
+import { haversine } from '../radars/geo.js';
 
 // Around a jam, the engine is kept off squares this wide on each side of the route...
 const AVOID_HALF_SIDE_M = 60;
@@ -27,44 +31,20 @@ const SAME_ROUTE_SHARE = 0.9;
 const THROUGH_CLOSURE_SHARE = 0.5;
 
 /**
- * Whether a faster way exists around the traffic on the rest of the route being followed
- * ([points], [lat, lon], from the driver to the destination). An engine keeps drawing the
- * routes — ORS or Valhalla, whichever [draw] asks (engine.js, drawer) — and gives their time
- * without traffic; the live traffic ([traffic]: HERE and the drivers', since 30/09) adds the time
- * lost on each. This only compares:
- * 1. the live traffic on the rest of the route lists its slowdowns (HERE's, the drivers' jams and
- *    speeds: traffic/crowd.js, traffic/speeds.js);
- * 2. slowdowns close together make one jam; only jams worth a detour and near enough
- *    (HORIZON_M) are kept, and nothing is searched when all of them together could not save
- *    the minimum gain (a closed road always is);
- * 3. a local detour: the engine draws variants from the driver to a point of the route past
- *    the jams (within the window) — around every jam, around the worst one alone, and its own
- *    alternatives —, each followed by the same rest of the route;
- * 4. a variant that is the route itself, still goes through every jam (or through a closure),
- *    or that the engine alone finds slower than the route by more than the time the jams cost,
- *    is dropped;
- * 5. over the window (the rest after it is the same for all), the route's time is the engine's
- *    for it (baselineS) plus its slowdowns there; a variant's, the engine's plus the live
- *    traffic on it;
- * 6. the fastest replaces the route only for a real gain: rerouteMinGainS and
- *    rerouteMinGainRatio of the time left ([etaS], the app's ETA, when it sends it), twice that
- *    for a while after a reroute ([sinceRerouteS]), and nothing at all just after one. A closed
- *    road is gone around by the fastest variant that avoids it, whatever the gain.
- * A jam alone never moves the driver: only the time saved does. When every variant the engine
- * was asked failed for an outage of it (Valhalla down: [draw] says `outage`), the answer is
- * `reason: "fallback"` (D5.2).
- *
- * Returns { answer, compare }: [answer], the JSON of /api/route/faster; [compare], what the
- * shadow mode needs to draw the same variants with the other engine (shadow.js) — null when no
- * engine was asked. [traffic] stands for the live traffic in the tests.
+ * Détour local : mêmes extrémités, même fenêtre, durées HERE pour trajet actuel et variantes.
+ * Trafic flow/incidents complet obligatoire. Toute fermeture sur variante la disqualifie.
+ * Seuls suppléments EONA/data.gouv s'ajoutent à HERE. Maximum deux variantes chronométrées.
+ * Gain minimal 3 min et 5 %, renforcé après bascule ; fermeture actuelle reste prioritaire.
+ * { answer, compare } conserve contrat API et comparaison des moteurs en mode ombre.
  */
-export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic } = {}) {
+export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel } = {}) {
   if (sinceRerouteS != null && sinceRerouteS < config.rerouteCooldownS) {
     return { answer: { better: null, reason: 'cooldown' }, compare: null };
   }
 
   const path = measure(points);
   const current = await traffic(points, path);
+  if (!current.reliable) return { answer: { better: null, reason: 'live traffic unavailable' }, compare: null };
   const sticky = sinceRerouteS != null && sinceRerouteS < config.rerouteStickyS;
   const thresholdS = Math.round(
     Math.max(config.rerouteMinGainS, config.rerouteMinGainRatio * (etaS > 0 ? etaS : 0)) * (sticky ? config.rerouteStickyFactor : 1),
@@ -84,6 +64,10 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   if (rejoinM >= path.total - KEEP_OPEN_M) rejoinM = path.total;
   const window = sliceOf(path, 0, rejoinM);
   const tail = rejoinM < path.total ? sliceOf(path, rejoinM, path.total) : null;
+  // Même portion, même source de durée. Aucun détour spéculatif sans import HERE valide.
+  const baseline = await travel(window, { use: 'faster' }).catch(() => null);
+  if (!(baseline?.travelS > 0)) return { answer: { ...summary, better: null, reason: 'HERE baseline unavailable' }, compare: null };
+  const currentS = baseline.travelS + delayWithin(current.sections.filter(s=>s.source === 'crowd' || s.source === 'datagouv'), 0, rejoinM);
 
   // The variants over the window, from the driver (heading kept: no U-turn) to the rejoin point
   // (reached the way the route goes) or the destination.
@@ -112,9 +96,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
     return { answer: { ...summary, better: null, reason: 'fallback' }, compare: null };
   }
 
-  // Over the window: the route's engine time plus its slowdowns there, against each variant's.
-  if (drawn.baselineS == null) return { answer: { ...summary, better: null, reason: 'no baseline' }, compare: { plan, drawn, detour: null } };
-  const currentS = drawn.baselineS + delayWithin(current.sections, 0, rejoinM);
+  // HERE chronomètre aussi chaque variante ; fermetures et données manquantes la disqualifient.
   let best = null;
   let timed = 0;
   for (const candidate of drawn.viable) {
@@ -122,9 +104,12 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
       console.warn('[faster] live traffic on a variant —', String(e.message || e));
       return null;
     });
-    if (!live) continue;
+    if (!live?.reliable || (live.coverageM != null && live.coverageM < measure(candidate.line).total - 1)
+        || live.sections.some(s=>s.level === 'closed' || s.kind === 'closed')) continue;
+    const timing = await travel(candidate.line, { use: 'faster' }).catch(() => null);
+    if (!(timing?.travelS > 0)) continue;
     timed += 1;
-    const travelS = candidate.route.durationS + live.delayS;
+    const travelS = timing.travelS + delayWithin(live.sections.filter(s=>s.source === 'crowd' || s.source === 'datagouv'), 0, Infinity);
     if (!best || travelS < best.travelS) best = { candidate, route: candidate.route, travelS };
   }
 
@@ -139,7 +124,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   if (!switching) return { answer: { ...result, better: null, reason: best ? 'not enough gain' : 'no variant' }, compare };
   const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw) : best.route;
   if (!route) return { answer: { ...result, better: null, reason: 'rest of the route unavailable' }, compare };
-  // The new route keeps its engine time: the apps add the live traffic to it (their ETA).
+  // Durée moteur conservée dans route ; prochain rafraîchissement fournit son ETA HERE.
   return { answer: { ...result, better: { gainS: Math.max(0, gainS), closed, route } }, compare };
 }
 
@@ -163,18 +148,14 @@ export async function drawVariants(plan, draw) {
   };
 }
 
-/**
- * [routes] (the app's shape) against the window of [plan]: the route itself gives the engine's
- * time for the window (baselineS); a variant through a closure, through every jam, or like one
- * already kept is dropped; one slower, without traffic, than the route by more than the jams
- * cost cannot win. The first config.rerouteMaxVariants left are `viable` (one live traffic
- * request each).
- */
+/** Écarter doublons, mauvais points de raccord et fermetures connues. HERE départage les durées. */
 function sift(plan, routes) {
   let baselineS = null;
   const candidates = [];
   for (const route of [...routes].sort((a, b) => a.durationS - b.durationS)) {
     const line = route.coordinates.map(([lon, lat]) => [lat, lon]);
+    const start = plan.windowSamples[0], end = plan.windowSamples.at(-1);
+    if (line.length < 2 || haversine(...line[0], ...start) > 40 || haversine(...line.at(-1), ...end) > 40) continue;
     const grid = gridOf(line);
     const samples = samplesBetween(measure(line), 0, Infinity);
     const same = (other) => share(other.samples, grid) >= SAME_ROUTE_SHARE && share(samples, other.grid) >= SAME_ROUTE_SHARE;
@@ -187,9 +168,7 @@ function sift(plan, routes) {
     if (candidates.some(same)) continue;
     candidates.push({ route, line, grid, samples });
   }
-  const viable = candidates
-    .filter((candidate) => plan.closed || baselineS == null || candidate.route.durationS <= baselineS + plan.lostS)
-    .slice(0, config.rerouteMaxVariants);
+  const viable = candidates.slice(0, config.rerouteMaxVariants);
   return { found: routes, baselineS, candidates, viable };
 }
 
@@ -226,14 +205,18 @@ export function worthChecking(sections, totalM, aheadM) {
 async function liveTraffic(points, path = measure(points)) {
   const live = await hereAlong(points, { use: 'faster' }).catch((e) => {
     console.warn('[faster] HERE unavailable —', String(e.message || e));
-    return { sections: [] };
+    return { sections: [], flowAvailable: false, incidentsAvailable: false };
   });
   const crowd = await crowdAlong(path).catch((e) => {
     console.warn('[faster] drivers\' jams unavailable —', String(e.message || e));
     return [];
   });
-  const sections = withCrowd(live.sections, crowd);
-  return { sections, delayS: delayWithin(sections, 0, path.total), crowdS: crowdExtraS(sections) };
+  const eona = speedStore.along(path, config.hereCorridorMaxM);
+  const merged = withCrowd(live.sections, [...crowd, ...eona.sections].sort((a,b)=>a.fromM-b.fromM));
+  const sections = settingsStore.trafficDatagouv ? withDatagouv(merged, datagouvAlong(path)) : merged;
+  return { sections, delayS: delayWithin(sections, 0, path.total), crowdS: crowdExtraS(sections),
+    coverageM: live.coverageM,
+    reliable: live.flowAvailable === true && live.incidentsAvailable === true && live.coverageM >= Math.min(path.total, WINDOW_MAX_M) - 1 };
 }
 
 /** The time [sections] lose between [fromM] and [toM], a section cut pro rata. */
@@ -260,6 +243,9 @@ async function withRest(detour, rest, heading, avoid, draw) {
     alternatives: false,
   });
   if (!route) return null;
+  const returned = route.coordinates.map(([lon, lat])=>[lat, lon]);
+  if (share(samplesBetween(measure(rest), 0, Infinity), gridOf(returned)) < 0.995
+      || share(samplesBetween(measure(returned), 0, Infinity), gridOf(rest)) < 0.995) return null;
   return {
     distanceM: detour.distanceM + route.distanceM,
     durationS: detour.durationS + route.durationS,

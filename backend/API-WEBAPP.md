@@ -609,3 +609,12 @@ Reste ouvert, à demander si besoin :
   `/api/admin/accounts`, paginés.
 - Ne jamais afficher `deviceId`, `email` ou `passwordHash` à quelqu'un qui n'est pas admin. Le
   backend ne renvoie jamais le mot de passe, même haché, mais il renvoie l'email dans la vue admin.
+
+
+## Trafic : livraison 01/10/2026
+
+Contrats existants conservés. `/api/traffic/route` garde import valide sans flow ; `check` utilise données disponibles.
+`/api/route/faster` compare durées HERE sur même fenêtre ; données incomplètes ou fermeture interdisent variante.
+Maximum deux variantes chronométrées. Budget estimé partagé ETA/détours, quotas compte persistants.
+`/health.traffic.here` ajoute `monthlyBudgetEUR`, `estimatedMonthEUR`, `monthByKind`, `blocked`, `cache` et `quality`.
+Tarifs affichés : hypothèses configurables ; facture HERE non garantie par estimation.

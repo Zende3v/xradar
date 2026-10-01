@@ -27,6 +27,8 @@ import { shareStore } from './trips/shares.js';
 import { groupStore } from './trips/groups.js';
 import { groupPage, sharePage } from './trips/page.js';
 import { hereUsage } from './traffic/budget.js';
+import { hereCache } from './traffic/here-cache.js';
+import { hereQuality } from './traffic/here.js';
 import { datagouvStore } from './traffic/datagouv.js';
 import { localMeta } from './search/local.js';
 import { probeStore } from './traffic/probes.js';
@@ -103,7 +105,7 @@ export function createApp() {
       traffic: {
         provider: config.hereApiKey ? 'here' : null,
         probes: probeStore.meta.count,
-        here: hereUsage(),
+        here: { ...hereUsage(), cache: hereCache.status(), quality: hereQuality() },
         speeds: speedStore.meta,
         datagouv: { shown: settingsStore.trafficDatagouv, ...datagouvStore.meta },
       },

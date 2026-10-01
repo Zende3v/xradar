@@ -1,5 +1,15 @@
 # Valhalla : journal des décisions
 
+## 01/10/2026 — Budget, ETA et évitement automatique
+
+Arthur valide trois lots, push et déploiement. Budget bêta souhaité maximal 5 €/mois.
+Priorité initiale : qualité HERE ; EONA remplacera fournisseur après preuve de précision.
+Détour avec gain fiable : comparaison HERE symétrique, fermetures contrôlées.
+Budget serveur estimé, tarifs configurables, marge 20 %, franchises non supposées.
+Réglage bouchons retiré sur deux apps. Bilan limité aux cinq trajets Arthur.
+Reprise Codex sans Claude explicitement autorisée après quota épuisé.
+
+
 Atelier par thèmes pour remplacer ORS par un moteur Valhalla auto-hébergé, avec le trafic temps
 réel et une ETA précise. Point de départ : l'audit du 24/09/2026 et les conditions de
 [VALHALLA.md](VALHALLA.md). Chaque entrée donne la décision, sa raison et sa date. Rien n'est codé

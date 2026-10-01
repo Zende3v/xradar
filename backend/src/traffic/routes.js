@@ -6,10 +6,10 @@ import { settingsStore } from '../accounts/settings.js';
 import { reportStore } from '../reports/store.js';
 import { worthChecking } from '../routing/faster.js';
 import { measure } from '../routing/geometry.js';
-import { hereAccountAllows, hereAllows } from './budget.js';
+import { hereAccountAllows } from './budget.js';
 import { crowdAlong, withCrowd } from './crowd.js';
 import { datagouvAlong, withDatagouv } from './datagouv.js';
-import { hereAlong, hereTravel } from './here.js';
+import { hereSnapshot } from './here.js';
 import { probeStore } from './probes.js';
 import { speedStore } from './speeds.js';
 
@@ -19,24 +19,10 @@ export const trafficRouter = Router();
 const PROBES_AUTHOR = 'system:traffic';
 
 /**
- * POST /api/traffic/route  { coordinates: [[lon, lat], …], aheadM?, live?, raw?, sources? }  (Bearer)
- * The slowdowns on this very route, in metres along the polyline sent (`fromM`, `toM`, `level`
- * slow | jam | heavy | closed, `delayS`, `speedKmh`, `kind`), each with its `source` (D2.7):
- * - `here`: HERE's live traffic (flow and incidents, traffic/here.js), since 30/09. Asked unless
- *   `live: false` (the apps' own recalage, D2.2; `tomtom: false` from the apps before HERE), while
- *   the drivers' own speeds do not already cover the route (speedCoverageSkipRatio), and once a
- *   hereAccountGapS per account, hereAccountDailyMax a day. `live` in the answer says whether it
- *   did (`tomtom` too, for those apps), `eonaCoverage` how much of the route the drivers covered.
- *   With it, `travelS`: HERE's time for the route sent, live traffic included (Route Import,
- *   hereTravel), the ETA's base since 30/09 — the engine's alone is far too quick in towns; null
- *   when HERE could not time it.
- * - `crowd`: the drivers' own jams and speeds; `datagouv`: the DIR's speeds and events (D3.2).
- * Merged (the default): the drivers' where they cost more than HERE, then data.gouv for its extra
- * only and only while the switch trafficDatagouv is on (D2.6). With `raw: true` (apps that merge
- * themselves, and compute both ETAs): each source whole, data.gouv included when `sources` lists
- * "datagouv"; `datagouv` says which ETA to show. Apps that do not list "here" in `sources` get
- * HERE's stretches as "tomtom", the live source they know. With `aheadM` (the driver's metres along
- * it), `check` says whether a faster-route check (/api/route/faster) is worth asking.
+ * POST /api/traffic/route : HERE (flow/incidents/import), EONA et data.gouv sur polyline envoyée.
+ * Import valide conservé sans flow. EONA complète HERE jusqu'à validation de sa précision.
+ * raw/sources, live/tomtom, travelS et check conservent contrat existant.
+ * check tient compte des données disponibles même sans nouvel appel HERE.
  */
 trafficRouter.post('/route', async (req, res) => {
   const account = authAccount(req);
@@ -51,29 +37,12 @@ trafficRouter.post('/route', async (req, res) => {
   const wantsLive = req.body?.live !== false && req.body?.tomtom !== false;
   const datagouvOn = settingsStore.trafficDatagouv;
 
-  // The drivers' own speeds first: where they cover the route, HERE is not asked.
+  // EONA complète HERE ; couverture seule ne prouve pas encore sa précision.
   const eona = speedStore.along(path, config.hereCorridorMaxM);
-  const covered = eona.coverage >= config.speedCoverageSkipRatio;
   let traffic = { totalM: Math.round(path.total), travelS: null, delayS: null, updatedAt: new Date().toISOString(), sections: [] };
   let live = false;
-  if (wantsLive && !covered && hereAllows() && hereAccountAllows(account.id)) {
-    // The slowdowns and incidents on the route, and HERE's time for the route itself (the ETA's
-    // base: the engine's alone is far too quick in towns), at once.
-    const [along, travel] = await Promise.all([
-      hereAlong(points, { use: 'eta' }).catch((e) => {
-        // HERE silent: the other sources still answer, the ETA goes on without it.
-        console.warn('[traffic] HERE unavailable —', String(e.message || e));
-        return null;
-      }),
-      hereTravel(points, { use: 'eta' }).catch((e) => {
-        console.warn('[traffic] HERE import unavailable —', String(e.message || e));
-        return null;
-      }),
-    ]);
-    if (along) {
-      traffic = { ...along, travelS: travel?.travelS ?? null };
-      live = true;
-    }
+  if (wantsLive && config.hereApiKey && hereAccountAllows(account.id)) {
+    ({ traffic, live } = await hereSnapshot(points));
   }
   const liveSections = traffic.sections.map((section) => ({ ...section, source: liveName }));
   // Without the drivers' jams (database down), the rest still counts.
@@ -84,6 +53,7 @@ trafficRouter.post('/route', async (req, res) => {
   const crowd = [...jams, ...eona.sections].sort((a, b) => a.fromM - b.fromM);
   const datagouv = (raw ? sources.includes('datagouv') : datagouvOn) ? datagouvAlong(path) : [];
   const merged = withCrowd(liveSections, crowd);
+  const checked = datagouvOn && datagouv.length ? withDatagouv(merged, datagouv) : merged;
   const sections = raw
     ? [...liveSections, ...crowd, ...datagouv].sort((a, b) => a.fromM - b.fromM)
     : datagouv.length ? withDatagouv(merged, datagouv) : merged;
@@ -96,7 +66,7 @@ trafficRouter.post('/route', async (req, res) => {
     eonaCoverage: Math.round(eona.coverage * 100) / 100,
     datagouv: datagouvOn,
     minGapS: config.hereAccountGapS,
-    ...(Number.isFinite(aheadM) ? { check: (live || covered) && worthChecking(merged, path.total, aheadM) } : {}),
+    ...(Number.isFinite(aheadM) ? { check: worthChecking(checked, path.total, aheadM) } : {}),
   });
 });
 

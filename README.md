@@ -178,7 +178,11 @@ systemctl daemon-reload && systemctl restart eona-backend
 | `ORS_DAILY_BUDGET` | appels ORS par clé et par jour, sous le quota du plan gratuit (2000) | `1500` |
 | `ORS_USAGE_FILE` | compteurs du jour des clés ORS (clé nommée par un hash court, jamais en clair) | `./data/ors-usage.json` |
 | `OSRM_URL` | OSRM de repli | `https://router.project-osrm.org` |
-| `HERE_USAGE_FILE` | compteur HERE du jour et du mois, par usage et par type | `./data/here-usage.json` |
+| `HERE_USAGE_FILE` | compteurs persistants, mois par type, quotas compte ; écriture avant appel | `./data/here-usage.json` |
+| `HERE_MONTHLY_BUDGET_EUR` | plafond mensuel estimé ; zéro bloque appels payants | 5 |
+| `HERE_TRAFFIC_EUR_PER_1000` / `HERE_IMPORT_EUR_PER_1000` | hypothèses tarifaires configurables, franchise supposée zéro | 2.33 / 4.66 |
+| `HERE_PRICE_MARGIN` | marge sur estimation ; minimum 1 | 1.2 |
+| `HERE_FASTER_ACCOUNT_DAILY_MAX` | contrôles détour maximum par compte/jour, persistants | 30 |
 | `PGHOST` / `PGDATABASE` | base | `/var/run/postgresql` / `eona` |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
 | `PUBLIC_BASE_URL` | base des URLs d'avatars (les anciennes en `ts.net` sont réécrites au chargement) | `https://api.lrda-mercuriale.uk` |
@@ -199,6 +203,9 @@ systemctl daemon-reload && systemctl restart eona-backend
 | `FUEL_FEED_URL` / `FUEL_REFRESH_INTERVAL_MS` | prix carburants | roulez-eco / 10 min |
 | `PLACE_USER_AGENT` | identité HTTP vers les données ouvertes | `EONA/1.0 (+url)` |
 | `PLACE_TABLE` | services autour : `signs_next.place` = tester un build non publié (staging) | `signs.place` |
+
+Plafond HERE : estimation serveur, tarifs du compte à confirmer. Cache exact 60 s ; erreurs jamais conservées.
+Compteur illisible ou écriture impossible : appels HERE bloqués. `/health.traffic.here` expose budget, cache et refus import.
 
 Générer un secret : `openssl rand -hex 32`.
 

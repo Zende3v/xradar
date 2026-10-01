@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { after, before, describe, it } from 'node:test';
 import express from 'express';
 import { createRoutingEngine } from '../src/routing/engine.js';
-import { checkFaster } from '../src/routing/faster.js';
+import { checkFaster as actualCheckFaster } from '../src/routing/faster.js';
 import { cachedRoute, keepRoute } from '../src/routing/guard.js';
 import { VALHALLA_ERROR, ValhallaError } from '../src/routing/providers/valhalla.js';
 import { createRouteRouter } from '../src/routing/routes.js';
@@ -11,6 +11,11 @@ import { createShadow, createShadowQueue } from '../src/routing/shadow.js';
 import {
   appRoute, call, deferred, fakeOrs, fakeValhalla, line, orsAnswer, orsFeature, trapNetwork, wait,
 } from './helpers/routing.js';
+
+// Durées HERE indépendantes des moteurs : trajet 1500 s, détour 1000 s.
+const checkFaster = (points, options) => actualCheckFaster(points, {
+  travel: async line => ({ travelS: line.some(p=>p[0] > 48.00001) ? 1000 : 1500 }), ...options,
+});
 
 // /api/route and /api/route/faster over HTTP (127.0.0.1, an ephemeral port), with the real
 // façade, shadow and cache over fake engines, a fake live traffic and fake accounts: no network, no
@@ -56,6 +61,7 @@ async function setup({ mode = 'ors', ors = fakeOrs(), valhalla = fakeValhalla(),
     log: (entry) => { events.push('answered'); logs.push(entry); },
     faster: faster ?? ((points, options) => checkFaster(points, { ...options, traffic })),
     liveReady: () => true,
+    accountAllows: () => true,
   });
   const app = express();
   app.use(express.json({ limit: '3mb' }));
@@ -188,8 +194,8 @@ describe('/api/route/faster', () => {
     const calls = [];
     const traffic = async (points) => {
       calls.push(points.length);
-      if (calls.length === 1) return { delayS: 600, crowdS: 0, sections: [{ fromM: 5000, toM: 8000, delayS: 600, level: 'heavy' }] };
-      return { delayS: 0, crowdS: 0, sections: [] };
+      if (calls.length === 1) return { reliable: true, delayS: 600, crowdS: 0, sections: [{ fromM: 5000, toM: 8000, delayS: 600, level: 'heavy' }] };
+      return { reliable: true, delayS: 0, crowdS: 0, sections: [] };
     };
     return { traffic, calls };
   }

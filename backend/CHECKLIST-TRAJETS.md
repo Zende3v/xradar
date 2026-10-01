@@ -1,5 +1,19 @@
 # Checklist trajets — équipe EONA
 
+## Lot validé 01/10/2026 : cinq trajets
+
+Installer Android 20 ou iOS 19 après Codemagic. Statistiques activées, départ réel, arrivée automatique.
+
+1. Campagne : ETA et pertinence des petites routes.
+2. Région parisienne : ville courte, feux.
+3. Région parisienne : périurbain.
+4. Région parisienne : heure de pointe, détour si gain confirmé.
+5. Région parisienne : trajet différent ; vérifier péages/autoroutes selon choix habituels.
+
+Noter à l'arrêt : départ/destination, heure d'arrivée annoncée, arrivée réelle, saut ETA ou détour absurde.
+Bilan après cinq trajets : erreurs ETA et appels HERE consommés. Aucun nouveau chantier automatique.
+
+
 Trajets tests de l'équipe et points à vérifier (D7.4). Phase 1 du plan Valhalla : on **mesure**
 ORS, l'ETA au prorata et les itinéraires actuels. Chaque phase met cette liste à jour (D8.4).
 

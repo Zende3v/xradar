@@ -485,10 +485,6 @@ private fun ColumnScope.OptionsBody() {
         Toggle("Éviter les ferries", EonaIcons.Ferry, colors.accent, settings.avoidFerries) {
             AppPreferences.updateSettings { it.copy(avoidFerries = !it.avoidFerries) }
         }
-        RowDivider()
-        Toggle("Éviter les bouchons", EonaIcons.Warning, colors.hazard, settings.avoidTraffic) {
-            AppPreferences.updateSettings { it.copy(avoidTraffic = !it.avoidTraffic) }
-        }
     }
     Spacer(Modifier.height(spacing.sm))
 }

@@ -1,5 +1,23 @@
 # Valhalla : état du chantier
 
+## Livraison 01/10/2026 : trois lots trafic
+
+Arthur valide développement, push deux repos et déploiement. Reprise Codex seul autorisée après quota Claude épuisé.
+
+- Budget HERE mensuel **estimé 5 €**. Réservation disque avant chaque appel, compteur repris, quotas ETA/détours séparés.
+- Tarifs configurables : hypothèses Traffic 2,33 €/1000, Import 4,66 €/1000 ; marge 20 %, franchise supposée zéro.
+- Hypothèses sans garantie de facture HERE. Tarifs du compte restent à confirmer.
+- Cache exact 60 s, 128 entrées ; appels identiques simultanés partagés. Fermetures toujours contrôlées.
+- ETA HERE valide conservée si flow échoue. Apps conservent dernière durée valide si import échoue.
+- Détours : durées HERE sur même portion, raccords vérifiés, deux variantes maximum.
+- Variante fermée ou contrôle HERE incomplet refusé. Seuils 3 min/5 %, cooldown et évitements stricts conservés.
+- EONA complète HERE. Couverture locale seule ne coupe plus HERE avant validation de précision.
+- Réglage « Éviter les bouchons » supprimé. Évitement automatique sur trajets réels, Android 20 et iOS 19.
+- Vérifications : 34 tests backend ciblés passent. APK Android 20 construit. Swift vérifié statiquement ; Codemagic par Arthur.
+- Déploiement : **préparé, pas encore effectué**. Prochain contrôle : `/health`, compteur repris, fichiers identiques.
+- Validation Arthur : cinq trajets, un campagne et quatre région parisienne. Précision réelle reste à mesurer.
+
+
 Mis à jour : **30/09/2026** (Claude : phase 5, constat ETA). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
 
 Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
