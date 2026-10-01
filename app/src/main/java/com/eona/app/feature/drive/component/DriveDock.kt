@@ -95,6 +95,7 @@ fun DriveDock(
     /** Seconds left on the light we are waiting at — E4, fed by a later release. */
     redLightSeconds: Int? = null,
     /** True as soon as the dock is pulled open, so the HUD can clear the way. */
+    closeRequest: Int = 0,
     onOpenChange: (Boolean) -> Unit = {},
     /** Tap on the limit sign: propose a new limit (null = the sign is not tappable). */
     onLimitClick: (() -> Unit)? = null,
@@ -103,6 +104,10 @@ fun DriveDock(
     val spacing = EonaTheme.spacing
     val scope = rememberCoroutineScope()
     val progress = remember { Animatable(0f) }
+    LaunchedEffect(closeRequest) {
+        progress.snapTo(0f)
+        onOpenChange(false)
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         // At rest the dock takes a fifth of the screen; pulled up, four fifths.

@@ -1,5 +1,10 @@
 package com.eona.app.feature.menu
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,7 +33,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.eona.app.core.model.GpsSignal
@@ -38,10 +47,12 @@ import com.eona.app.data.bugs.BugAppDetails
 import com.eona.app.data.bugs.BugCategory
 import com.eona.app.data.bugs.BugReport
 import com.eona.app.data.bugs.BugSendOutcome
+import com.eona.app.data.bugs.BugScreenshot
 import com.eona.app.data.bugs.BugStatus
 import com.eona.app.data.bugs.BugTripTrace
 import com.eona.app.designsystem.component.EonaButton
 import com.eona.app.designsystem.component.EonaChip
+import com.eona.app.designsystem.component.EonaButtonVariant
 import com.eona.app.designsystem.component.EonaDivider
 import com.eona.app.designsystem.component.EonaListGroup
 import com.eona.app.designsystem.component.EonaMessageState
@@ -51,6 +62,8 @@ import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.designsystem.theme.EonaTheme
 import com.eona.app.location.LocationRepository
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val MIN_LENGTH = 10
 private const val MAX_LENGTH = 1000
@@ -76,7 +89,22 @@ fun BugReportRoute(onBack: () -> Unit) {
     var description by remember { mutableStateOf("") }
     var steps by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    var screenshot by remember { mutableStateOf<ByteArray?>(null) }
+    var loadingScreenshot by remember { mutableStateOf(false) }
+    val resolver = LocalContext.current.contentResolver
     var message by remember { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            loadingScreenshot = true
+            message = null
+            val image = BugScreenshot.read(resolver, uri)
+            if (image != null) screenshot = image else message = "Capture illisible. Choisis une autre image."
+            loadingScreenshot = false
+        }
+    }
+    val preview = remember(screenshot) {
+        screenshot?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }
+    }
     val fix by LocationRepository.location.collectAsState()
     val signal by LocationRepository.signal.collectAsState()
     // Driving: the form waits (what was typed stays) and opens by itself once the car stops. No
@@ -108,6 +136,20 @@ fun BugReportRoute(onBack: () -> Unit) {
                 Area(description, "Ce qui ne va pas, en quelques mots") { description = it }
                 Label("Comment le reproduire ?")
                 Area(steps, "Facultatif : ce que tu faisais juste avant") { steps = it }
+                Label("Capture (facultative)")
+                preview?.let {
+                    Image(bitmap = it, contentDescription = "Capture jointe",
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp), contentScale = ContentScale.Fit)
+                }
+                EonaButton(
+                    text = if (loadingScreenshot) "Préparation…" else if (screenshot == null) "Ajouter une capture" else "Changer la capture",
+                    onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    variant = EonaButtonVariant.Secondary,
+                    enabled = !sending && !loadingScreenshot, loading = loadingScreenshot, fillWidth = true,
+                )
+                if (screenshot != null) EonaButton(text = "Retirer la capture",
+                    onClick = { screenshot = null }, variant = EonaButtonVariant.Ghost,
+                    enabled = !sending && !loadingScreenshot, fillWidth = true)
                 EonaText(
                     "Envoyé avec ton compte et ${details.platform} ${details.os} · EONA ${details.version} · ${details.model}." +
                         if (category == BugCategory.Navigation) " Le trajet en cours (ou le dernier) et son itinéraire sont joints." else "",
@@ -122,7 +164,7 @@ fun BugReportRoute(onBack: () -> Unit) {
                         // Read here, where the trip is fed: the trip as it is at the moment of sending.
                         val context = if (category == BugCategory.Navigation) BugTripTrace.context() else null
                         scope.launch {
-                            val outcome = api.send(category, description.trim(), steps.trim(), AccountRepository.token, context)
+                            val outcome = api.send(category, description.trim(), steps.trim(), AccountRepository.token, context, screenshot)
                             sending = false
                             when (outcome) {
                                 BugSendOutcome.Sent -> onBack()
@@ -131,7 +173,7 @@ fun BugReportRoute(onBack: () -> Unit) {
                             }
                         }
                     },
-                    enabled = description.trim().length >= MIN_LENGTH && !sending,
+                    enabled = description.trim().length >= MIN_LENGTH && !sending && !loadingScreenshot,
                     loading = sending,
                     fillWidth = true,
                 )
@@ -275,8 +317,31 @@ private fun BugRow(report: BugReport, onClick: () -> Unit) {
 private fun BugDetail(report: BugReport, onStatus: (BugStatus) -> Unit) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
+    var screenshot by remember(report.id) { mutableStateOf<ImageBitmap?>(null) }
+    var loadingScreenshot by remember(report.id) { mutableStateOf(false) }
+    var reload by remember(report.id) { mutableStateOf(0) }
+    val api = remember { BugApi() }
+    LaunchedEffect(report.id, report.hasScreenshot, reload) {
+        if (report.hasScreenshot) {
+            loadingScreenshot = true
+            val bytes = api.screenshot(report.id, AccountRepository.token)
+            screenshot = withContext(Dispatchers.IO) {
+                bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }
+            }
+            loadingScreenshot = false
+        }
+    }
     Label("Description")
     EonaText(report.description, color = colors.textPrimary)
+    if (report.hasScreenshot) {
+        Label("Capture")
+        val image = screenshot
+        if (image != null) Image(bitmap = image, contentDescription = "Capture du rapport",
+            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), contentScale = ContentScale.Fit)
+        else EonaButton(text = if (loadingScreenshot) "Chargement…" else "Recharger la capture",
+            onClick = { reload += 1 }, variant = EonaButtonVariant.Secondary,
+            enabled = !loadingScreenshot, loading = loadingScreenshot, fillWidth = true)
+    }
     report.steps?.let {
         Label("Reproduction")
         EonaText(it, color = colors.textPrimary)

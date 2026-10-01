@@ -88,7 +88,6 @@ import com.eona.app.core.model.RadarZone
 import com.eona.app.core.model.RoadSign
 import com.eona.app.core.model.RouteTraffic
 import com.eona.app.core.model.TrafficLevel
-import com.eona.app.core.geo.LineSimplifier
 import com.eona.app.feature.drive.group.GroupMapLayer
 import com.eona.app.feature.drive.group.GroupMapRenderer
 import androidx.compose.runtime.rememberCoroutineScope
@@ -180,12 +179,8 @@ fun DriveMap(
     // Map-matching state: the driver is snapped onto the route so the arrow stays
     // on the line and the passed part gets trimmed away ("eats the line").
     val routePath = remember(routePoints) { if (routePoints.size >= 2) RoutePath(routePoints) else null }
-    // What is drawn is lightened (the driver is matched on every point, in [routePath]): a 400 km
-    // route of thousands of points was redrawn far too slowly, and every other line waited behind
-    // it. The shape stays within a couple of metres.
-    val drawnPath = remember(routePoints) {
-        if (routePoints.size >= 2) RoutePath(LineSimplifier.simplify(routePoints, ROUTE_DRAW_MAX_POINTS, 2.0)) else null
-    }
+    // Tracé complet, partagé avec guidage. Aucun plafond de points.
+    val drawnPath = routePath
     val drawnPathState = rememberUpdatedState(drawnPath)
     val routePathState = rememberUpdatedState(routePath)
     val trafficState = rememberUpdatedState(traffic)
@@ -366,7 +361,7 @@ fun DriveMap(
                     PropertyFactory.iconImage(Expression.get("icon")),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.iconSize(0.82f),
+                    PropertyFactory.iconSize(0.95f),
                 ).also { it.setFilter(Expression.not(Expression.has(CLUSTER_COUNT))) },
             )
             addBadgeClusterLayer(style, RADAR_SOURCE, RADAR_CLUSTER, CLUSTER_ALERT_IMAGE, alertOffsetEm, darkMap)
@@ -388,7 +383,7 @@ fun DriveMap(
                     PropertyFactory.iconImage(Expression.get("icon")),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.iconSize(0.82f),
+                    PropertyFactory.iconSize(0.95f),
                 ).also { it.setFilter(Expression.not(Expression.has(CLUSTER_COUNT))) },
             )
             addBadgeClusterLayer(style, REPORT_SOURCE, REPORT_CLUSTER, CLUSTER_ALERT_IMAGE, alertOffsetEm, darkMap)
@@ -466,6 +461,15 @@ fun DriveMap(
 
     // Match each GPS fix onto the active route (snap + progress); off-route falls back to raw GPS.
     // New traffic (or a new style) colours the line at once, even when the car stands still.
+    // Nouveau trajet visible dès réception, même sans position GPS.
+    LaunchedEffect(map, styleReady, routePath) {
+        val style = map?.style ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        routeFrom[0] = 0.0
+        setRoute(style, routePath?.points ?: emptyList())
+        applyTraffic(style, routePath, 0.0, trafficState.value, accentState.value)
+    }
+
     LaunchedEffect(traffic, styleReady) {
         val style = map?.style ?: return@LaunchedEffect
         if (styleReady) applyTraffic(style, drawnPath, routeFrom[0], traffic, accentState.value)
@@ -1219,8 +1223,6 @@ private const val MAX_DR_MS = 2_500L
 private const val ROUTE_TRIM_MS = 120L
 /** The driven part is cut away by steps of this many metres: fewer redraws of the line. */
 private const val ROUTE_TRIM_STEP_M = 30.0
-/** The driver's own route is drawn with this many points at most. */
-private const val ROUTE_DRAW_MAX_POINTS = 2500
 /** "Tous": the whole group framed with this margin, in this time. */
 private const val OVERVIEW_PADDING_PX = 160
 private const val OVERVIEW_MS = 800

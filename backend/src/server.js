@@ -87,7 +87,7 @@ export function createApp() {
   // A shared trip carries its route: a long one does not fit in the 16 kb of the rest.
   app.use('/api/trips', express.json({ limit: '1mb' }));
   // A "navigation" bug report carries the trip's route too (600 points at most).
-  app.use('/api/bugs', express.json({ limit: '256kb' }));
+  app.use('/api/bugs', express.json({ limit: '2mb' }));
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {

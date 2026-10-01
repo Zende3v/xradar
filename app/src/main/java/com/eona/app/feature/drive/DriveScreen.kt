@@ -188,6 +188,7 @@ fun DriveScreen(
     var limitReportOpen by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     var dockOpen by remember { mutableStateOf(false) }
+    var dockCloseRequest by remember { mutableStateOf(0) }
     /** Which audio bar is open, if any: only one at a time, and it hides its neighbours. */
     var audioMenu by remember { mutableStateOf<AudioMenu?>(null) }
     var shareOpen by remember { mutableStateOf(false) }
@@ -266,7 +267,11 @@ fun DriveScreen(
                                 when {
                                     restricted -> onBlocked(PaywallReason.Restricted)
                                     limits?.tripsLeft() == 0 -> onBlocked(PaywallReason.TripLimit)
-                                    else -> onOpenSearch()
+                                    else -> {
+                                        dockCloseRequest += 1
+                                        dockOpen = false
+                                        onOpenSearch()
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -512,6 +517,7 @@ fun DriveScreen(
                 status = state.speedStatus,
                 searching = state.isSearchingGps,
                 trip = state.trip,
+                closeRequest = dockCloseRequest,
                 onOpenChange = { dockOpen = it },
                 onLimitClick = openLimitReport.takeUnless { state.isSearchingGps },
             )

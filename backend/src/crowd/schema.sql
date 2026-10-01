@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS crowd.bug_report (
 );
 -- Added after the table existed: an older database gets the column here.
 ALTER TABLE crowd.bug_report ADD COLUMN IF NOT EXISTS context jsonb;
+-- Capture privée, JPEG fourni par application.
+ALTER TABLE crowd.bug_report ADD COLUMN IF NOT EXISTS screenshot bytea;
 CREATE INDEX IF NOT EXISTS bug_report_recent ON crowd.bug_report (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS bug_report_author ON crowd.bug_report (account_id, created_at);
 

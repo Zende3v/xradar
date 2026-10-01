@@ -1,6 +1,7 @@
 package com.eona.app.data.bugs
 
 import android.os.Build
+import android.util.Base64
 import com.eona.app.BuildConfig
 import com.eona.app.core.geo.LineSimplifier
 import com.eona.app.core.model.GeoPoint
@@ -48,6 +49,7 @@ data class BugReport(
     val createdAt: String,
     val author: String?,
     val app: BugAppDetails,
+    val hasScreenshot: Boolean = false,
 )
 
 enum class BugSendOutcome { Sent, TooMany, Failed }
@@ -57,7 +59,8 @@ class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     /**
@@ -70,6 +73,7 @@ class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         steps: String?,
         token: String?,
         context: BugContext? = null,
+        screenshot: ByteArray? = null,
     ): BugSendOutcome = withContext(Dispatchers.IO) {
         val app = BugAppDetails.current()
         val body = JSONObject()
@@ -78,11 +82,12 @@ class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             .put("app", JSONObject().put("platform", app.platform).put("version", app.version).put("os", app.os).put("model", app.model))
         if (!steps.isNullOrBlank()) body.put("steps", steps)
         if (context != null) body.put("context", contextJson(context))
+        if (screenshot != null) body.put("screenshot", Base64.encodeToString(screenshot, Base64.NO_WRAP))
         runCatching {
             client.newCall(request("/api/bugs", token).post(body.toString().toRequestBody(JSON)).build()).execute().use { r ->
                 when {
                     r.code == 429 -> BugSendOutcome.TooMany
-                    r.isSuccessful -> BugSendOutcome.Sent
+                    r.isSuccessful && (screenshot == null || JSONObject(r.body?.string().orEmpty()).optBoolean("screenshotSaved")) -> BugSendOutcome.Sent
                     else -> BugSendOutcome.Failed
                 }
             }
@@ -101,6 +106,13 @@ class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 val reports = JSONObject(r.body?.string() ?: "").optJSONArray("reports") ?: return@use emptyList()
                 (0 until reports.length()).mapNotNull { i -> reports.optJSONObject(i)?.let(::parse) }
             }
+        }.getOrNull()
+    }
+
+    suspend fun screenshot(id: String, token: String?): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            client.newCall(request("/api/bugs/${URLEncoder.encode(id, "UTF-8")}/screenshot", token).build())
+                .execute().use { if (it.isSuccessful) it.body?.bytes() else null }
         }.getOrNull()
     }
 
@@ -159,6 +171,7 @@ class BugApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             description = o.optString("description"),
             steps = o.optString("steps").ifBlank { null }.takeUnless { o.isNull("steps") },
             createdAt = o.optString("createdAt"),
+            hasScreenshot = o.optBoolean("hasScreenshot"),
             author = author,
             app = BugAppDetails(
                 app?.optString("platform").orEmpty(),

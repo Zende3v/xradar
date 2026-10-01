@@ -112,7 +112,8 @@ l'action est écrite au journal (section 6 bis).
 |---|---|---|
 | Lister | `GET /api/bugs?status=new\|progress\|resolved&before=<ISO>` | admin |
 | Changer le statut | `PATCH /api/bugs/:id` `{ "status": "progress" }` | admin |
-| En envoyer un | `POST /api/bugs` `{category, description, steps?, app{}, context?}` | compte |
+| En envoyer un | `POST /api/bugs` `{category, description, steps?, app{}, context?, screenshot?}` | compte |
+| Lire capture | `GET /api/bugs/:id/screenshot` | admin |
 
 50 par page, du plus récent au plus ancien. Pour la page suivante, renvoyer `before` = le
 `createdAt` du dernier reçu.
@@ -122,7 +123,7 @@ Un rapport contient : `id`, `status`, `category` (map, navigation, alerts, accou
 supprimé), `app` (`platform`, `version`, `os`, `model`), `context` (ci-dessous, sinon `null`).
 
 **`context`** (D7.4) : catégorie `navigation` seulement, joint par l'app (nouvelles versions). Autre
-catégorie : ignoré. Corps accepté jusqu'à 256 ko.
+catégorie : ignoré. Corps accepté jusqu'à 2 Mio.
 
 ```json
 "context": {
@@ -145,6 +146,14 @@ Contrôles serveur : textes coupés (40 car., `toLabel` 160), nombres ≥ 0 arro
 réelles arrondies au 1e-6, route > 600 points amincie régulièrement (bouts gardés). Formulaire
 ouvert dans l'app **à l'arrêt seulement** (< 1,5 m/s). Donnée perso (destination, tracé) : visible
 admins seulement.
+
+**Capture facultative** : champ `screenshot` = JPEG en base64, sans préfixe data URL.
+Application prépare image orientée, côté maximal 1600 pixels. Serveur accepte jusqu’à 1 Mio,
+4096 pixels par côté et 8 millions de pixels. Absence ou `null` : rapport normal.
+JPEG invalide : 400. Réponse POST inclut `screenshotSaved` ; application vérifie stockage si capture jointe.
+Doublon : capture jointe remplace précédente ; absence conserve précédente.
+Liste inclut `hasScreenshot`, jamais image complète. Endpoint capture renvoie JPEG privé,
+`Cache-Control: private, no-store`. Compte non administrateur : 403 ; capture absente : 404.
 
 Les rapports résolus de plus de 90 jours sont effacés automatiquement.
 
