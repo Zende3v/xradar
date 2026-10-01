@@ -14,7 +14,10 @@ Arthur valide développement, push deux repos et déploiement. Reprise Codex seu
 - EONA complète HERE. Couverture locale seule ne coupe plus HERE avant validation de précision.
 - Réglage « Éviter les bouchons » supprimé. Évitement automatique sur trajets réels, Android 20 et iOS 19.
 - Vérifications : 34 tests backend ciblés passent. APK Android 20 construit. Swift vérifié statiquement ; Codemagic par Arthur.
-- Déploiement : **préparé, pas encore effectué**. Prochain contrôle : `/health`, compteur repris, fichiers identiques.
+- Backend **déployé 01/10 à 14:25 Europe/Paris**, code `197f5f6`. Huit fichiers vérifiés SHA-256 ; `/health` local/public OK.
+- Compteur repris : 27 appels octobre, estimation 0,100656 €. Budget actif 5 €, aucun appel HERE ajouté aux contrôles.
+- Sauvegarde avant déploiement : `/opt/eona-backend-src-backup-20261001-142420.tgz`. Aucun changement de dépendance.
+- Push iOS `22ef528` : build 19. APK Android 20 : build réussi en 69 s ; artefact disponible localement.
 - Validation Arthur : cinq trajets, un campagne et quatre région parisienne. Précision réelle reste à mesurer.
 
 
