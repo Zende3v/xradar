@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
 import { accountStore } from '../accounts/store.js';
 import { hereAllows, hereAccountAllows } from '../traffic/budget.js';
+import { hereTravel } from '../traffic/here.js';
 import { routing as defaultRouting } from './engine.js';
 import { checkFaster } from './faster.js';
 import { cachedRoute, keepRoute, spendRoute } from './guard.js';
@@ -23,13 +24,34 @@ export function createRouteRouter({
   faster = checkFaster,
   liveReady = () => hereAllows(),
   accountAllows = hereAccountAllows,
+  travel = (points) => hereTravel(points, { use: 'eta' }),
 } = {}) {
   const router = Router();
   /** When each account last had a faster-route check (rerouteCheckGapS). */
   const lastCheckAt = new Map();
 
   /**
-   * GET /api/route?from=lat,lon&to=lat,lon[&avoid=tolls,highways,ferries,traffic]
+   * Temps HERE avec trafic de [route] entière (Route Import), borné à routeTimingMs ; null si HERE
+   * muet, budget atteint ou route non reconnue. Même tracé que premier rafraîchissement trafic de
+   * l'app : cache HERE 60 s, aucun second appel pour la route choisie.
+   */
+  async function timeRoute(route) {
+    const points = (route.coordinates ?? []).map(([lon, lat]) => [lat, lon]);
+    let timer;
+    const late = new Promise((resolve) => { timer = setTimeout(() => resolve(null), config.routeTimingMs); });
+    try {
+      const timing = await Promise.race([Promise.resolve().then(() => travel(points)).catch(() => null), late]);
+      return timing?.travelS > 0 ? timing.travelS : null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * GET /api/route?from=lat,lon&to=lat,lon[&avoid=tolls,highways,ferries,traffic][&preference=fastest|shortest][&timed=1]
+   * [preference] (choix d'itinéraire, 02/10) : `shortest` = Éco, la plus courte en distance ;
+   * `fastest` = Rapide, comme avant. Demandée : réponse la répète (`preference`). [timed=1] :
+   * `travelS`, temps HERE avec trafic de la route entière, null sans HERE. Sans eux : JSON inchangé.
    * Returns a normalized car route, from the engine routingEngine gives this account (engine.js):
    * ORS, or Valhalla with ORS in fallback. "traffic" keeps the route away from the traffic jams
    * drivers reported. The route says which engine drew it (`engine`: ors | valhalla) and on
@@ -58,6 +80,17 @@ export function createRouteRouter({
     if (!from || !to) {
       return answer(400, { error: 'from and to are required as "lat,lon"' });
     }
+    const preference = parsePreference(req.query.preference);
+    if (preference === undefined) return answer(400, { error: 'preference must be fastest or shortest' });
+    const shortest = preference === 'shortest';
+    facts.preference = preference ?? 'fastest';
+    const timed = req.query.timed === '1';
+    /** La route, plus ce que l'app récente a demandé : preference, travelS. */
+    const reply = async (route) => (!preference && !timed ? route : {
+      ...route,
+      ...(preference ? { preference } : {}),
+      ...(timed ? { travelS: await timeRoute(route) } : {}),
+    });
     // A guest starts a limited number of trips a day; recalculations to the same place are free.
     const trip = accounts.tripCheck(account, to);
     facts.isNew = trip.isNew;
@@ -65,18 +98,19 @@ export function createRouteRouter({
       return answer(429, { error: 'daily trip limit', limit: config.guestTripsPerDay });
     }
 
-    // Who serves this account now: the cache below keeps each engine's answers apart.
+    // Who serves this account now: the cache below keeps each engine's answers apart, Éco aussi.
     const plan = routing.plan(account);
+    const partition = shortest ? `${plan.primary}:shortest` : plan.primary;
     // The same trip asked again within the minute costs nothing: an app looping on a recalculation
     // (a driver still off the road, a retry that keeps failing) never spends the day's routes.
     // The driver's course (D4.4), sent by the apps while moving: no U-turn at the start. A route asked
     // with it skips the cache, which knows nothing of the way the car points.
     const heading = parseHeading(req.query.heading);
-    const known = heading == null ? guard.cachedRoute(from, to, avoid, plan.primary) : null;
+    const known = heading == null ? guard.cachedRoute(from, to, avoid, partition) : null;
     if (known) {
       if (trip.isNew) accounts.countTrip(account, to);
       routing.noteServed(account.id, known.served);
-      return answer(200, known.route, { cached: true, ...routeFacts(known.route) });
+      return answer(200, await reply(known.route), { cached: true, ...routeFacts(known.route) });
     }
     facts.cached = false;
     const allowance = guard.spendRoute(account.id);
@@ -86,7 +120,7 @@ export function createRouteRouter({
 
     let outcome;
     try {
-      outcome = await routing.route(from, to, avoid, { plan, heading });
+      outcome = await routing.route(from, to, avoid, { plan, heading, preference: preference ?? 'fastest' });
     } catch (e) {
       // The façade answers its failures; this is a bug, still answered like one.
       console.warn('[route] unavailable —', String(e.message || e));
@@ -95,9 +129,9 @@ export function createRouteRouter({
     if (outcome.route) {
       if (trip.isNew) accounts.countTrip(account, to);
       const served = { engine: outcome.engine, fallback: outcome.fallback };
-      guard.keepRoute(from, to, avoid, outcome.route, { partition: plan.primary, served });
+      guard.keepRoute(from, to, avoid, outcome.route, { partition, served });
       routing.noteServed(account.id, served);
-      answer(200, outcome.route, routeFacts(outcome.route));
+      answer(200, await reply(outcome.route), routeFacts(outcome.route));
     } else if (outcome.thrown) {
       console.warn('[route] unavailable —', outcome.detail);
       answer(outcome.status, { error: outcome.error, detail: outcome.detail }, { error: outcome.detail });
@@ -106,12 +140,15 @@ export function createRouteRouter({
       // The engine's own text may quote the coordinates: the log keeps the error alone.
       answer(outcome.status || 502, { error: outcome.error });
     }
-    // Only once the answer is sent (shadow.js queues it on the response's end).
-    shadow.afterRoute(res, { plan, outcome, from, to, avoid, heading, admin: account.role === 'admin' });
+    // Only once the answer is sent (shadow.js queues it on the response's end). Éco : pas
+    // d'ombre, comparaison des moteurs faite sur Rapide seulement.
+    if (!shortest) shadow.afterRoute(res, { plan, outcome, from, to, avoid, heading, admin: account.role === 'admin' });
   });
 
   /**
-   * POST /api/route/faster  { coordinates: [[lon, lat], …], avoid?: ["tolls", "highways"], sinceRerouteS?, etaS? }
+   * POST /api/route/faster  { coordinates: [[lon, lat], …], avoid?: ["tolls", "highways"], sinceRerouteS?, etaS?, preference? }
+   * [preference] `shortest` (trajet Éco) : détour seulement autour d'une route fermée, variantes
+   * Éco, la plus courte retenue.
    * The rest of the route being followed (from the driver to the destination) against variants
    * around its big traffic jams, drawn by the engine that serves this account (ORS or Valhalla),
    * durations come from HERE on the same window, completed by EONA/data.gouv: a variant
@@ -153,6 +190,9 @@ export function createRouteRouter({
     }
     const avoid = Array.isArray(req.body.avoid) ? req.body.avoid.map(String) : [];
     facts.avoid = avoid;
+    const preference = parsePreference(req.body.preference);
+    if (preference === undefined) return answer(400, { error: 'preference must be fastest or shortest' });
+    facts.preference = preference ?? 'fastest';
     const since = Number(req.body.sinceRerouteS);
     const etaS = Number(req.body.etaS);
     // A failing Valhalla, or a route ORS served in its place: no detour, nothing spent (D5.2).
@@ -166,6 +206,7 @@ export function createRouteRouter({
         sinceRerouteS: Number.isFinite(since) && since >= 0 ? since : null,
         etaS: Number.isFinite(etaS) && etaS > 0 ? etaS : null,
         draw: routing.drawer(plan.primary),
+        preference: preference ?? 'fastest',
       });
       answer(200, result, result.better ? routeFacts(result.better.route) : { error: result.reason ?? null });
       if (result.better) routing.noteServed(account.id, { engine: result.better.route.engine, fallback: false });
@@ -202,6 +243,12 @@ function parseCoord(value) {
   const parts = String(value || '').split(',').map(Number);
   if (parts.length !== 2 || parts.some((n) => !Number.isFinite(n))) return null;
   return { lat: parts[0], lon: parts[1] };
+}
+
+/** Choix d'itinéraire : 'fastest' | 'shortest' ; null absent (anciennes apps) ; undefined illisible. */
+function parsePreference(value) {
+  if (value == null || value === '') return null;
+  return value === 'fastest' || value === 'shortest' ? value : undefined;
 }
 
 /** The driver's course in degrees (0 to 360, from north), or null when absent or unreadable. */

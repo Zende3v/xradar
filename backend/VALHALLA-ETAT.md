@@ -1,5 +1,13 @@
 # Valhalla : état du chantier
 
+## Choix d'itinéraire 02/10/2026 (Claude, session cloud)
+
+- Backend : `preference=shortest` (Éco) et `timed=1` sur `/api/route`, Éco sur `/faster`. Contrat inchangé sans eux.
+- Colonne `routing.route_log.preference`, ajoutée seule au redémarrage. Rapport ETA : option `--since`.
+- 157 tests backend passent (12 nouveaux). Valhalla `shortest` réel, exclusions avec Éco : à vérifier sur VPS.
+- **Non déployé** : SSH et HTTPS du VPS refusés depuis cloud. Déploiement README §4, accord Arthur donné 02/10.
+- iOS build 24 : choix Rapide / Éco / Perso. Backend non déployé : Éco affiché « Indisponible ».
+
 ## Livraison 01/10/2026 : trois lots trafic
 
 Arthur valide développement, push deux repos et déploiement. Reprise Codex seul autorisée après quota Claude épuisé.

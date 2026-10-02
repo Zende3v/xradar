@@ -7,8 +7,9 @@
  * never a label, an id or anything about an account.
  *
  * Usage (on the VPS, from /opt/eona-backend):
- *   node bin/eona-eta-report.js [accounts.json] [--json]
- * File: the argument, else $ACCOUNTS_FILE, else ./data/accounts.json.
+ *   node bin/eona-eta-report.js [accounts.json] [--json] [--since=2026-10-01T14:25:00+02:00]
+ * File: the argument, else $ACCOUNTS_FILE, else ./data/accounts.json. [--since] : trajets partis
+ * depuis cette date seulement (ex. dernier correctif ETA).
  */
 
 import { readFileSync } from 'node:fs';
@@ -134,9 +135,10 @@ function slicesOf(trip, drivenMin) {
   ];
 }
 
-/** The whole report, from the saved accounts. */
-export function report(accounts) {
-  const trips = (Array.isArray(accounts) ? accounts : []).flatMap((a) => (Array.isArray(a?.trips) ? a.trips : []));
+/** The whole report, from the saved accounts; [since] (epoch ms) : trajets partis depuis seulement. */
+export function report(accounts, { since = null } = {}) {
+  const trips = (Array.isArray(accounts) ? accounts : []).flatMap((a) => (Array.isArray(a?.trips) ? a.trips : []))
+    .filter((trip) => since == null || Number(trip?.startedAt) >= since);
   const excluded = {};
   const kept = [];
   for (const trip of trips) {
@@ -176,6 +178,7 @@ export function report(accounts) {
   }
   return {
     generatedAt: new Date().toISOString(),
+    since: since == null ? null : new Date(since).toISOString(),
     rules: {
       good: `|erreur| <= min(${GOOD_MAX_S} s, max(${GOOD_MIN_S} s, ${GOOD_RATIO * 100} % du temps restant réel))`,
       error: 'arrivée réelle (pauses après le relevé retirées) - arrivée affichée, en s ; > 0 = arrivé plus tard qu\'annoncé',
@@ -197,6 +200,7 @@ const WIDTHS = [6, 5, 7, 15, 12, 12];
 function print(result) {
   const out = [];
   out.push(`Rapport ETA — ${result.generatedAt}`);
+  if (result.since) out.push(`Trajets partis depuis : ${result.since}`);
   out.push(`Bonne ETA : ${result.rules.good}`);
   out.push(`Erreur : ${result.rules.error}`);
   out.push(`Pointe : ${result.rules.peak}`);
@@ -226,6 +230,12 @@ function main() {
   const args = process.argv.slice(2);
   const json = args.includes('--json');
   const file = args.find((a) => !a.startsWith('--')) || process.env.ACCOUNTS_FILE || './data/accounts.json';
+  const sinceArg = args.find((a) => a.startsWith('--since='))?.slice('--since='.length);
+  const since = sinceArg ? Date.parse(sinceArg) : null;
+  if (sinceArg && !Number.isFinite(since)) {
+    console.error(`✗ date --since illisible : ${sinceArg}`);
+    process.exit(1);
+  }
   let accounts;
   try {
     accounts = JSON.parse(readFileSync(file, 'utf8'));
@@ -233,7 +243,7 @@ function main() {
     console.error(`✗ fichier des comptes illisible (${file}) : ${e.message}`);
     process.exit(1);
   }
-  const result = report(accounts);
+  const result = report(accounts, { since });
   if (json) console.log(JSON.stringify(result, null, 2));
   else print(result);
 }

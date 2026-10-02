@@ -627,3 +627,19 @@ Contrats existants conservés. `/api/traffic/route` garde import valide sans flo
 Maximum deux variantes chronométrées. Budget estimé partagé ETA/détours, quotas compte persistants.
 `/health.traffic.here` ajoute `monthlyBudgetEUR`, `estimatedMonthEUR`, `monthByKind`, `blocked`, `cache` et `quality`.
 Tarifs affichés : hypothèses configurables ; facture HERE non garantie par estimation.
+
+## Choix d'itinéraire : 02/10/2026
+
+Sélection d'une destination : app iOS demande Rapide puis Éco, montre choix. Anciennes apps : rien ne change.
+
+- `GET /api/route` ajoute `preference=fastest|shortest` et `timed=1`, facultatifs.
+  - `shortest` = Éco : plus court en distance. Valhalla `costing_options.auto.shortest`, ORS `preference: shortest`.
+  - Exclusions strictes gardées (péages, autoroutes, ferries). Cache séparé. Pas d'ombre Éco.
+  - `preference` demandée : réponse la répète (`preference`). Sans elle : JSON inchangé.
+  - Valeur inconnue : 400 `preference must be fastest or shortest`.
+  - `timed=1` : `travelS`, temps HERE avec trafic de la route entière (Route Import), `null` si HERE muet,
+    budget atteint, route non reconnue ou plus de `ROUTE_TIMING_MS` (2 500 ms).
+  - Même tracé que premier rafraîchissement trafic de l'app : cache HERE 60 s, route choisie non rechronométrée.
+- `POST /api/route/faster` ajoute `preference`. `shortest` : détour seulement autour d'une route fermée.
+  Variantes Éco ; variante ouverte la plus courte retenue, sans Route Import. Gain `0`.
+- `routing.route_log.preference` : `fastest` ou `shortest` ; `null` avant 02/10.

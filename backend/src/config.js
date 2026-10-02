@@ -91,6 +91,9 @@ export const config = {
   valhallaTimeoutMs: Number(process.env.VALHALLA_TIMEOUT_MS) || 4000,
   routeDeadlineMs: Number(process.env.ROUTE_DEADLINE_MS) || 13 * 1000,
   routeJamsTimeoutMs: Number(process.env.ROUTE_JAMS_TIMEOUT_MS) || 2000,
+  // Choix d'itinéraire (/api/route?timed=1, 02/10) : temps HERE de la route attendu au plus ce
+  // délai (Route Import mesuré 0,5 s le 30/09), puis réponse sans lui (travelS null).
+  routeTimingMs: Number(process.env.ROUTE_TIMING_MS) || 2500,
   valhallaSearchCutoffM: Number(process.env.VALHALLA_SEARCH_CUTOFF_M) || 1000,
   valhallaMaxSnapM: Number(process.env.VALHALLA_MAX_SNAP_M) || 350,
   valhallaBreakerFailures: Number(process.env.VALHALLA_BREAKER_FAILURES) || 5,

@@ -12,17 +12,19 @@ import { db } from '../db.js';
 
 /** The avoid options a line keeps: the ones the apps send, nothing else a client could write. */
 const AVOID = new Set(['tolls', 'highways', 'ferries', 'traffic']);
+/** Choix d'itinéraire gardé : Rapide ou Éco, rien d'autre. */
+const PREFERENCES = new Set(['fastest', 'shortest']);
 
 let lastPurge = 0;
 
 /**
  * One line: { kind: 'route' | 'faster', status, latencyMs, engine?, isNew?, cached?, distanceM?,
- * durationS?, steps?, uturnStart?, avoid?, error? } — what is not known stays null.
+ * durationS?, steps?, uturnStart?, avoid?, preference?, error? } — what is not known stays null.
  */
 export function logRoute(entry) {
   db.query(
-    `INSERT INTO routing.route_log (kind, engine, status, latency_ms, is_new, cached, distance_m, duration_s, steps, uturn_start, avoid, error)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    `INSERT INTO routing.route_log (kind, engine, status, latency_ms, is_new, cached, distance_m, duration_s, steps, uturn_start, avoid, error, preference)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       entry.kind,
       text(entry.engine, 16),
@@ -36,6 +38,7 @@ export function logRoute(entry) {
       flag(entry.uturnStart),
       Array.isArray(entry.avoid) ? [...new Set(entry.avoid.filter((a) => AVOID.has(a)))] : [],
       text(entry.error, 200),
+      PREFERENCES.has(entry.preference) ? entry.preference : null,
     ],
   ).catch((e) => console.warn('[route-log] not written —', String(e.message || e)));
   if (Date.now() - lastPurge > 60 * 60 * 1000) {

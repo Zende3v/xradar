@@ -230,7 +230,7 @@ export function createValhallaClient({ baseUrl, timeoutMs, searchCutoffM, maxSna
    * alternatives. [avoid]: 'tolls', 'highways', 'ferries' (strict); [polygons]: areas to keep
    * off, a GeoJSON MultiPolygon as ORS's avoid_polygons, never with alternates (D4.3);
    * [bearings]: [[heading, tolerance], …] in degrees, for the start then the destination (null to
-   * leave one free). Throws a ValhallaError.
+   * leave one free); [shortest]: route Éco, la plus courte en distance. Throws a ValhallaError.
    * @returns {Promise<Route[]>}
    */
   async function routes(from, to, options = {}) {
@@ -305,7 +305,7 @@ export function decodePolyline6(encoded) {
 // ---- Request ----------------------------------------------------------------
 
 /** Valhalla's /route request for [from] → [to] with the caller's options, checked. */
-function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, alternates = 0 }, searchCutoffM) {
+function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, alternates = 0, shortest = false }, searchCutoffM) {
   const start = checkedPoint(from, 'from');
   const end = checkedPoint(to, 'to');
   const [startHeading, endHeading] = checkedBearings(bearings);
@@ -316,10 +316,12 @@ function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, 
     throw refused(`alternates must be a whole number from 0 to ${MAX_ALTERNATES}`);
   }
   if (rings && count > 0) throw refused('polygons and alternates are asked separately');
+  if (typeof shortest !== 'boolean') throw refused('shortest must be true or false');
   const body = {
     locations: [location(start, startHeading, searchCutoffM), location(end, endHeading, searchCutoffM)],
     costing: 'auto',
-    costing_options: { auto: { top_speed: TOP_SPEED_KMH, ...exclusions } },
+    // Éco : métrique distance seule (option auto `shortest`). Exclusions strictes gardées.
+    costing_options: { auto: { top_speed: TOP_SPEED_KMH, ...exclusions, ...(shortest ? { shortest: true } : {}) } },
     format: 'osrm',
     shape_format: 'polyline6',
     roundabout_exits: false,

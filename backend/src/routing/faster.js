@@ -35,12 +35,15 @@ const THROUGH_CLOSURE_SHARE = 0.5;
  * Trafic flow/incidents complet obligatoire. Toute fermeture sur variante la disqualifie.
  * Seuls suppléments EONA/data.gouv s'ajoutent à HERE. Maximum deux variantes chronométrées.
  * Gain minimal 3 min et 5 %, renforcé après bascule ; fermeture actuelle reste prioritaire.
+ * [preference] `shortest` (trajet Éco) : route fermée seulement, variantes Éco autour d'elle,
+ * plus courte en distance retenue, sans chronométrage HERE.
  * { answer, compare } conserve contrat API et comparaison des moteurs en mode ombre.
  */
-export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel } = {}) {
+export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest' } = {}) {
   if (sinceRerouteS != null && sinceRerouteS < config.rerouteCooldownS) {
     return { answer: { better: null, reason: 'cooldown' }, compare: null };
   }
+  const shortest = preference === 'shortest';
 
   const path = measure(points);
   const current = await traffic(points, path);
@@ -50,10 +53,12 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
     Math.max(config.rerouteMinGainS, config.rerouteMinGainRatio * (etaS > 0 ? etaS : 0)) * (sticky ? config.rerouteStickyFactor : 1),
   );
 
-  // The jams near enough to go around now, the detour rejoining the route past them.
+  // The jams near enough to go around now, the detour rejoining the route past them. Éco : routes
+  // fermées seulement, un bouchon ne justifie aucun km de plus.
   const short = path.total <= WINDOW_MAX_M;
   const jams = jamsOf(current.sections, path.total)
-    .filter((jam) => jam.fromM <= HORIZON_M && (short || jam.toM + REJOIN_AFTER_M <= WINDOW_MAX_M));
+    .filter((jam) => jam.fromM <= HORIZON_M && (short || jam.toM + REJOIN_AFTER_M <= WINDOW_MAX_M))
+    .filter((jam) => !shortest || jam.closed);
   const closed = jams.some((jam) => jam.closed);
   const lostS = jams.reduce((sum, jam) => sum + jam.delayS, 0);
   const summary = { lostS, crowdS: current.crowdS, thresholdS, jams: jams.map(({ fromM, toM, delayS, closed: shut }) => ({ fromM, toM, delayS, closed: shut })) };
@@ -64,17 +69,21 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   if (rejoinM >= path.total - KEEP_OPEN_M) rejoinM = path.total;
   const window = sliceOf(path, 0, rejoinM);
   const tail = rejoinM < path.total ? sliceOf(path, rejoinM, path.total) : null;
-  // Même portion, même source de durée. Aucun détour spéculatif sans import HERE valide.
-  const baseline = await travel(window, { use: 'faster' }).catch(() => null);
-  if (!(baseline?.travelS > 0)) return { answer: { ...summary, better: null, reason: 'HERE baseline unavailable' }, compare: null };
-  const currentS = baseline.travelS + delayWithin(current.sections.filter(s=>s.source === 'crowd' || s.source === 'datagouv'), 0, rejoinM);
+  // Même portion, même source de durée. Aucun détour spéculatif sans import HERE valide. Éco :
+  // détour imposé par la fermeture, aucun temps à comparer.
+  let currentS = null;
+  if (!shortest) {
+    const baseline = await travel(window, { use: 'faster' }).catch(() => null);
+    if (!(baseline?.travelS > 0)) return { answer: { ...summary, better: null, reason: 'HERE baseline unavailable' }, compare: null };
+    currentS = baseline.travelS + delayWithin(current.sections.filter(s=>s.source === 'crowd' || s.source === 'datagouv'), 0, rejoinM);
+  }
 
   // The variants over the window, from the driver (heading kept: no U-turn) to the rejoin point
   // (reached the way the route goes) or the destination.
   const [start, end] = [window[0], window[window.length - 1]];
   const bearings = [[headingAt(path, 0), 45]];
   if (tail) bearings.push([headingAt(path, rejoinM), 45]);
-  const base = { from: { lat: start[0], lon: start[1] }, to: { lat: end[0], lon: end[1] }, bearings, avoid };
+  const base = { from: { lat: start[0], lon: start[1] }, to: { lat: end[0], lon: end[1] }, bearings, avoid, ...(shortest ? { preference } : {}) };
   const worst = jams.reduce((a, b) => (weight(b) > weight(a) ? b : a));
   const asks = [{ ...base, label: 'around', polygons: polygonsAround(path, jams), alternatives: false }];
   if (jams.length > 1) asks.push({ ...base, label: 'around worst', polygons: polygonsAround(path, [worst]), alternatives: false });
@@ -106,6 +115,12 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
     });
     if (!live?.reliable || (live.coverageM != null && live.coverageM < measure(candidate.line).total - 1)
         || live.sections.some(s=>s.level === 'closed' || s.kind === 'closed')) continue;
+    if (shortest) {
+      // Éco : variante ouverte la plus courte.
+      timed += 1;
+      if (!best || candidate.route.distanceM < best.route.distanceM) best = { candidate, route: candidate.route, travelS: null };
+      continue;
+    }
     const timing = await travel(candidate.line, { use: 'faster' }).catch(() => null);
     if (!(timing?.travelS > 0)) continue;
     timed += 1;
@@ -113,16 +128,16 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
     if (!best || travelS < best.travelS) best = { candidate, route: candidate.route, travelS };
   }
 
-  const gainS = best ? currentS - best.travelS : 0;
+  const gainS = best && !shortest ? currentS - best.travelS : 0;
   const switching = best != null && (closed || gainS >= thresholdS);
   console.log(
-    `[faster] now ${currentS}s (drivers +${current.crowdS}s), ${jams.length} jam(s) ${lostS}s lost${closed ? ' + closed' : ''}, window ${Math.round(rejoinM / 1000)}/${Math.round(path.total / 1000)} km, ` +
-      `${drawn.found.length} ${drawn.engine ?? 'engine'} route(s), ${timed} timed, best ${best ? best.travelS + 's' : '-'}, threshold ${thresholdS}s${sticky ? ' (sticky)' : ''} → ${switching ? 'switch' : 'keep'}`,
+    `[faster]${shortest ? ' eco' : ''} now ${currentS ?? '-'}s (drivers +${current.crowdS}s), ${jams.length} jam(s) ${lostS}s lost${closed ? ' + closed' : ''}, window ${Math.round(rejoinM / 1000)}/${Math.round(path.total / 1000)} km, ` +
+      `${drawn.found.length} ${drawn.engine ?? 'engine'} route(s), ${timed} timed, best ${best ? (shortest ? best.route.distanceM + 'm' : best.travelS + 's') : '-'}, threshold ${thresholdS}s${sticky ? ' (sticky)' : ''} → ${switching ? 'switch' : 'keep'}`,
   );
   const result = { ...summary, currentS, variants: timed, bestS: best?.travelS ?? null };
   const compare = { plan, drawn, detour: switching ? best.candidate : null };
   if (!switching) return { answer: { ...result, better: null, reason: best ? 'not enough gain' : 'no variant' }, compare };
-  const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw) : best.route;
+  const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw, shortest ? preference : null) : best.route;
   if (!route) return { answer: { ...result, better: null, reason: 'rest of the route unavailable' }, compare };
   // Durée moteur conservée dans route ; prochain rafraîchissement fournit son ETA HERE.
   return { answer: { ...result, better: { gainS: Math.max(0, gainS), closed, route } }, compare };
@@ -231,7 +246,7 @@ function delayWithin(sections, fromM, toM) {
  * The winning detour, then the engine's route from the rejoin point to the destination (the
  * same road as the route's rest): one route to follow, with its steps, its engine and its map.
  */
-async function withRest(detour, rest, heading, avoid, draw) {
+async function withRest(detour, rest, heading, avoid, draw, preference = null) {
   const [from, to] = [rest[0], rest[rest.length - 1]];
   const { routes: [route] = [] } = await draw({
     label: 'rest',
@@ -241,6 +256,7 @@ async function withRest(detour, rest, heading, avoid, draw) {
     avoid,
     polygons: null,
     alternatives: false,
+    ...(preference ? { preference } : {}),
   });
   if (!route) return null;
   const returned = route.coordinates.map(([lon, lat])=>[lat, lon]);

@@ -199,7 +199,7 @@ export function createRoutingEngine({
    * Valhalla's route within [ms], the jams avoided first then not ([polygons], D4.3):
    * { ok, route, latencyMs } or { ok: false, error, latencyMs, skipped? }.
    */
-  async function valhallaRoute(from, to, exclusions, polygons, ms, bearings = null) {
+  async function valhallaRoute(from, to, exclusions, polygons, ms, bearings = null, shortest = false) {
     const blocked = valhallaBlocked();
     if (blocked) return { ok: false, error: blocked, skipped: true, latencyMs: null };
     // No time left for it (the jams took it): not asked, and not Valhalla's fault.
@@ -210,6 +210,7 @@ export function createRoutingEngine({
       avoid: exclusions,
       polygons: areas,
       bearings,
+      ...(shortest ? { shortest: true } : {}),
       signal,
     })));
     let result = await ask(polygons);
@@ -222,15 +223,15 @@ export function createRoutingEngine({
    * ORS's route within [ms], the jams avoided first then not, as before phase 2:
    * { ok, route, latencyMs } or { ok: false, error, status, message, detail, thrown, latencyMs }.
    */
-  async function orsRoute(from, to, avoid, polygons, ms, bearings = null) {
+  async function orsRoute(from, to, avoid, polygons, ms, bearings = null, preference = null) {
     if (!ors.configured()) {
       return { ok: false, error: 'not_configured', skipped: true, status: 503, message: 'routing unavailable', latencyMs: null };
     }
     const startedAt = Date.now();
     try {
       const out = await within(ms, async (signal) => {
-        const body = orsBody({ from, to, avoid, bearings });
-        let r = await ors.post(polygons ? orsBody({ from, to, avoid, polygons, bearings }) : body, { signal });
+        const body = orsBody({ from, to, avoid, bearings, preference });
+        let r = await ors.post(polygons ? orsBody({ from, to, avoid, polygons, bearings, preference }) : body, { signal });
         // A route squeezed out by the reported jams can be impossible: the trip matters more.
         if (!r.ok && polygons) r = await ors.post(body, { signal });
         if (r.budgetSpent) return { ok: false, error: 'budget', status: 503, message: 'routing budget reached' };
@@ -281,13 +282,15 @@ export function createRoutingEngine({
 
   /**
    * The route from [from] to [to] ({ lat, lon }) avoiding [avoid] (tolls, highways, ferries,
-   * traffic), served as [plan] says. Never throws: { route, engine, primary, fallback, cause,
+   * traffic), served as [plan] says; [preference] `shortest` : route Éco, la plus courte en
+   * distance, sur les deux moteurs. Never throws: { route, engine, primary, fallback, cause,
    * attempts, polygons } — route null with { status, error, detail, thrown } when nobody could.
    */
-  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null } = {}) {
+  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null, preference = 'fastest' } = {}) {
     const until = Date.now() + s.deadlineMs;
     const wanted = [...new Set(avoid)];
     const bearings = headingBearings(heading);
+    const shortest = preference === 'shortest';
     const polygons = wanted.includes('traffic')
       ? await jamsWithin(from, to, Math.min(s.jamsTimeoutMs, until - Date.now()))
       : null;
@@ -295,7 +298,7 @@ export function createRoutingEngine({
     let cause = null;
     if (chosen.primary === 'valhalla') {
       const exclusions = wanted.filter((a) => EXCLUSIONS.has(a));
-      const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()), bearings);
+      const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()), bearings, shortest);
       attempts.valhalla = tried;
       if (tried.ok) {
         return { route: tried.route, engine: 'valhalla', primary: 'valhalla', fallback: false, cause: null, attempts, polygons };
@@ -303,7 +306,7 @@ export function createRoutingEngine({
       cause = tried.error;
       noteFallback(cause);
     }
-    const tried = await orsRoute(from, to, wanted, polygons, until - Date.now(), bearings);
+    const tried = await orsRoute(from, to, wanted, polygons, until - Date.now(), bearings, preference);
     attempts.ors = tried;
     const outcome = { primary: chosen.primary, fallback: cause != null, cause, attempts, polygons };
     if (tried.ok) return { ...outcome, route: tried.route, engine: 'ors' };
@@ -342,8 +345,8 @@ export function createRoutingEngine({
   /**
    * How [engine] draws the variants of /faster (faster.js), whatever the engine: one ask
    * { label, from, to ({ lat, lon }), bearings ([[heading, tolerance], …]), avoid, polygons,
-   * alternatives } → { engine, routes, error, outage, skipped?, latencyMs }. [shadow]: for the
-   * shadow mode (ORS kept off the fallback's budget).
+   * alternatives, preference? } → { engine, routes, error, outage, skipped?, latencyMs }.
+   * [shadow]: for the shadow mode (ORS kept off the fallback's budget).
    */
   function drawer(engine, { shadow = false } = {}) {
     if (engine === 'valhalla') {
@@ -356,6 +359,7 @@ export function createRoutingEngine({
           polygons: ask.polygons ?? null,
           bearings: ask.bearings ?? null,
           alternates: ask.alternatives ? MAX_ALTERNATES : 0,
+          ...(ask.preference === 'shortest' ? { shortest: true } : {}),
         }));
         const latencyMs = Date.now() - startedAt;
         if (result.ok) return { engine, routes: result.value, error: null, outage: false, latencyMs };

@@ -199,15 +199,17 @@ function withTimeout(signal, ms) {
  * The ORS directions body for [from] → [to] ({ lat, lon }): steps, full shape, the app's avoid
  * options ([avoid]: tolls, highways, ferries; anything else is dropped), areas to keep off
  * ([polygons]: a GeoJSON MultiPolygon), a heading per point ([bearings]: [[heading, tolerance],
- * …]) and ORS's own alternatives ([alternatives]).
+ * …]), ORS's own alternatives ([alternatives]) and [preference] (`shortest` : route Éco).
  */
-export function orsBody({ from, to, avoid = [], polygons = null, bearings = null, alternatives = false }) {
+export function orsBody({ from, to, avoid = [], polygons = null, bearings = null, alternatives = false, preference = null }) {
   const options = {};
   const features = avoid.map((a) => ORS_AVOID[a]).filter(Boolean);
   if (features.length) options.avoid_features = features;
   if (polygons) options.avoid_polygons = polygons;
   return {
     coordinates: [[from.lon, from.lat], [to.lon, to.lat]],
+    // Éco : ORS au plus court en distance, même choix que Valhalla.
+    ...(preference === 'shortest' ? { preference: 'shortest' } : {}),
     ...(bearings ? { bearings } : {}),
     instructions: true,
     maneuvers: true,
