@@ -1,12 +1,24 @@
 # Valhalla : état du chantier
 
+## Bilan ETA 03/10/2026 01:12 (rapport `--since=2026-10-01T14:25+02:00`)
+
+- 14 trajets, tous iOS. 8 arrêtés en route, exclus. 1 iOS (11) ancien mode `proportional`.
+- Mode `dynamic`, 5 trajets gardés. 25 à 75 % : 5/5 bons, écart médian 1,1 min, biais nul.
+- Départ (0 %) : 1/5 bon, arrivée médiane +6,6 min plus tard qu'annoncé.
+- Cause vue trajet par trajet : relevé 0 % = temps Valhalla seul sur 9 trajets `dynamic` sur 13.
+  Premier point GPS sur route avant première réponse HERE.
+- Correctif iOS build 25 (`8489a68`) : ETA départ = temps HERE du choix d'itinéraire. Aucun appel en plus.
+- Échantillon trop petit : 5 trajets, Wilson 95 % large. Collecte continue (Arthur).
+- Déploiement backend `19aa105` : 03/10 01:11:42, sauvegarde `/opt/eona-backend-src-backup-20261003-0110.tgz`.
+  `/health` ok, colonne `routing.route_log.preference` présente.
+
 ## Choix d'itinéraire 02/10/2026 (Claude, session cloud)
 
 - Backend : `preference=shortest` (Éco) et `timed=1` sur `/api/route`, Éco sur `/faster`. Contrat inchangé sans eux.
 - Colonne `routing.route_log.preference`, ajoutée seule au redémarrage. Rapport ETA : option `--since`.
 - 157 tests backend passent (12 nouveaux). Valhalla `shortest` réel, exclusions avec Éco : à vérifier sur VPS.
-- **Non déployé** : SSH et HTTPS du VPS refusés depuis cloud. Déploiement README §4, accord Arthur donné 02/10.
-- iOS build 24 : choix Rapide / Éco / Perso. Backend non déployé : Éco affiché « Indisponible ».
+- Déployé par Arthur 03/10 01:11 (SSH et HTTPS du VPS refusés depuis cloud).
+- iOS build 24 : choix Rapide / Éco / Perso. Build 25 : ETA départ juste.
 
 ## Livraison 01/10/2026 : trois lots trafic
 
