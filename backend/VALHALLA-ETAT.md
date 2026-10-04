@@ -14,7 +14,8 @@
 - Relance build par Arthur 04/10 soir : **carte validée 19:38**, `20261004T170051Z-a788fcddd0dc`.
   `build_tile_set` 1 973 s. Tests candidat (8003) et service (8002) passés, sinon aucune bascule.
   Avertissement podman « SIGTERM failed … resorting to SIGKILL » à l'arrêt du test : sans effet.
-- Ménage manuel après succès : candidats échoués `20261004T041931Z-…` (8,4 Go) et `20260927T175800Z-…`.
+- Contrôle Arthur 04/10 : `current` = carte 04/10, `previous` = carte 27/09, `/health` ok. Candidats
+  échoués supprimés. Restent 2 cartes, 8,4 Go chacune. Aucune purge auto : +8,4 Go par dimanche.
 
 ## Choix Rapide / Éco 04/10
 
