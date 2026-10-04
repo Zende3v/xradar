@@ -35,6 +35,9 @@
 - Recherche, cause confirmée dans `search.poi` : aucun Fitness Park à Orly (Thiais, Fresnes, Créteil,
   Montgeron). L'ancien filtre exigeait « orly » dans la commune du lieu : zéro résultat. Repli
   enseigne + ville : Fitness Park de Thiais. Leclerc à Orly dans l'index : station-service seule.
+- E.Leclerc Orly (8 place Gaston Viens), carte OSM du 04/10 : aucun objet `shop=supermarket`.
+  Seul le centre commercial porte l'enseigne : w143320617 `shop=mall`, `name=Centre Commercial Orlydis`,
+  `operator=E.Leclerc`. L'index ignore `operator` : « leclerc » ne trouve pas Orlydis. Décision Arthur attendue.
 
 ## Choix Rapide / Éco 04/10
 
