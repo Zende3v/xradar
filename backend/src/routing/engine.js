@@ -199,7 +199,7 @@ export function createRoutingEngine({
    * Valhalla's route within [ms], the jams avoided first then not ([polygons], D4.3):
    * { ok, route, latencyMs } or { ok: false, error, latencyMs, skipped? }.
    */
-  async function valhallaRoute(from, to, exclusions, polygons, ms, bearings = null, shortest = false, via = []) {
+  async function valhallaRoute(from, to, exclusions, polygons, ms, bearings = null, shortest = false, via = [], moped = false) {
     const blocked = valhallaBlocked();
     if (blocked) return { ok: false, error: blocked, skipped: true, latencyMs: null };
     // No time left for it (the jams took it): not asked, and not Valhalla's fault.
@@ -212,6 +212,7 @@ export function createRoutingEngine({
       bearings,
       ...(shortest ? { shortest: true } : {}),
       ...(via.length ? { via } : {}),
+      ...(moped ? { moped: true } : {}),
       signal,
     })));
     let result = await ask(polygons);
@@ -284,12 +285,13 @@ export function createRoutingEngine({
   /**
    * The route from [from] to [to] ({ lat, lon }) avoiding [avoid] (tolls, highways, ferries,
    * traffic), served as [plan] says; [preference] `shortest` : route Éco, la plus courte en
-   * distance, sur les deux moteurs ; [via] : étapes [{ lat, lon }, …] dans l'ordre. Never throws: { route, engine, primary, fallback, cause,
+   * distance, sur les deux moteurs ; [via] : étapes [{ lat, lon }, …] dans l'ordre ; [moped] : 50cc
+   * ou sans permis (Valhalla motor_scooter ; ORS en voiture sans autoroute). Never throws: { route, engine, primary, fallback, cause,
    * attempts, polygons } — route null with { status, error, detail, thrown } when nobody could.
    */
-  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null, preference = 'fastest', via = [] } = {}) {
+  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null, preference = 'fastest', via = [], moped = false } = {}) {
     const until = Date.now() + s.deadlineMs;
-    const wanted = [...new Set(avoid)];
+    const wanted = [...new Set(moped ? [...avoid, 'highways'] : avoid)];
     const bearings = headingBearings(heading);
     const shortest = preference === 'shortest';
     const polygons = wanted.includes('traffic')
@@ -299,7 +301,7 @@ export function createRoutingEngine({
     let cause = null;
     if (chosen.primary === 'valhalla') {
       const exclusions = wanted.filter((a) => EXCLUSIONS.has(a));
-      const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()), bearings, shortest, via);
+      const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()), bearings, shortest, via, moped);
       attempts.valhalla = tried;
       if (tried.ok) {
         return { route: tried.route, engine: 'valhalla', primary: 'valhalla', fallback: false, cause: null, attempts, polygons };
@@ -346,7 +348,7 @@ export function createRoutingEngine({
   /**
    * How [engine] draws the variants of /faster (faster.js), whatever the engine: one ask
    * { label, from, to ({ lat, lon }), bearings ([[heading, tolerance], …]), avoid, polygons,
-   * alternatives, preference?, via? } → { engine, routes, error, outage, skipped?, latencyMs }.
+   * alternatives, preference?, via?, moped? } → { engine, routes, error, outage, skipped?, latencyMs }.
    * [shadow]: for the shadow mode (ORS kept off the fallback's budget).
    */
   function drawer(engine, { shadow = false } = {}) {
@@ -362,6 +364,7 @@ export function createRoutingEngine({
           alternates: ask.alternatives ? MAX_ALTERNATES : 0,
           ...(ask.preference === 'shortest' ? { shortest: true } : {}),
           ...(ask.via?.length ? { via: ask.via } : {}),
+          ...(ask.moped ? { moped: true } : {}),
         }));
         const latencyMs = Date.now() - startedAt;
         if (result.ok) return { engine, routes: result.value, error: null, outage: false, latencyMs };

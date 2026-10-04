@@ -82,6 +82,11 @@ export class ValhallaError extends Error {
 
 /** France's car profile (D4.1): Valhalla's `auto`, its top speed that of French motorways. */
 const TOP_SPEED_KMH = 130;
+/**
+ * Scooter 50 et sans permis (04/10) : profil Valhalla `motor_scooter`, 45 km/h au plus (Code de
+ * la route, cyclomoteurs et voiturettes), autoroutes exclues d'office.
+ */
+const MOPED_TOP_SPEED_KMH = 45;
 
 /** Alternatives asked at most: max_alternates on EONA's server (D4.5). */
 export const MAX_ALTERNATES = 3;
@@ -231,7 +236,8 @@ export function createValhallaClient({ baseUrl, timeoutMs, searchCutoffM, maxSna
    * off, a GeoJSON MultiPolygon as ORS's avoid_polygons, never with alternates (D4.3);
    * [bearings]: [[heading, tolerance], …] in degrees, for the start then the destination (null to
    * leave one free); [shortest]: route Éco, la plus courte en distance ; [via] : étapes
-   * [{ lat, lon }, …] dans l'ordre, MAX_STOPS au plus. Throws a ValhallaError.
+   * [{ lat, lon }, …] dans l'ordre, MAX_STOPS au plus ; [moped] : scooter 50 ou sans permis
+   * (motor_scooter, 45 km/h, sans autoroute). Throws a ValhallaError.
    * @returns {Promise<Route[]>}
    */
   async function routes(from, to, options = {}) {
@@ -310,7 +316,7 @@ export function decodePolyline6(encoded) {
 export const MAX_STOPS = 10;
 
 /** Valhalla's /route request for [from] → [to] with the caller's options, checked. */
-function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, alternates = 0, shortest = false, via = [] }, searchCutoffM) {
+function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, alternates = 0, shortest = false, via = [], moped = false }, searchCutoffM) {
   const start = checkedPoint(from, 'from');
   const end = checkedPoint(to, 'to');
   const stops = checkedStops(via);
@@ -323,6 +329,8 @@ function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, 
   }
   if (rings && count > 0) throw refused('polygons and alternates are asked separately');
   if (typeof shortest !== 'boolean') throw refused('shortest must be true or false');
+  if (typeof moped !== 'boolean') throw refused('moped must be true or false');
+  const costing = moped ? 'motor_scooter' : 'auto';
   if (stops.length && count > 0) throw refused('stops and alternates are asked separately');
   const body = {
     // Étapes : type `via`, route sans coupure ni manœuvre d'arrivée, demi-tour permis après l'arrêt.
@@ -331,9 +339,17 @@ function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, 
       ...stops.map((stop) => ({ ...location(stop, null, searchCutoffM), type: 'via' })),
       location(end, endHeading, searchCutoffM),
     ],
-    costing: 'auto',
-    // Éco : métrique distance seule (option auto `shortest`). Exclusions strictes gardées.
-    costing_options: { auto: { top_speed: TOP_SPEED_KMH, ...exclusions, ...(shortest ? { shortest: true } : {}) } },
+    costing,
+    // Éco : métrique distance seule (option `shortest`). Exclusions strictes gardées. 50cc et sans
+    // permis : 45 km/h, autoroutes exclues.
+    costing_options: {
+      [costing]: {
+        top_speed: moped ? MOPED_TOP_SPEED_KMH : TOP_SPEED_KMH,
+        ...exclusions,
+        ...(moped ? { exclude_highways: true } : {}),
+        ...(shortest ? { shortest: true } : {}),
+      },
+    },
     format: 'osrm',
     shape_format: 'polyline6',
     roundabout_exits: false,

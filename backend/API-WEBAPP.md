@@ -118,7 +118,7 @@ l'action est écrite au journal (section 6 bis).
 50 par page, du plus récent au plus ancien. Pour la page suivante, renvoyer `before` = le
 `createdAt` du dernier reçu.
 
-Un rapport contient : `id`, `status`, `category` (map, navigation, alerts, account, other),
+Un rapport contient : `id`, `status`, `category` (map, navigation, alerts, account, suggestion, other),
 `description`, `steps`, `createdAt`, `author` (`username` + `role`, ou `null` si le compte a été
 supprimé), `app` (`platform`, `version`, `os`, `model`), `context` (ci-dessous, sinon `null`).
 
@@ -661,3 +661,24 @@ Livreurs, taxis, VTC : plusieurs étapes sur un trajet. Anciennes apps : rien ne
   - Reste du trajet tracé par les étapes suivantes.
   - Illisible ou plus de 10 : 400 `via takes 10 stops [[lon,lat],...] at most`.
 - `routing.route_log.stops` : nombre d'étapes ; `0` sans étape ; `null` avant 04/10.
+
+## Scooter 50 et sans permis : 04/10/2026
+
+Cyclomoteurs 50 cm³ et voiturettes : 45 km/h, ni autoroute ni voie rapide. Anciennes apps : rien ne change.
+
+- `GET /api/route` ajoute `vehicle=car|moped`, facultatif. Absent ou `car` : JSON inchangé.
+  - `moped` : Valhalla `motor_scooter`, `top_speed` 45, `exclude_highways`. ORS en secours : `avoid_features` highways.
+  - `timed=1` : `travelS` toujours `null` (temps HERE = voiture).
+  - Cache séparé. Pas d'ombre. Combinable avec `preference`, `via`, `avoid`.
+  - Autre valeur : 400 `vehicle must be car or moped`.
+- `POST /api/route/faster` ajoute `vehicle`. `moped` : détour seulement autour d'une route fermée, comme Éco.
+- À vérifier sur VPS : voies rapides (`motorroad=yes`) exclues par `motor_scooter`.
+
+## Recherche enseigne + ville : 04/10/2026
+
+- « E.Leclerc Orly » : commune reconnue dans la requête, enseigne cherchée à moins de 8 km d'elle.
+- Contrat `/api/search` inchangé.
+
+## Contactez-nous : 04/10/2026
+
+- `POST /api/bugs` accepte `category: "suggestion"`. Même flux que les bugs.

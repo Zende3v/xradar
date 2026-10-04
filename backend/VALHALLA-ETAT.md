@@ -19,6 +19,16 @@
 - Ménage auto ajouté (accord Arthur 04/10) : après build validé, seules `current` et `previous` restent.
   Testé sur dossiers temporaires. À déployer : `valhalla/build.sh` seul.
 
+## Scooter 50, sans permis, recherche 04/10 (Claude, session cloud)
+
+- `/api/route` et `/faster` : `vehicle=moped`. Valhalla `motor_scooter`, 45 km/h, sans autoroute.
+  ORS secours sans autoroute. Pas de HERE ni d'ombre. Détails : `API-WEBAPP.md`.
+- Recherche : enseigne + commune (« Fitness Park Orly »), lieux à 8 km de la commune.
+  Cause réelle de l'échec non vérifiée : lieu absent de l'index ou classé trop loin. À mesurer sur VPS.
+- `/api/bugs` : catégorie `suggestion` (« Contactez-nous »).
+- 174 tests backend passent. Non déployé.
+- À vérifier sur VPS : voies rapides (`motorroad=yes`) exclues par `motor_scooter`.
+
 ## Choix Rapide / Éco 04/10
 
 - Constat Arthur : Éco 34 min, Rapide 37 min. Aucune inversion : temps HERE par tracé, profils

@@ -132,7 +132,8 @@ export function looksLikeAddress(query) {
  * typed ("orly", "vitry sur seine"): then the town itself is looked for, not a place in it.
  */
 function townWords(query, item) {
-  const town = new Set(fold(item.city).split(' ').filter((word) => word.length > 2 && !TOWN_FILLER.has(word)));
+  // Sa commune, et la ville typée autour de laquelle l'index l'a trouvé (commune voisine).
+  const town = new Set(`${fold(item.city)} ${fold(item.townHint)}`.split(' ').filter((word) => word.length > 2 && !TOWN_FILLER.has(word)));
   if (item.postcode) town.add(fold(item.postcode));
   if (!words(query).some((word) => !town.has(word) && !TOWN_FILLER.has(word))) return new Set();
   const typed = fold(query).split(' ');

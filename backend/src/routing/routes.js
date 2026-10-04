@@ -49,7 +49,9 @@ export function createRouteRouter({
   }
 
   /**
-   * GET /api/route?from=lat,lon&to=lat,lon[&avoid=tolls,highways,ferries,traffic][&preference=fastest|shortest][&timed=1][&via=lat,lon;lat,lon]
+   * GET /api/route?from=lat,lon&to=lat,lon[&avoid=tolls,highways,ferries,traffic][&preference=fastest|shortest][&timed=1][&via=lat,lon;lat,lon][&vehicle=car|moped]
+   * [vehicle] (04/10) : `moped` = scooter 50 ou sans permis, 45 km/h, autoroutes exclues ;
+   * `travelS` null (temps HERE voiture faux), pas d'ombre.
    * [via] (multi-arrêts, 04/10) : étapes dans l'ordre, MAX_STOPS au plus ; route unique qui les
    * traverse, sans manœuvre d'arrivée intermédiaire.
    * [preference] (choix d'itinéraire, 02/10) : `shortest` = Éco, la plus courte en distance ;
@@ -90,12 +92,15 @@ export function createRouteRouter({
     const via = parseVia(req.query.via);
     if (!via) return answer(400, { error: `via takes ${MAX_STOPS} stops "lat,lon;lat,lon" at most` });
     facts.stops = via.length;
+    const vehicle = parseVehicle(req.query.vehicle);
+    if (vehicle === undefined) return answer(400, { error: 'vehicle must be car or moped' });
+    const moped = vehicle === 'moped';
     const timed = req.query.timed === '1';
     /** La route, plus ce que l'app récente a demandé : preference, travelS. */
     const reply = async (route) => (!preference && !timed ? route : {
       ...route,
       ...(preference ? { preference } : {}),
-      ...(timed ? { travelS: await timeRoute(route) } : {}),
+      ...(timed ? { travelS: moped ? null : await timeRoute(route) } : {}),
     });
     // A guest starts a limited number of trips a day; recalculations to the same place are free.
     const trip = accounts.tripCheck(account, to);
@@ -109,6 +114,7 @@ export function createRouteRouter({
     const partition = [
       plan.primary,
       ...(shortest ? ['shortest'] : []),
+      ...(moped ? ['moped'] : []),
       ...(via.length ? [`via:${via.map((p) => `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`).join(';')}`] : []),
     ].join(':');
     // The same trip asked again within the minute costs nothing: an app looping on a recalculation
@@ -130,7 +136,7 @@ export function createRouteRouter({
 
     let outcome;
     try {
-      outcome = await routing.route(from, to, avoid, { plan, heading, preference: preference ?? 'fastest', via });
+      outcome = await routing.route(from, to, avoid, { plan, heading, preference: preference ?? 'fastest', via, moped });
     } catch (e) {
       // The façade answers its failures; this is a bug, still answered like one.
       console.warn('[route] unavailable —', String(e.message || e));
@@ -150,13 +156,14 @@ export function createRouteRouter({
       // The engine's own text may quote the coordinates: the log keeps the error alone.
       answer(outcome.status || 502, { error: outcome.error });
     }
-    // Only once the answer is sent (shadow.js queues it on the response's end). Éco ou étapes :
-    // pas d'ombre, comparaison des moteurs faite sur Rapide direct seulement.
-    if (!shortest && !via.length) shadow.afterRoute(res, { plan, outcome, from, to, avoid, heading, admin: account.role === 'admin' });
+    // Only once the answer is sent (shadow.js queues it on the response's end). Éco, étapes ou
+    // 45 km/h : pas d'ombre, comparaison des moteurs faite sur Rapide voiture direct seulement.
+    if (!shortest && !via.length && !moped) shadow.afterRoute(res, { plan, outcome, from, to, avoid, heading, admin: account.role === 'admin' });
   });
 
   /**
-   * POST /api/route/faster  { coordinates: [[lon, lat], …], avoid?: ["tolls", "highways"], sinceRerouteS?, etaS?, preference?, via? }
+   * POST /api/route/faster  { coordinates: [[lon, lat], …], avoid?: ["tolls", "highways"], sinceRerouteS?, etaS?, preference?, via?, vehicle? }
+   * [vehicle] `moped` : autoroutes exclues, détour seulement autour d'une route fermée.
    * [preference] `shortest` (trajet Éco) : détour seulement autour d'une route fermée, variantes
    * Éco, la plus courte retenue. [via] : étapes restantes [[lon, lat], …] ; détour avant la
    * première seulement, reste du trajet par les suivantes.
@@ -199,7 +206,11 @@ export function createRouteRouter({
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return answer(400, { error: 'invalid coordinate' });
       points.push([lat, lon]);
     }
-    const avoid = Array.isArray(req.body.avoid) ? req.body.avoid.map(String) : [];
+    const vehicle = parseVehicle(req.body.vehicle);
+    if (vehicle === undefined) return answer(400, { error: 'vehicle must be car or moped' });
+    const moped = vehicle === 'moped';
+    const asked = Array.isArray(req.body.avoid) ? req.body.avoid.map(String) : [];
+    const avoid = moped && !asked.includes('highways') ? [...asked, 'highways'] : asked;
     facts.avoid = avoid;
     const preference = parsePreference(req.body.preference);
     if (preference === undefined) return answer(400, { error: 'preference must be fastest or shortest' });
@@ -222,10 +233,11 @@ export function createRouteRouter({
         draw: routing.drawer(plan.primary),
         preference: preference ?? 'fastest',
         via,
+        moped,
       });
       answer(200, result, result.better ? routeFacts(result.better.route) : { error: result.reason ?? null });
       if (result.better) routing.noteServed(account.id, { engine: result.better.route.engine, fallback: false });
-      shadow.afterFaster(res, { plan, compare, avoid, admin: account.role === 'admin' });
+      if (!moped) shadow.afterFaster(res, { plan, compare, avoid, admin: account.role === 'admin' });
     } catch (e) {
       console.warn('[faster] unavailable —', String(e.message || e));
       answer(502, { error: 'rerouting unavailable' }, { error: String(e.message || e) });
@@ -274,6 +286,12 @@ function parseViaList(value) {
   if (!Array.isArray(value) || value.length > MAX_STOPS) return null;
   const stops = value.map((c) => ({ lat: Number(c?.[1]), lon: Number(c?.[0]) }));
   return stops.every((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180) ? stops : null;
+}
+
+/** Véhicule : 'car' (absent : anciennes apps) | 'moped' (scooter 50, sans permis) ; undefined illisible. */
+function parseVehicle(value) {
+  if (value == null || value === '' || value === 'car') return 'car';
+  return value === 'moped' ? 'moped' : undefined;
 }
 
 /** Choix d'itinéraire : 'fastest' | 'shortest' ; null absent (anciennes apps) ; undefined illisible. */

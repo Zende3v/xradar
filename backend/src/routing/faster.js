@@ -40,13 +40,17 @@ const THROUGH_CLOSURE_SHARE = 0.5;
  * [preference] `shortest` (trajet Éco) : route fermée seulement, variantes Éco autour d'elle,
  * plus courte en distance retenue, sans chronométrage HERE. [via] : étapes restantes
  * [{ lat, lon }] ; détour fini à la première au plus tard, reste du trajet par les suivantes.
+ * [moped] (scooter 50, sans permis) : comme Éco, route fermée seulement, variantes la plus courte
+ * retenue, sans chronométrage HERE (temps voiture faux à 45 km/h) ; tracés motor_scooter.
  * { answer, compare } conserve contrat API et comparaison des moteurs en mode ombre.
  */
-export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest', via = [] } = {}) {
+export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest', via = [], moped = false } = {}) {
   if (sinceRerouteS != null && sinceRerouteS < config.rerouteCooldownS) {
     return { answer: { better: null, reason: 'cooldown' }, compare: null };
   }
   const shortest = preference === 'shortest';
+  // Éco ou 45 km/h : détour pour une route fermée seulement, aucun temps HERE à comparer.
+  const closedOnly = shortest || moped;
 
   const path = measure(points);
   // Étapes : place de chacune sur le trajet ; une étape introuvable interdit tout détour.
@@ -68,7 +72,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
     .filter((jam) => jam.fromM <= HORIZON_M && (short || jam.toM + REJOIN_AFTER_M <= WINDOW_MAX_M))
     // Étapes : bouchon fini avant la première, le détour la rejoint au plus tard.
     .filter((jam) => !stopsM.length || jam.toM <= reach - KEEP_OPEN_M)
-    .filter((jam) => !shortest || jam.closed);
+    .filter((jam) => !closedOnly || jam.closed);
   const closed = jams.some((jam) => jam.closed);
   const lostS = jams.reduce((sum, jam) => sum + jam.delayS, 0);
   const summary = { lostS, crowdS: current.crowdS, thresholdS, jams: jams.map(({ fromM, toM, delayS, closed: shut }) => ({ fromM, toM, delayS, closed: shut })) };
@@ -82,7 +86,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   // Même portion, même source de durée. Aucun détour spéculatif sans import HERE valide. Éco :
   // détour imposé par la fermeture, aucun temps à comparer.
   let currentS = null;
-  if (!shortest) {
+  if (!closedOnly) {
     const baseline = await travel(window, { use: 'faster' }).catch(() => null);
     if (!(baseline?.travelS > 0)) return { answer: { ...summary, better: null, reason: 'HERE baseline unavailable' }, compare: null };
     currentS = baseline.travelS + delayWithin(current.sections.filter(s=>s.source === 'crowd' || s.source === 'datagouv'), 0, rejoinM);
@@ -93,7 +97,10 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   const [start, end] = [window[0], window[window.length - 1]];
   const bearings = [[headingAt(path, 0), 45]];
   if (tail) bearings.push([headingAt(path, rejoinM), 45]);
-  const base = { from: { lat: start[0], lon: start[1] }, to: { lat: end[0], lon: end[1] }, bearings, avoid, ...(shortest ? { preference } : {}) };
+  const base = {
+    from: { lat: start[0], lon: start[1] }, to: { lat: end[0], lon: end[1] }, bearings, avoid,
+    ...(shortest ? { preference } : {}), ...(moped ? { moped: true } : {}),
+  };
   const worst = jams.reduce((a, b) => (weight(b) > weight(a) ? b : a));
   const asks = [{ ...base, label: 'around', polygons: polygonsAround(path, jams), alternatives: false }];
   if (jams.length > 1) asks.push({ ...base, label: 'around worst', polygons: polygonsAround(path, [worst]), alternatives: false });
@@ -125,8 +132,8 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
     });
     if (!live?.reliable || (live.coverageM != null && live.coverageM < measure(candidate.line).total - 1)
         || live.sections.some(s=>s.level === 'closed' || s.kind === 'closed')) continue;
-    if (shortest) {
-      // Éco : variante ouverte la plus courte.
+    if (closedOnly) {
+      // Éco, 45 km/h : variante ouverte la plus courte.
       timed += 1;
       if (!best || candidate.route.distanceM < best.route.distanceM) best = { candidate, route: candidate.route, travelS: null };
       continue;
@@ -138,17 +145,17 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
     if (!best || travelS < best.travelS) best = { candidate, route: candidate.route, travelS };
   }
 
-  const gainS = best && !shortest ? currentS - best.travelS : 0;
+  const gainS = best && !closedOnly ? currentS - best.travelS : 0;
   const switching = best != null && (closed || gainS >= thresholdS);
   console.log(
-    `[faster]${shortest ? ' eco' : ''} now ${currentS ?? '-'}s (drivers +${current.crowdS}s), ${jams.length} jam(s) ${lostS}s lost${closed ? ' + closed' : ''}, window ${Math.round(rejoinM / 1000)}/${Math.round(path.total / 1000)} km, ` +
-      `${drawn.found.length} ${drawn.engine ?? 'engine'} route(s), ${timed} timed, best ${best ? (shortest ? best.route.distanceM + 'm' : best.travelS + 's') : '-'}, threshold ${thresholdS}s${sticky ? ' (sticky)' : ''} → ${switching ? 'switch' : 'keep'}`,
+    `[faster]${shortest ? ' eco' : ''}${moped ? ' moped' : ''} now ${currentS ?? '-'}s (drivers +${current.crowdS}s), ${jams.length} jam(s) ${lostS}s lost${closed ? ' + closed' : ''}, window ${Math.round(rejoinM / 1000)}/${Math.round(path.total / 1000)} km, ` +
+      `${drawn.found.length} ${drawn.engine ?? 'engine'} route(s), ${timed} timed, best ${best ? (closedOnly ? best.route.distanceM + 'm' : best.travelS + 's') : '-'}, threshold ${thresholdS}s${sticky ? ' (sticky)' : ''} → ${switching ? 'switch' : 'keep'}`,
   );
   const result = { ...summary, currentS, variants: timed, bestS: best?.travelS ?? null };
   const compare = { plan, drawn, detour: switching ? best.candidate : null };
   if (!switching) return { answer: { ...result, better: null, reason: best ? 'not enough gain' : 'no variant' }, compare };
   const restStops = via.filter((_, i) => stopsM[i] > rejoinM + 1);
-  const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw, shortest ? preference : null, restStops) : best.route;
+  const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw, shortest ? preference : null, restStops, moped) : best.route;
   if (!route) return { answer: { ...result, better: null, reason: 'rest of the route unavailable' }, compare };
   // Durée moteur conservée dans route ; prochain rafraîchissement fournit son ETA HERE.
   return { answer: { ...result, better: { gainS: Math.max(0, gainS), closed, route } }, compare };
@@ -257,7 +264,7 @@ function delayWithin(sections, fromM, toM) {
  * The winning detour, then the engine's route from the rejoin point to the destination (the
  * same road as the route's rest): one route to follow, with its steps, its engine and its map.
  */
-async function withRest(detour, rest, heading, avoid, draw, preference = null, via = []) {
+async function withRest(detour, rest, heading, avoid, draw, preference = null, via = [], moped = false) {
   const [from, to] = [rest[0], rest[rest.length - 1]];
   const { routes: [route] = [] } = await draw({
     label: 'rest',
@@ -269,6 +276,7 @@ async function withRest(detour, rest, heading, avoid, draw, preference = null, v
     alternatives: false,
     ...(preference ? { preference } : {}),
     ...(via.length ? { via } : {}),
+    ...(moped ? { moped: true } : {}),
   });
   if (!route) return null;
   const returned = route.coordinates.map(([lon, lat])=>[lat, lon]);

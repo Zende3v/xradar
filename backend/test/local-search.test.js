@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { fromLocal } from '../src/search/local.js';
+import { score } from '../src/search/rank.js';
 
 /** A pool that answers like the published index: the fold, then the places near, then the notable ones. */
-function fakePool({ folded, near = [], notable = [] }) {
+function fakePool({ folded, near = [], notable = [], hinted = () => [] }) {
   const asked = [];
   const client = {
     async query(text, values) {
       asked.push({ text, values });
       if (text.includes('search.fold')) return { rows: [{ q: folded }] };
+      if (text.includes('town_hint')) return { rows: hinted(values[0]) };
       if (text.includes('ST_Expand')) return { rows: near };
       if (text.includes('weight >= 0.6')) return { rows: notable };
       return { rows: [] };
@@ -52,5 +54,29 @@ describe('EONA\'s own place index', () => {
     await fromLocal('orly', null, { pool: far.pool });
     assert.ok(!far.asked.some((q) => q.text.includes('ST_Expand')));
     assert.ok(far.asked.some((q) => q.text.includes('weight >= 0.6')));
+  });
+
+  it('enseigne + ville : cherchée autour de la ville typée, commune voisine comprise', async () => {
+    const { asked, pool } = fakePool({
+      folded: 'fitness park orly',
+      hinted: (town) => (town === 'orly' ? [row(7, 'Fitness Park', { key: 'leisure', value: 'fitness_centre', city: 'Thiais', postcode: '94320', town_hint: 'Orly' })] : []),
+    });
+    const places = await fromLocal('Fitness Park Orly', { lat: 48.79, lon: 2.36 }, { pool });
+    const hint = asked.find((q) => q.text.includes('town_hint'));
+    assert.equal(hint.values[0], 'orly');
+    assert.deepEqual(hint.values.slice(-2), ['fitness', 'park']);
+    assert.deepEqual(places.map((p) => [p.name, p.city, p.townHint]), [['Fitness Park', 'Thiais', 'Orly']]);
+    // Classement : « orly » vaut la ville, comme pour un lieu dans Orly même.
+    const { parts } = score({ ...places[0], distanceM: 9000 }, { query: 'Fitness Park Orly', index: 0, total: 1 });
+    assert.equal(parts.name, 1);
+    assert.equal(parts.distance, 0.8);
+  });
+
+  it('ville seule tapée en entier : rien cherché autour', async () => {
+    const { pool } = fakePool({
+      folded: 'vitry sur seine',
+      hinted: () => [row(9, 'Boulangerie', { city: 'Vitry-sur-Seine', town_hint: 'Vitry-sur-Seine' })],
+    });
+    assert.deepEqual(await fromLocal('Vitry sur Seine', { lat: 48.79, lon: 2.39 }, { pool }), []);
   });
 });

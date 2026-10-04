@@ -9,7 +9,8 @@ import { screenshotBytes } from './screenshot.js';
 
 export const bugRouter = Router();
 
-const CATEGORIES = new Set(['map', 'navigation', 'alerts', 'account', 'other']);
+// « suggestion » (04/10) : « Contactez-nous » remonte bugs et idées dans un même flux.
+const CATEGORIES = new Set(['map', 'navigation', 'alerts', 'account', 'suggestion', 'other']);
 const STATUSES = new Set(['new', 'progress', 'resolved']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
