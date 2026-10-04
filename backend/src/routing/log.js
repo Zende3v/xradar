@@ -19,12 +19,12 @@ let lastPurge = 0;
 
 /**
  * One line: { kind: 'route' | 'faster', status, latencyMs, engine?, isNew?, cached?, distanceM?,
- * durationS?, steps?, uturnStart?, avoid?, preference?, error? } — what is not known stays null.
+ * durationS?, steps?, uturnStart?, avoid?, preference?, stops?, error? } — what is not known stays null.
  */
 export function logRoute(entry) {
   db.query(
-    `INSERT INTO routing.route_log (kind, engine, status, latency_ms, is_new, cached, distance_m, duration_s, steps, uturn_start, avoid, error, preference)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    `INSERT INTO routing.route_log (kind, engine, status, latency_ms, is_new, cached, distance_m, duration_s, steps, uturn_start, avoid, error, preference, stops)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
     [
       entry.kind,
       text(entry.engine, 16),
@@ -39,6 +39,7 @@ export function logRoute(entry) {
       Array.isArray(entry.avoid) ? [...new Set(entry.avoid.filter((a) => AVOID.has(a)))] : [],
       text(entry.error, 200),
       PREFERENCES.has(entry.preference) ? entry.preference : null,
+      whole(entry.stops),
     ],
   ).catch((e) => console.warn('[route-log] not written —', String(e.message || e)));
   if (Date.now() - lastPurge > 60 * 60 * 1000) {

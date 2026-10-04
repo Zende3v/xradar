@@ -4,7 +4,7 @@ import { hereAlong, hereTravel } from '../traffic/here.js';
 import { datagouvAlong, withDatagouv } from '../traffic/datagouv.js';
 import { speedStore } from '../traffic/speeds.js';
 import { settingsStore } from '../accounts/settings.js';
-import { gridOf, headingAt, measure, samplesBetween, share, sliceOf } from './geometry.js';
+import { gridOf, headingAt, measure, project, samplesBetween, share, sliceOf } from './geometry.js';
 import { square } from './providers/ors.js';
 import { haversine } from '../radars/geo.js';
 
@@ -27,6 +27,8 @@ const REJOIN_AFTER_M = 5_000;
 const WINDOW_MAX_M = 85_000;
 // Two routes sharing this much of each other are one route.
 const SAME_ROUTE_SHARE = 0.9;
+// Une étape plus loin que ceci du trajet suivi : place inconnue, aucun détour.
+const STOP_ON_ROUTE_M = 350;
 // A variant going through half a closed stretch or more still meets the closure.
 const THROUGH_CLOSURE_SHARE = 0.5;
 
@@ -36,16 +38,22 @@ const THROUGH_CLOSURE_SHARE = 0.5;
  * Seuls suppléments EONA/data.gouv s'ajoutent à HERE. Maximum deux variantes chronométrées.
  * Gain minimal 3 min et 5 %, renforcé après bascule ; fermeture actuelle reste prioritaire.
  * [preference] `shortest` (trajet Éco) : route fermée seulement, variantes Éco autour d'elle,
- * plus courte en distance retenue, sans chronométrage HERE.
+ * plus courte en distance retenue, sans chronométrage HERE. [via] : étapes restantes
+ * [{ lat, lon }] ; détour fini à la première au plus tard, reste du trajet par les suivantes.
  * { answer, compare } conserve contrat API et comparaison des moteurs en mode ombre.
  */
-export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest' } = {}) {
+export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest', via = [] } = {}) {
   if (sinceRerouteS != null && sinceRerouteS < config.rerouteCooldownS) {
     return { answer: { better: null, reason: 'cooldown' }, compare: null };
   }
   const shortest = preference === 'shortest';
 
   const path = measure(points);
+  // Étapes : place de chacune sur le trajet ; une étape introuvable interdit tout détour.
+  const routeGrid = via.length ? gridOf(points) : null;
+  const stopsM = via.map((stop) => project(path, routeGrid, stop.lat, stop.lon, STOP_ON_ROUTE_M)?.along ?? null);
+  if (stopsM.some((m) => m == null)) return { answer: { better: null, reason: 'stop off route' }, compare: null };
+  const reach = stopsM.length ? stopsM[0] : path.total;
   const current = await traffic(points, path);
   if (!current.reliable) return { answer: { better: null, reason: 'live traffic unavailable' }, compare: null };
   const sticky = sinceRerouteS != null && sinceRerouteS < config.rerouteStickyS;
@@ -55,9 +63,11 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
 
   // The jams near enough to go around now, the detour rejoining the route past them. Éco : routes
   // fermées seulement, un bouchon ne justifie aucun km de plus.
-  const short = path.total <= WINDOW_MAX_M;
+  const short = reach <= WINDOW_MAX_M;
   const jams = jamsOf(current.sections, path.total)
     .filter((jam) => jam.fromM <= HORIZON_M && (short || jam.toM + REJOIN_AFTER_M <= WINDOW_MAX_M))
+    // Étapes : bouchon fini avant la première, le détour la rejoint au plus tard.
+    .filter((jam) => !stopsM.length || jam.toM <= reach - KEEP_OPEN_M)
     .filter((jam) => !shortest || jam.closed);
   const closed = jams.some((jam) => jam.closed);
   const lostS = jams.reduce((sum, jam) => sum + jam.delayS, 0);
@@ -65,8 +75,8 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   if (!jams.length || (!closed && lostS < thresholdS)) {
     return { answer: { ...summary, better: null, reason: 'no significant jam' }, compare: null };
   }
-  let rejoinM = short ? path.total : Math.max(...jams.map((jam) => jam.toM)) + REJOIN_AFTER_M;
-  if (rejoinM >= path.total - KEEP_OPEN_M) rejoinM = path.total;
+  let rejoinM = short ? reach : Math.max(...jams.map((jam) => jam.toM)) + REJOIN_AFTER_M;
+  if (rejoinM >= reach - KEEP_OPEN_M) rejoinM = reach;
   const window = sliceOf(path, 0, rejoinM);
   const tail = rejoinM < path.total ? sliceOf(path, rejoinM, path.total) : null;
   // Même portion, même source de durée. Aucun détour spéculatif sans import HERE valide. Éco :
@@ -137,7 +147,8 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   const result = { ...summary, currentS, variants: timed, bestS: best?.travelS ?? null };
   const compare = { plan, drawn, detour: switching ? best.candidate : null };
   if (!switching) return { answer: { ...result, better: null, reason: best ? 'not enough gain' : 'no variant' }, compare };
-  const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw, shortest ? preference : null) : best.route;
+  const restStops = via.filter((_, i) => stopsM[i] > rejoinM + 1);
+  const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw, shortest ? preference : null, restStops) : best.route;
   if (!route) return { answer: { ...result, better: null, reason: 'rest of the route unavailable' }, compare };
   // Durée moteur conservée dans route ; prochain rafraîchissement fournit son ETA HERE.
   return { answer: { ...result, better: { gainS: Math.max(0, gainS), closed, route } }, compare };
@@ -246,7 +257,7 @@ function delayWithin(sections, fromM, toM) {
  * The winning detour, then the engine's route from the rejoin point to the destination (the
  * same road as the route's rest): one route to follow, with its steps, its engine and its map.
  */
-async function withRest(detour, rest, heading, avoid, draw, preference = null) {
+async function withRest(detour, rest, heading, avoid, draw, preference = null, via = []) {
   const [from, to] = [rest[0], rest[rest.length - 1]];
   const { routes: [route] = [] } = await draw({
     label: 'rest',
@@ -257,6 +268,7 @@ async function withRest(detour, rest, heading, avoid, draw, preference = null) {
     polygons: null,
     alternatives: false,
     ...(preference ? { preference } : {}),
+    ...(via.length ? { via } : {}),
   });
   if (!route) return null;
   const returned = route.coordinates.map(([lon, lat])=>[lat, lon]);

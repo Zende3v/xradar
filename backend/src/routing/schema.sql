@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS routing.route_log (
 CREATE INDEX IF NOT EXISTS route_log_at ON routing.route_log (at);
 -- Choix d'itinéraire (02/10) : fastest (Rapide) ou shortest (Éco) ; null avant ce choix.
 ALTER TABLE routing.route_log ADD COLUMN IF NOT EXISTS preference text;
+-- Multi-arrêts (04/10) : nombre d'étapes demandées ; null avant.
+ALTER TABLE routing.route_log ADD COLUMN IF NOT EXISTS stops integer;
 
 -- ---- Bench (routing/bench.js) --------------------------------------------------------------
 

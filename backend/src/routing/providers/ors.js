@@ -199,15 +199,17 @@ function withTimeout(signal, ms) {
  * The ORS directions body for [from] → [to] ({ lat, lon }): steps, full shape, the app's avoid
  * options ([avoid]: tolls, highways, ferries; anything else is dropped), areas to keep off
  * ([polygons]: a GeoJSON MultiPolygon), a heading per point ([bearings]: [[heading, tolerance],
- * …]), ORS's own alternatives ([alternatives]) and [preference] (`shortest` : route Éco).
+ * …]), ORS's own alternatives ([alternatives]), [preference] (`shortest` : route Éco) and [via]
+ * (étapes [{ lat, lon }, …]).
  */
-export function orsBody({ from, to, avoid = [], polygons = null, bearings = null, alternatives = false, preference = null }) {
+export function orsBody({ from, to, avoid = [], polygons = null, bearings = null, alternatives = false, preference = null, via = [] }) {
   const options = {};
   const features = avoid.map((a) => ORS_AVOID[a]).filter(Boolean);
   if (features.length) options.avoid_features = features;
   if (polygons) options.avoid_polygons = polygons;
   return {
-    coordinates: [[from.lon, from.lat], [to.lon, to.lat]],
+    // Étapes : entre départ et arrivée, dans l'ordre.
+    coordinates: [[from.lon, from.lat], ...(via ?? []).map((stop) => [stop.lon, stop.lat]), [to.lon, to.lat]],
     // Éco : ORS au plus court en distance, même choix que Valhalla.
     ...(preference === 'shortest' ? { preference: 'shortest' } : {}),
     ...(bearings ? { bearings } : {}),
@@ -265,9 +267,11 @@ const ORS_TYPE = {
 
 function normalizeOrsSteps(segments, coordinates) {
   const out = [];
-  for (const seg of segments) {
+  for (const [index, seg] of segments.entries()) {
     for (const s of seg.steps || []) {
       const [type, modifier] = ORS_TYPE[s.type] || ['continue', 'straight'];
+      // Étapes : une seule route, comme Valhalla. Arrivée et départ intermédiaires retirés.
+      if ((type === 'arrive' && index < segments.length - 1) || (type === 'depart' && index > 0)) continue;
       const at = Array.isArray(s.way_points) ? coordinates[s.way_points[0]] : null;
       out.push({
         type,

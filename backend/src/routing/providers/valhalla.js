@@ -230,7 +230,8 @@ export function createValhallaClient({ baseUrl, timeoutMs, searchCutoffM, maxSna
    * alternatives. [avoid]: 'tolls', 'highways', 'ferries' (strict); [polygons]: areas to keep
    * off, a GeoJSON MultiPolygon as ORS's avoid_polygons, never with alternates (D4.3);
    * [bearings]: [[heading, tolerance], …] in degrees, for the start then the destination (null to
-   * leave one free); [shortest]: route Éco, la plus courte en distance. Throws a ValhallaError.
+   * leave one free); [shortest]: route Éco, la plus courte en distance ; [via] : étapes
+   * [{ lat, lon }, …] dans l'ordre, MAX_STOPS au plus. Throws a ValhallaError.
    * @returns {Promise<Route[]>}
    */
   async function routes(from, to, options = {}) {
@@ -240,7 +241,8 @@ export function createValhallaClient({ baseUrl, timeoutMs, searchCutoffM, maxSna
     const json = await exchange('/route', body, signal);
     return readRoutes(json, {
       from: body.locations[0],
-      to: body.locations[1],
+      to: body.locations[body.locations.length - 1],
+      stops: body.locations.slice(1, -1),
       polygons: body.exclude_polygons != null,
       maxSnapM: snapLimitM,
       mapVersion: map?.mapVersion ?? null,
@@ -304,10 +306,14 @@ export function decodePolyline6(encoded) {
 
 // ---- Request ----------------------------------------------------------------
 
+/** Étapes demandées au plus : au-delà, refus. */
+export const MAX_STOPS = 10;
+
 /** Valhalla's /route request for [from] → [to] with the caller's options, checked. */
-function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, alternates = 0, shortest = false }, searchCutoffM) {
+function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, alternates = 0, shortest = false, via = [] }, searchCutoffM) {
   const start = checkedPoint(from, 'from');
   const end = checkedPoint(to, 'to');
+  const stops = checkedStops(via);
   const [startHeading, endHeading] = checkedBearings(bearings);
   const exclusions = checkedAvoid(avoid);
   const rings = excludePolygons(polygons);
@@ -317,8 +323,14 @@ function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, 
   }
   if (rings && count > 0) throw refused('polygons and alternates are asked separately');
   if (typeof shortest !== 'boolean') throw refused('shortest must be true or false');
+  if (stops.length && count > 0) throw refused('stops and alternates are asked separately');
   const body = {
-    locations: [location(start, startHeading, searchCutoffM), location(end, endHeading, searchCutoffM)],
+    // Étapes : type `via`, route sans coupure ni manœuvre d'arrivée, demi-tour permis après l'arrêt.
+    locations: [
+      location(start, startHeading, searchCutoffM),
+      ...stops.map((stop) => ({ ...location(stop, null, searchCutoffM), type: 'via' })),
+      location(end, endHeading, searchCutoffM),
+    ],
     costing: 'auto',
     // Éco : métrique distance seule (option auto `shortest`). Exclusions strictes gardées.
     costing_options: { auto: { top_speed: TOP_SPEED_KMH, ...exclusions, ...(shortest ? { shortest: true } : {}) } },
@@ -359,6 +371,13 @@ function checkedSignal(signal) {
   if (typeof signal.aborted !== 'boolean' || typeof signal.addEventListener !== 'function') {
     throw refused('signal must be an AbortSignal');
   }
+}
+
+/** Étapes [{ lat, lon }, …], dans l'ordre, MAX_STOPS au plus. */
+function checkedStops(via) {
+  if (via == null) return [];
+  if (!Array.isArray(via) || via.length > MAX_STOPS) throw refused(`via takes ${MAX_STOPS} stops at most`);
+  return via.map((stop) => checkedPoint(stop, 'via'));
 }
 
 function checkedPoint(value, name) {
@@ -468,7 +487,7 @@ function refusal(status, text) {
  * The routes of an OSRM-format answer in the app's shape, after the checks: nothing asked was
  * dropped (warnings 208, 204), both points snapped within [maxSnapM], every route whole.
  */
-function readRoutes(json, { from, to, polygons, maxSnapM, mapVersion }) {
+function readRoutes(json, { from, to, stops = [], polygons, maxSnapM, mapVersion }) {
   if (json.code !== 'Ok') throw badAnswer('route answer not Ok');
   const warnings = Array.isArray(json.warnings) ? json.warnings.map((w) => Number(w?.code)) : [];
   if (warnings.includes(WARNING_EXCLUSIONS_IGNORED)) {
@@ -481,7 +500,7 @@ function readRoutes(json, { from, to, polygons, maxSnapM, mapVersion }) {
       valhallaCode: WARNING_POLYGONS_IGNORED,
     });
   }
-  checkWaypoints(json.waypoints, from, to, maxSnapM);
+  checkWaypoints(json.waypoints, from, to, stops, maxSnapM);
   if (!Array.isArray(json.routes) || !json.routes.length) throw badAnswer('no route in the answer');
   const routes = json.routes.map((route) => normalizeRoute(route, mapVersion));
   // The shape's own ends: where the driver really starts and arrives.
@@ -492,15 +511,20 @@ function readRoutes(json, { from, to, polygons, maxSnapM, mapVersion }) {
   return routes;
 }
 
-/** Where Valhalla snapped both points: its own distance and ours, each within [maxSnapM]. */
-function checkWaypoints(waypoints, from, to, maxSnapM) {
-  if (!Array.isArray(waypoints) || waypoints.length !== 2) throw badAnswer('waypoints missing');
+/**
+ * Where Valhalla snapped the points: its own distance and ours, each within [maxSnapM]. Étapes
+ * `via` : listées ou non selon serveur ; listées, contrôlées comme les deux bouts.
+ */
+function checkWaypoints(waypoints, from, to, stops, maxSnapM) {
+  const asked = waypoints?.length === stops.length + 2 ? [from, ...stops, to] : [from, to];
+  if (!Array.isArray(waypoints) || waypoints.length !== asked.length) throw badAnswer('waypoints missing');
   waypoints.forEach((waypoint, i) => {
     const at = lonLat(waypoint?.location);
     if (!at) throw badAnswer('waypoint location unreadable');
     const reported = waypoint.distance;
     if (reported != null && !(isNumber(reported) && reported >= 0)) throw badAnswer('waypoint distance unreadable');
-    checkSnap(i ? 'to' : 'from', i ? to : from, at, maxSnapM, reported ?? 0);
+    const name = i === 0 ? 'from' : i === asked.length - 1 ? 'to' : 'via';
+    checkSnap(name, asked[i], at, maxSnapM, reported ?? 0);
   });
 }
 
@@ -508,7 +532,7 @@ function checkWaypoints(waypoints, from, to, maxSnapM) {
 function checkSnap(name, asked, at, maxSnapM, reportedM = 0) {
   const snapM = Math.max(haversine(asked.lat, asked.lon, at[1], at[0]), reportedM);
   if (snapM <= maxSnapM) return;
-  const which = name === 'from' ? 'start' : 'destination';
+  const which = name === 'from' ? 'start' : name === 'via' ? 'stop' : 'destination';
   throw new ValhallaError(
     VALHALLA_ERROR.OUT_OF_COVERAGE,
     `Valhalla: the ${which} snapped ${Math.round(snapM)} m away, over the ${Math.round(maxSnapM)} m allowed`,

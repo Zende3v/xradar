@@ -1,5 +1,15 @@
 # Valhalla : état du chantier
 
+## Multi-arrêts 04/10/2026 (Claude, session cloud)
+
+- Backend : `via` sur `/api/route` (10 étapes, Valhalla `type: via`, ORS coordonnées) et `/faster`.
+  Contrat inchangé sans `via`. Détails : `API-WEBAPP.md`, section Multi-arrêts.
+- Colonne `routing.route_log.stops`, ajoutée seule au redémarrage (`ADD COLUMN IF NOT EXISTS`).
+- 167 tests backend passent (10 nouveaux, `test/routing-stops.test.js`).
+- À vérifier sur VPS : Valhalla réel avec étapes, `waypoints` listant ou non les étapes.
+- Non déployé : Arthur déploie (README §4). SSH VPS refusé depuis cloud.
+- iOS build 26 : multi-arrêts, permis probatoire, Garer mon véhicule, menu Signaler sobre.
+
 ## Bilan ETA 03/10/2026 01:12 (rapport `--since=2026-10-01T14:25+02:00`)
 
 - 14 trajets, tous iOS. 8 arrêtés en route, exclus. 1 iOS (11) ancien mode `proportional`.

@@ -643,3 +643,21 @@ Sélection d'une destination : app iOS demande Rapide puis Éco, montre choix. A
 - `POST /api/route/faster` ajoute `preference`. `shortest` : détour seulement autour d'une route fermée.
   Variantes Éco ; variante ouverte la plus courte retenue, sans Route Import. Gain `0`.
 - `routing.route_log.preference` : `fastest` ou `shortest` ; `null` avant 02/10.
+
+## Multi-arrêts : 04/10/2026
+
+Livreurs, taxis, VTC : plusieurs étapes sur un trajet. Anciennes apps : rien ne change.
+
+- `GET /api/route` ajoute `via=lat,lon;lat,lon`, facultatif. 10 étapes au plus, dans l'ordre.
+  - Route unique qui les traverse. Aucune manœuvre d'arrivée intermédiaire.
+  - Valhalla : locations `type: "via"`, demi-tour permis après l'arrêt. ORS : étapes dans `coordinates`,
+    arrivées et départs intermédiaires retirés des `steps`.
+  - Étape à plus de `maxSnapM` d'une route (Valhalla) : refus, secours ORS comme pour les deux bouts.
+  - Illisible ou plus de 10 : 400 `via takes 10 stops "lat,lon;lat,lon" at most`.
+  - Cache séparé par liste d'étapes. Pas d'ombre avec étapes. Combinable avec `preference` et `timed=1`.
+- `POST /api/route/faster` ajoute `via: [[lon, lat], …]` : étapes restantes, dans l'ordre.
+  - Étape à plus de 350 m du trajet envoyé : `better: null`, `reason: "stop off route"`.
+  - Détour fini à la première étape au plus tard. Bouchons après elle ignorés.
+  - Reste du trajet tracé par les étapes suivantes.
+  - Illisible ou plus de 10 : 400 `via takes 10 stops [[lon,lat],...] at most`.
+- `routing.route_log.stops` : nombre d'étapes ; `0` sans étape ; `null` avant 04/10.
