@@ -4,11 +4,15 @@
 
 - Premier build automatique (cron geodata dimanche 03:30). Routage OK le soir : carte active conservée,
   à confirmer (`readlink -f /var/lib/valhalla/current`).
-- Cause probable, lue dans code : `valhalla/test.mjs` lit `bench/trajets.json`, supprimé le 30/09
-  (`cd3240c`, retrait TomTom). Build 27/09 passait avec ce fichier (50/50). À confirmer sur VPS.
+- Cause confirmée sur VPS (04/10 soir) : `/opt/eona-backend/bench` absent ; candidat
+  `20261004T041931Z-a788fcddd0dc` construit (8,4 Go, même taille que carte 27/09), échec au test.
+  `valhalla/test.mjs` lisait `bench/trajets.json`, supprimé le 30/09 (`cd3240c`, retrait TomTom).
 - Fix : trajets versionnés `valhalla/trajets.json`, test Éco et étape ajouté, ligne d'échec
   écrite dans `/var/lib/eona-signs/rebuild.log`. Mock local : 50 trajets + Éco + étape passent.
-- Relance : `valhalla/build.sh` exige PBF vérifié de moins de 24 h. Sinon prochain cron dimanche.
+- Fix déployé 04/10 soir (`valhalla/` seul). Test sur Valhalla réel port 8002 : 50 trajets + Éco +
+  étape passent. Valhalla 3.9 accepte `type: via` et `auto.shortest` sur carte France.
+- Relance build lancée par Arthur 04/10 soir (PBF vérifié 04/10 06:07). Résultat : à confirmer.
+- Ménage manuel après succès : candidats échoués `20261004T041931Z-…` (8,4 Go) et `20260927T175800Z-…`.
 
 ## Choix Rapide / Éco 04/10
 
