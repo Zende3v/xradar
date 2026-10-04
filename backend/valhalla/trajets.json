@@ -1,0 +1,1115 @@
+{
+  "description": "Test carte Valhalla (build.sh, rollback.sh) : 50 trajets France fixes, points Base Adresse Nationale (25/09/2026). Repris du banc phase 1, retiré le 30/09 avec TomTom. Versionné ici : test indépendant du banc.",
+  "trips": [
+    {
+      "id": "paris-republique-italie",
+      "from": {
+        "label": "Place de la République 75011 Paris",
+        "lat": 48.866793,
+        "lon": 2.365428,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place d'Italie 75013 Paris",
+        "lat": 48.831342,
+        "lon": 2.355345,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain",
+        "idf"
+      ]
+    },
+    {
+      "id": "paris-grande-armee-nation",
+      "from": {
+        "label": "Avenue de la Grande Armée 75017 Paris",
+        "lat": 48.876188,
+        "lon": 2.28858,
+        "score": 0.975,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place de la Nation 75012 Paris",
+        "lat": 48.847524,
+        "lon": 2.395859,
+        "score": 0.97,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain",
+        "idf"
+      ]
+    },
+    {
+      "id": "lyon-bellecour-villeurbanne",
+      "from": {
+        "label": "Place Bellecour 69002 Lyon",
+        "lat": 45.757597,
+        "lon": 4.831662,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Cours Emile Zola 69100 Villeurbanne",
+        "lat": 45.768106,
+        "lon": 4.886373,
+        "score": 0.985,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain"
+      ]
+    },
+    {
+      "id": "marseille-vieux-port-prado",
+      "from": {
+        "label": "Quai du port 13002 Marseille",
+        "lat": 43.295992,
+        "lon": 5.368267,
+        "score": 0.971,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Avenue du prado 13008 Marseille",
+        "lat": 43.272573,
+        "lon": 5.386189,
+        "score": 0.98,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain"
+      ]
+    },
+    {
+      "id": "toulouse-capitole-rangueil",
+      "from": {
+        "label": "Place du Capitole 31000 Toulouse",
+        "lat": 43.604354,
+        "lon": 1.443054,
+        "score": 0.976,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Avenue de Rangueil 31400 Toulouse",
+        "lat": 43.574452,
+        "lon": 1.457422,
+        "score": 0.984,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain"
+      ]
+    },
+    {
+      "id": "rennes-republique-lorient",
+      "from": {
+        "label": "Place de la République 35000 Rennes",
+        "lat": 48.109654,
+        "lon": -1.67999,
+        "score": 0.963,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Rue de Lorient 35000 Rennes",
+        "lat": 48.108357,
+        "lon": -1.708269,
+        "score": 0.984,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain"
+      ]
+    },
+    {
+      "id": "nantes-commerce-saint-joseph",
+      "from": {
+        "label": "Place du Commerce 44000 Nantes",
+        "lat": 47.21348,
+        "lon": -1.55796,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Route de Saint Joseph 44300 Nantes",
+        "lat": 47.255693,
+        "lon": -1.528117,
+        "score": 0.988,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain"
+      ]
+    },
+    {
+      "id": "bordeaux-bourse-thiers",
+      "from": {
+        "label": "Place de la Bourse 33000 Bordeaux",
+        "lat": 44.841464,
+        "lon": -0.570493,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Avenue Thiers 33100 Bordeaux",
+        "lat": 44.846615,
+        "lon": -0.549455,
+        "score": 0.987,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain"
+      ]
+    },
+    {
+      "id": "lille-villeneuve-d-ascq",
+      "from": {
+        "label": "Place du Général de Gaulle 59800 Lille",
+        "lat": 50.636895,
+        "lon": 3.0636,
+        "score": 0.977,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Boulevard de Valmy 59650 Villeneuve-d'Ascq",
+        "lat": 50.617527,
+        "lon": 3.128165,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain"
+      ]
+    },
+    {
+      "id": "strasbourg-kleber-rhin",
+      "from": {
+        "label": "Place Kléber 67000 Strasbourg",
+        "lat": 48.583286,
+        "lon": 7.745507,
+        "score": 0.975,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Avenue du Rhin 67100 Strasbourg",
+        "lat": 48.571332,
+        "lon": 7.770434,
+        "score": 0.98,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "urbain",
+        "frontiere"
+      ]
+    },
+    {
+      "id": "paris-versailles",
+      "from": {
+        "label": "Place de la République 75011 Paris",
+        "lat": 48.866793,
+        "lon": 2.365428,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place d'Armes 78000 Versailles",
+        "lat": 48.803887,
+        "lon": 2.123851,
+        "score": 0.966,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "idf"
+      ]
+    },
+    {
+      "id": "paris-roissy",
+      "from": {
+        "label": "Place de la Nation 75012 Paris",
+        "lat": 48.847524,
+        "lon": 2.395859,
+        "score": 0.97,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Roissy-en-France",
+        "lat": 48.998904,
+        "lon": 2.511155,
+        "score": 0.94,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "idf"
+      ]
+    },
+    {
+      "id": "creteil-cergy",
+      "from": {
+        "label": "Avenue du Général de Gaulle 94000 Créteil",
+        "lat": 48.796223,
+        "lon": 2.448015,
+        "score": 0.972,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Boulevard de l'Oise 95000 Cergy",
+        "lat": 49.042371,
+        "lon": 2.055852,
+        "score": 0.969,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "idf"
+      ]
+    },
+    {
+      "id": "puteaux-chessy",
+      "from": {
+        "label": "Boulevard Circulaire 92800 Puteaux",
+        "lat": 48.888585,
+        "lon": 2.234926,
+        "score": 0.956,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Chessy",
+        "lat": 48.871441,
+        "lon": 2.764777,
+        "score": 0.945,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "idf"
+      ]
+    },
+    {
+      "id": "lyon-saint-etienne",
+      "from": {
+        "label": "Place Bellecour 69002 Lyon",
+        "lat": 45.757597,
+        "lon": 4.831662,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Jean Jaurès 42000 Saint-Étienne",
+        "lat": 45.440642,
+        "lon": 4.386558,
+        "score": 0.972,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen"
+      ]
+    },
+    {
+      "id": "aix-marseille",
+      "from": {
+        "label": "Cours  Mirabeau 13100 Aix-en-Provence",
+        "lat": 43.526816,
+        "lon": 5.449173,
+        "score": 0.977,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Quai du port 13002 Marseille",
+        "lat": 43.295992,
+        "lon": 5.368267,
+        "score": 0.971,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen"
+      ]
+    },
+    {
+      "id": "nantes-saint-nazaire",
+      "from": {
+        "label": "Place du Commerce 44000 Nantes",
+        "lat": 47.21348,
+        "lon": -1.55796,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Avenue de la République 44600 Saint-Nazaire",
+        "lat": 47.279789,
+        "lon": -2.212129,
+        "score": 0.977,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen"
+      ]
+    },
+    {
+      "id": "rennes-saint-malo",
+      "from": {
+        "label": "Place de la République 35000 Rennes",
+        "lat": 48.109654,
+        "lon": -1.67999,
+        "score": 0.963,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Chaussée du Sillon 35400 Saint-Malo",
+        "lat": 48.654384,
+        "lon": -2.008816,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen"
+      ]
+    },
+    {
+      "id": "lille-dunkerque",
+      "from": {
+        "label": "Place du Général de Gaulle 59800 Lille",
+        "lat": 50.636895,
+        "lon": 3.0636,
+        "score": 0.977,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Jean Bart 59140 Dunkerque",
+        "lat": 51.034837,
+        "lon": 2.377204,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "frontiere"
+      ]
+    },
+    {
+      "id": "wattrelos-halluin",
+      "from": {
+        "label": "Wattrelos",
+        "lat": 50.711887,
+        "lon": 3.218738,
+        "score": 0.952,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Halluin",
+        "lat": 50.774135,
+        "lon": 3.125231,
+        "score": 0.949,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "frontiere"
+      ]
+    },
+    {
+      "id": "annemasse-saint-julien",
+      "from": {
+        "label": "Annemasse",
+        "lat": 46.189327,
+        "lon": 6.243054,
+        "score": 0.952,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Saint-Julien-en-Genevois",
+        "lat": 46.138878,
+        "lon": 6.081754,
+        "score": 0.948,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "frontiere"
+      ]
+    },
+    {
+      "id": "annemasse-thonon",
+      "from": {
+        "label": "Annemasse",
+        "lat": 46.189327,
+        "lon": 6.243054,
+        "score": 0.952,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place des Arts 74200 Thonon-les-Bains",
+        "lat": 46.370771,
+        "lon": 6.480724,
+        "score": 0.965,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "frontiere"
+      ]
+    },
+    {
+      "id": "menton-nice",
+      "from": {
+        "label": "Promenade du Soleil 06500 Menton",
+        "lat": 43.772297,
+        "lon": 7.498339,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Masséna 06000 Nice",
+        "lat": 43.697104,
+        "lon": 7.270241,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "frontiere",
+        "peage"
+      ]
+    },
+    {
+      "id": "strasbourg-colmar",
+      "from": {
+        "label": "Place Kléber 67000 Strasbourg",
+        "lat": 48.583286,
+        "lon": 7.745507,
+        "score": 0.975,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Rapp 68000 Colmar",
+        "lat": 48.077229,
+        "lon": 7.353555,
+        "score": 0.958,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "frontiere"
+      ]
+    },
+    {
+      "id": "strasbourg-lauterbourg",
+      "from": {
+        "label": "Place Kléber 67000 Strasbourg",
+        "lat": 48.583286,
+        "lon": 7.745507,
+        "score": 0.975,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Lauterbourg",
+        "lat": 48.968013,
+        "lon": 8.182747,
+        "score": 0.939,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "frontiere"
+      ]
+    },
+    {
+      "id": "grenoble-chamrousse",
+      "from": {
+        "label": "Place Victor Hugo 38000 Grenoble",
+        "lat": 45.188812,
+        "lon": 5.724569,
+        "score": 0.97,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Chamrousse",
+        "lat": 45.113504,
+        "lon": 5.876846,
+        "score": 0.932,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "montagne"
+      ]
+    },
+    {
+      "id": "royan-le-verdon",
+      "from": {
+        "label": "Boulevard Frédéric Garnier 17200 Royan",
+        "lat": 45.617897,
+        "lon": -1.0153,
+        "score": 0.969,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Le Verdon-sur-Mer",
+        "lat": 45.542951,
+        "lon": -1.083102,
+        "score": 0.937,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "bac"
+      ]
+    },
+    {
+      "id": "le-verdon-royan",
+      "from": {
+        "label": "Le Verdon-sur-Mer",
+        "lat": 45.542951,
+        "lon": -1.083102,
+        "score": 0.937,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Boulevard Frédéric Garnier 17200 Royan",
+        "lat": 45.617897,
+        "lon": -1.0153,
+        "score": 0.969,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "bac"
+      ]
+    },
+    {
+      "id": "toulouse-montauban",
+      "from": {
+        "label": "Place du Capitole 31000 Toulouse",
+        "lat": 43.604354,
+        "lon": 1.443054,
+        "score": 0.976,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "place nationale 82000 Montauban",
+        "lat": 44.017585,
+        "lon": 1.354204,
+        "score": 0.969,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "peage"
+      ]
+    },
+    {
+      "id": "clermont-mont-dore",
+      "from": {
+        "label": "place de Jaude 63000 Clermont-Ferrand",
+        "lat": 45.776588,
+        "lon": 3.082062,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place du Panthéon 63240 Mont-Dore",
+        "lat": 45.574082,
+        "lon": 2.810318,
+        "score": 0.949,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "moyen",
+        "montagne"
+      ]
+    },
+    {
+      "id": "paris-lille",
+      "from": {
+        "label": "Place de la République 75011 Paris",
+        "lat": 48.866793,
+        "lon": 2.365428,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place du Général de Gaulle 59800 Lille",
+        "lat": 50.636895,
+        "lon": 3.0636,
+        "score": 0.977,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "idf",
+        "peage"
+      ]
+    },
+    {
+      "id": "paris-rouen",
+      "from": {
+        "label": "Avenue de la Grande Armée 75017 Paris",
+        "lat": 48.876188,
+        "lon": 2.28858,
+        "score": 0.975,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place du Vieux Marche 76000 Rouen",
+        "lat": 49.443078,
+        "lon": 1.088286,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "idf",
+        "peage"
+      ]
+    },
+    {
+      "id": "paris-rouen-sans-peage",
+      "from": {
+        "label": "Avenue de la Grande Armée 75017 Paris",
+        "lat": 48.876188,
+        "lon": 2.28858,
+        "score": 0.975,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place du Vieux Marche 76000 Rouen",
+        "lat": 49.443078,
+        "lon": 1.088286,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [
+        "tolls"
+      ],
+      "tags": [
+        "long",
+        "idf",
+        "sans-peage"
+      ]
+    },
+    {
+      "id": "paris-orleans",
+      "from": {
+        "label": "Place d'Italie 75013 Paris",
+        "lat": 48.831342,
+        "lon": 2.355345,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place du Martroi 45000 Orléans",
+        "lat": 47.902476,
+        "lon": 1.904469,
+        "score": 0.971,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "idf",
+        "peage"
+      ]
+    },
+    {
+      "id": "paris-orleans-sans-autoroute",
+      "from": {
+        "label": "Place d'Italie 75013 Paris",
+        "lat": 48.831342,
+        "lon": 2.355345,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place du Martroi 45000 Orléans",
+        "lat": 47.902476,
+        "lon": 1.904469,
+        "score": 0.971,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [
+        "highways"
+      ],
+      "tags": [
+        "long",
+        "idf",
+        "sans-autoroute"
+      ]
+    },
+    {
+      "id": "paris-reims",
+      "from": {
+        "label": "Place de la Nation 75012 Paris",
+        "lat": 48.847524,
+        "lon": 2.395859,
+        "score": 0.97,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Drouet d'Erlon 51100 Reims",
+        "lat": 49.255543,
+        "lon": 4.026938,
+        "score": 0.98,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "idf",
+        "peage"
+      ]
+    },
+    {
+      "id": "lille-dunkerque-sans-autoroute",
+      "from": {
+        "label": "Place du Général de Gaulle 59800 Lille",
+        "lat": 50.636895,
+        "lon": 3.0636,
+        "score": 0.977,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Jean Bart 59140 Dunkerque",
+        "lat": 51.034837,
+        "lon": 2.377204,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [
+        "highways"
+      ],
+      "tags": [
+        "long",
+        "frontiere",
+        "sans-autoroute"
+      ]
+    },
+    {
+      "id": "lyon-grenoble",
+      "from": {
+        "label": "Place Bellecour 69002 Lyon",
+        "lat": 45.757597,
+        "lon": 4.831662,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Victor Hugo 38000 Grenoble",
+        "lat": 45.188812,
+        "lon": 5.724569,
+        "score": 0.97,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "peage"
+      ]
+    },
+    {
+      "id": "lyon-grenoble-sans-peage",
+      "from": {
+        "label": "Place Bellecour 69002 Lyon",
+        "lat": 45.757597,
+        "lon": 4.831662,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Victor Hugo 38000 Grenoble",
+        "lat": 45.188812,
+        "lon": 5.724569,
+        "score": 0.97,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [
+        "tolls"
+      ],
+      "tags": [
+        "long",
+        "sans-peage"
+      ]
+    },
+    {
+      "id": "lyon-chamonix",
+      "from": {
+        "label": "Place Bellecour 69002 Lyon",
+        "lat": 45.757597,
+        "lon": 4.831662,
+        "score": 0.967,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Chamonix-Mont-Blanc",
+        "lat": 45.948385,
+        "lon": 6.893163,
+        "score": 0.945,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "peage",
+        "montagne"
+      ]
+    },
+    {
+      "id": "grenoble-briancon",
+      "from": {
+        "label": "Place Victor Hugo 38000 Grenoble",
+        "lat": 45.188812,
+        "lon": 5.724569,
+        "score": 0.97,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Briançon",
+        "lat": 44.896187,
+        "lon": 6.637231,
+        "score": 0.947,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "montagne"
+      ]
+    },
+    {
+      "id": "marseille-nice",
+      "from": {
+        "label": "Quai du port 13002 Marseille",
+        "lat": 43.295992,
+        "lon": 5.368267,
+        "score": 0.971,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Masséna 06000 Nice",
+        "lat": 43.697104,
+        "lon": 7.270241,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "peage"
+      ]
+    },
+    {
+      "id": "bordeaux-toulouse",
+      "from": {
+        "label": "Place de la Bourse 33000 Bordeaux",
+        "lat": 44.841464,
+        "lon": -0.570493,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place du Capitole 31000 Toulouse",
+        "lat": 43.604354,
+        "lon": 1.443054,
+        "score": 0.976,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "peage"
+      ]
+    },
+    {
+      "id": "bordeaux-toulouse-sans-peage",
+      "from": {
+        "label": "Place de la Bourse 33000 Bordeaux",
+        "lat": 44.841464,
+        "lon": -0.570493,
+        "score": 0.973,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place du Capitole 31000 Toulouse",
+        "lat": 43.604354,
+        "lon": 1.443054,
+        "score": 0.976,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [
+        "tolls"
+      ],
+      "tags": [
+        "long",
+        "sans-peage"
+      ]
+    },
+    {
+      "id": "nantes-rennes",
+      "from": {
+        "label": "Place du Commerce 44000 Nantes",
+        "lat": 47.21348,
+        "lon": -1.55796,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place de la République 35000 Rennes",
+        "lat": 48.109654,
+        "lon": -1.67999,
+        "score": 0.963,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "perpignan-font-romeu",
+      "from": {
+        "label": "Place de Catalogne 66000 Perpignan",
+        "lat": 42.698616,
+        "lon": 2.887879,
+        "score": 0.965,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Font-Romeu-Odeillo-Via",
+        "lat": 42.50179,
+        "lon": 2.041072,
+        "score": 0.938,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "montagne",
+        "frontiere"
+      ]
+    },
+    {
+      "id": "nice-isola",
+      "from": {
+        "label": "Place Masséna 06000 Nice",
+        "lat": 43.697104,
+        "lon": 7.270241,
+        "score": 0.974,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Isola",
+        "lat": 44.190146,
+        "lon": 7.148677,
+        "score": 0.934,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "montagne"
+      ]
+    },
+    {
+      "id": "bastia-ajaccio",
+      "from": {
+        "label": "Place Saint - Nicolas 20200 Bastia",
+        "lat": 42.700427,
+        "lon": 9.45099,
+        "score": 0.963,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Cours Napoléon 20000 Ajaccio",
+        "lat": 41.924262,
+        "lon": 8.737833,
+        "score": 0.977,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "corse",
+        "montagne"
+      ]
+    },
+    {
+      "id": "ajaccio-bastia",
+      "from": {
+        "label": "Cours Napoléon 20000 Ajaccio",
+        "lat": 41.924262,
+        "lon": 8.737833,
+        "score": 0.977,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place Saint - Nicolas 20200 Bastia",
+        "lat": 42.700427,
+        "lon": 9.45099,
+        "score": 0.963,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "corse",
+        "montagne"
+      ]
+    },
+    {
+      "id": "strasbourg-mulhouse",
+      "from": {
+        "label": "Place Kléber 67000 Strasbourg",
+        "lat": 48.583286,
+        "lon": 7.745507,
+        "score": 0.975,
+        "source": "BAN 2026-09-25"
+      },
+      "to": {
+        "label": "Place de la Réunion 68100 Mulhouse",
+        "lat": 47.746745,
+        "lon": 7.338401,
+        "score": 0.971,
+        "source": "BAN 2026-09-25"
+      },
+      "avoid": [],
+      "tags": [
+        "long",
+        "frontiere"
+      ]
+    }
+  ]
+}

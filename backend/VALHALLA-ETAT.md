@@ -1,5 +1,21 @@
 # Valhalla : état du chantier
 
+## Build Valhalla du 04/10 échoué (mail 06:53)
+
+- Premier build automatique (cron geodata dimanche 03:30). Routage OK le soir : carte active conservée,
+  à confirmer (`readlink -f /var/lib/valhalla/current`).
+- Cause probable, lue dans code : `valhalla/test.mjs` lit `bench/trajets.json`, supprimé le 30/09
+  (`cd3240c`, retrait TomTom). Build 27/09 passait avec ce fichier (50/50). À confirmer sur VPS.
+- Fix : trajets versionnés `valhalla/trajets.json`, test Éco et étape ajouté, ligne d'échec
+  écrite dans `/var/lib/eona-signs/rebuild.log`. Mock local : 50 trajets + Éco + étape passent.
+- Relance : `valhalla/build.sh` exige PBF vérifié de moins de 24 h. Sinon prochain cron dimanche.
+
+## Choix Rapide / Éco 04/10
+
+- Constat Arthur : Éco 34 min, Rapide 37 min. Aucune inversion : temps HERE par tracé, profils
+  justes (Valhalla `auto` temps, `auto.shortest` distance). Valhalla choisit Rapide sans trafic.
+- Fix iOS : deux temps HERE connus et Éco plus rapide, Rapide prend route Éco. Aucun appel en plus.
+
 ## Multi-arrêts 04/10/2026 (Claude, session cloud)
 
 - Backend : `via` sur `/api/route` (10 étapes, Valhalla `type: via`, ORS coordonnées) et `/faster`.

@@ -22,6 +22,8 @@ cleanup() {
   exit "$code"
 }
 trap cleanup EXIT
+# Échec silencieux interdit : ligne et commande dans journal cron.
+trap 'echo "[valhalla] échec ligne $LINENO : $BASH_COMMAND" >&2' ERR
 trap 'exit 130' INT
 trap 'exit 143' TERM
 source "${VALHALLA_ENV:-/etc/eona/valhalla.env}"

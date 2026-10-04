@@ -52,8 +52,10 @@ Chaque candidat possède dossier `graphs/<date>-<hash>` : admins, fuseaux, tuile
 `build-metrics.json`, taille, hash PBF et résultats tests. Aucun ancien graphe supprimé automatiquement.
 Contrôler disque ; conserver au minimum cibles `current` et `previous` avant toute purge manuelle.
 
-`test.sh` interroge status détaillé et tous trajets fixes du banc avec fournisseur EONA.
-Aucun appel ORS ou TomTom. Tests arrêtent promotion au premier échec.
+`test.sh` interroge status détaillé, 50 trajets fixes (`valhalla/trajets.json`), une route Éco et
+une route avec étape, avec fournisseur EONA. Aucun appel ORS ou HERE. Tests arrêtent promotion au
+premier échec. Trajets versionnés ici depuis 04/10 : `bench/trajets.json`, retiré le 30/09 avec
+TomTom, cassait build du 04/10. Échec : ligne et commande écrites dans journal cron.
 Trajets fixes ne prouvent pas tous évitements ou frontières ; tests terrain restent nécessaires.
 
 Après succès candidat : arrêt instance temporaire, lien `current`, redémarrage service, mêmes tests.
