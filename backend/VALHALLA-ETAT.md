@@ -29,6 +29,12 @@
 - 174 tests backend passent. Non déployé.
 - À vérifier sur VPS : voies rapides (`motorroad=yes`) exclues par `motor_scooter`.
 - iOS build 28 (`a9ca0d1`) envoie `vehicle=moped` et `suggestion` : déployer backend avant tests téléphone.
+- Déployé par Arthur 04/10 22:16 (`f2643e8`), `/health` ok. Sauvegarde : `eona-backend-src-backup-20261004-2214.tgz`.
+- Contrôle Valhalla Orly → Porte d'Italie : `auto` prend A 6b ; `motor_scooter` reste sur D 7, sans autoroute.
+  Exclusion des voies rapides (`motorroad=yes`) pas encore prouvée : ce trajet n'en a pas côté scooter.
+- Recherche, cause confirmée dans `search.poi` : aucun Fitness Park à Orly (Thiais, Fresnes, Créteil,
+  Montgeron). L'ancien filtre exigeait « orly » dans la commune du lieu : zéro résultat. Repli
+  enseigne + ville : Fitness Park de Thiais. Leclerc à Orly dans l'index : station-service seule.
 
 ## Choix Rapide / Éco 04/10
 
