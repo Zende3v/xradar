@@ -347,7 +347,8 @@ Chaîne `search/rebuild.sh`, lancée chaque semaine par `bin/eona-geodata-rebuil
    - `weight` : importance de 0 à 1 (ville, aéroport avec code IATA, gare, lien Wikidata, surface).
    - Index : trigrammes (`pg_trgm`) sur `doc`, trigrammes partiel sur les lieux notables (`weight >= 0.6`), GiST sur la position.
    - Refus si moins de 500 k lieux ou moins de 20 k villes et villages.
-3. **publish.sql** : bascule atomique `search` → `search_prev`, `search_next` → `search`. Puis suppression de `search_osm`.
+3. **extra.sql** (04/10) : lieux ajoutés à la main, absents d'OSM ou mal placés (`osm_type = 'X'`, id de résultat `osm:X<n>`). Réappliqués à chaque rebuild. Ligne retirée du fichier : lieu retiré au run suivant ; OSM corrigé : retirer la ligne.
+4. **publish.sql** : bascule atomique `search` → `search_prev`, `search_next` → `search`. Puis suppression de `search_osm`.
 
 Requête : chaque mot tapé de 3 lettres ou plus doit ressembler (`<%`, similarité de mot ≥ 0,6) à un mot des noms ou de la commune. Un mot en cours de frappe ou une faute d'une lettre passe donc. Deux listes :
 
@@ -364,6 +365,8 @@ Temps mesurés le 30/09 : 30 à 100 ms (jusqu'à 250 ms à froid), plafond 2,5 s
 tail -30 /var/lib/eona-signs/search-build.log                 # premier build (30/09)
 bash /opt/eona-backend/search/rebuild.sh                      # relancer à la main (verrou partagé avec la chaîne hebdo)
 runuser -u eona -- psql -d eona -c "SELECT * FROM search.meta"
+# lieux ajoutés à la main, à chaud sur l'index publié (après avoir modifié extra.sql)
+runuser -u eona -- psql -qX -v ON_ERROR_STOP=1 -v schema=search -d eona -f /opt/eona-backend/search/extra.sql
 ```
 
 **Revenir à l'index précédent** :

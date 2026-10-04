@@ -37,7 +37,10 @@
   enseigne + ville : Fitness Park de Thiais. Leclerc à Orly dans l'index : station-service seule.
 - E.Leclerc Orly (8 place Gaston Viens), carte OSM du 04/10 : aucun objet `shop=supermarket`.
   Seul le centre commercial porte l'enseigne : w143320617 `shop=mall`, `name=Centre Commercial Orlydis`,
-  `operator=E.Leclerc`. L'index ignore `operator` : « leclerc » ne trouve pas Orlydis. Décision Arthur attendue.
+  `operator=E.Leclerc`. L'index ignore `operator` : « leclerc » ne trouve pas Orlydis.
+- Choix Arthur : `search/extra.sql`, lieux ajoutés à la main (`osm_type = 'X'`), réappliqués à chaque rebuild.
+  X1 = E.Leclerc Orly (position Orlydis). Fitness Park Orly (av. des Martyrs de Châteaubriant) : en attente
+  du contrôle BAN / index (même salle que le Fitness Park classé Thiais ?).
 
 ## Choix Rapide / Éco 04/10
 

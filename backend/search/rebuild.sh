@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # EONA search — weekly rebuild, after the signalisation (same France extract, already checked):
-# import, build, publish. Any failure stops here and the published index stays. Run as root
+# import, build, places added by hand (extra.sql), publish. Any failure stops here and the
+# published index stays. Run as root
 # (bin/eona-geodata-rebuild.sh), or alone the same way.
 #
 set -euo pipefail
@@ -26,6 +27,8 @@ bash "$HERE/import.sh" "$WORK/france-latest.osm.pbf"
 
 echo "[search] building"
 psql_eona -f "$HERE/build.sql"
+# Lieux ajoutés à la main (absents d'OSM) : sur le nouvel index, avant publication.
+psql_eona -f "$HERE/extra.sql"
 
 echo "[search] publishing"
 psql_eona -f "$HERE/publish.sql"
