@@ -1,5 +1,7 @@
 # Valhalla : état du chantier
 
+Bilan complet de la session Claude du 02/10 au 05/10 : `../BILAN-SESSION-CLAUDE-20261005.md`.
+
 ## Build Valhalla du 04/10 échoué (mail 06:53)
 
 - Premier build automatique (cron geodata dimanche 03:30). Routage OK le soir : carte active conservée,
@@ -112,6 +114,7 @@ itinéraires plus malins, sans casser les apps.
 | Fichier | Rôle |
 |---|---|
 | `VALHALLA-ETAT.md` | ce fichier : où on en est |
+| `../BILAN-SESSION-CLAUDE-20261005.md` | bilan session Claude cloud, 02/10 → 05/10 : backend, iOS 24 à 30, VPS, reste à faire |
 | `PLAN-VALHALLA.md` | plan en phases (validé le 25/09) |
 | `VALHALLA-DECISIONS.md` | journal des décisions : D1–D8 (atelier), P1.1–P1.7 (choix phase 1) |
 | `CHECKLIST-TRAJETS.md` | trajets tests de l'équipe |
