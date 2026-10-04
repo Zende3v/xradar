@@ -2,17 +2,12 @@
 
 Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'importe).
 
-## Mode de travail (depuis le 25/09/2026)
+## Mode de travail (Arthur, 05/10/2026)
 
-- **Codex (GPT-6-Astra) pilote.** Il cadre, découpe, arbitre et répond à Arthur.
-  Actions locales limitées : petites corrections, intégration, contrôles indispensables.
-- **Claude (Opus 5.5) est partenaire** via le MCP `bridge`. Codex lui délègue des sous-tâches
-  bornées (scope disjoint, délai, livrable, critère de vérif) :
-  - build Android : le sandbox Codex bloque Gradle (verrou `.gradle`) ;
-  - relectures indépendantes, en lecture seule, avec preuves `fichier:ligne` ;
-  - gros chantiers parallélisables.
-- **Claude réalise majorité du travail ; Codex garde vision globale** (Arthur, 26/09, remplace règle 50/50).
-  Confier implémentation et diagnostics substantiels à Claude. Contrats courts, scopes disjoints, aucun travail dupliqué.
+- **ChatGPT : iOS et backend.** Codex travaille directement dans ces périmètres.
+- **Claude local : Android.** Session locale rattrape les fonctionnalités iOS.
+- Respecter périmètres disjoints. Aucun travail dupliqué.
+- **Bridge uniquement sur demande explicite d'Arthur.** Ancien pilotage Codex/Claude via bridge abandonné.
 - Tests automatiques uniquement indispensables à correction ou risque concret. Aucune campagne par défaut ni relance sans nécessité.
   Arthur réalise validation fonctionnelle et téléphone. Ne pas ajouter tests pour changements mineurs.
 - Revue croisée ciblée : contrat, changements risqués, défauts concrets. Pas de double audit ni double campagne de tests.
@@ -20,7 +15,7 @@ Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'impor
 - Les deux : skill **caveman** à chaque réponse, en français. Commits et docs en caveman aussi.
 - Arthur ne travaille plus qu'à deux.
 
-### Bridge
+### Bridge (uniquement sur demande d'Arthur)
 
 - Dossier : `C:/Users/usr/bidirectional-bridge-claude-codex`. Codex 0.158.0-alpha.13 requis pour
   gpt-6-astra.
@@ -78,6 +73,7 @@ irréversibles.
 
 - Nom produit : **EONA** (ancien nom XRadar). Package Android : `com.eona.app`.
 - Non suivis dans x_radar, à ne pas commiter sans accord : `.claude/`, `.mcp.json`.
+- `C:\Users\usr\Documents\x_radar_eco` : worktree détaché, déploiement backend seulement.
 
 ## Android (`app/`)
 
@@ -92,7 +88,7 @@ irréversibles.
   - AGP 9 embarque Kotlin : **ne jamais** appliquer `org.jetbrains.kotlin.android`.
   - KGP 2.2.10 : aucune lib compilée avec Kotlin ≥ 2.4.
   - Pas de tests unitaires Android.
-- Version : 1.0.1 (versionCode 5). **Monter le `versionCode` à chaque nouvel APK.**
+- Version : 1.0.1 (versionCode 22). **Monter le `versionCode` à chaque nouvel APK.**
 
 ## iOS (`xradar_ios`)
 
@@ -100,17 +96,17 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 3. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 30. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
 ## Backend (`backend/`)
 
-- Node 20 ESM + Express, PostgreSQL 17 + PostGIS (schémas `signs`, `crowd`, `routing`).
+- Node 20 ESM + Express, PostgreSQL 17 + PostGIS (schémas `signs`, `crowd`, `routing`, `search`).
 - Docs d'exploitation : `README.md` à la racine (install, déploiement §4, surveillance, pannes,
   API §12) et `backend/API-WEBAPP.md`.
-- Routage actuel : ORS public (2 clés, 1 500 appels par clé et par jour), trafic TomTom (gratuit,
-  environ 2 500 requêtes par jour), OSRM démo en repli.
+- Routage actuel : Valhalla 3.9 sur VPS (`127.0.0.1:8002`), ORS en secours. OSRM démo retiré.
+- Trafic : HERE depuis le 30/09. TomTom retiré. Recherche : index OSM EONA, BAN, Photon en secours.
 
 ## VPS de production
 
@@ -126,11 +122,12 @@ irréversibles.
 - **Secrets** : drop-ins `/etc/systemd/system/eona-backend.service.d/*.conf`. Ne jamais les
   afficher (ni `systemctl cat`, ni env du process).
 - Cron (`/etc/cron.d`) :
-  - `eona-signs` : signalisation OSM, dimanche 03:30 ;
+  - dimanche 03:30 : signalisation, Valhalla, recherche (`bin/eona-geodata-rebuild.sh`) ;
   - `eona-backup` : 03:10, `/var/backups/eona`, 14 jours, sur le VPS seulement ;
-  - `eona-bench` : 08:00, 12:30, 18:00, 23:00.
-- Déploiement : README §4. Toujours sauvegarder `src` en `.tgz` d'abord, puis scp, `chown eona`,
-  restart, vérifier `/health`.
+  - banc TomTom arrêté depuis le 30/09 ; historique conservé en lecture seule.
+- Déploiement : README §4. `ssh`, sauvegarde `tar` et `scp` depuis cmd du PC, dossier `x_radar_eco`.
+- Sauvegarder `src` en `.tgz` d'abord. Puis `scp` depuis PC ; `chown`, restart, `/health` sur VPS.
+- Ne jamais lancer `scp` depuis VPS.
 - **Aucun déploiement, installation ni redémarrage sur le VPS sans accord explicite d'Arthur, à
   chaque fois.** Lecture seule libre.
 
@@ -146,7 +143,8 @@ irréversibles.
   - ORS seulement en secours ;
   - contrat `/api/route` inchangé, tout ajout de champ additif ;
   - évitements stricts (péages, autoroutes, ferries, bouchons) ;
-  - TomTom à économiser ;
+  - HERE à économiser ;
   - aucun chiffre inventé : ce qui n'est pas mesuré est « à mesurer ».
-- Phase 1 (mesure de l'existant) en service depuis le 25/09. Collecte 2 à 3 semaines, puis
-  bilan. Prochaine étape : phase 2 (Valhalla en mode ombre).
+- Phase 1 : collecte depuis le 25/09. Bilan après 2 à 3 semaines.
+- Historique documenté : Valhalla généralisé le 29/09 ; phase 5 livrée le 30/09.
+- Prochaine phase à confirmer avec Arthur : `VALHALLA-ETAT.md` contient des sections historiques contradictoires.
