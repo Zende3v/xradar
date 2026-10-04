@@ -11,7 +11,9 @@
   écrite dans `/var/lib/eona-signs/rebuild.log`. Mock local : 50 trajets + Éco + étape passent.
 - Fix déployé 04/10 soir (`valhalla/` seul). Test sur Valhalla réel port 8002 : 50 trajets + Éco +
   étape passent. Valhalla 3.9 accepte `type: via` et `auto.shortest` sur carte France.
-- Relance build lancée par Arthur 04/10 soir (PBF vérifié 04/10 06:07). Résultat : à confirmer.
+- Relance build par Arthur 04/10 soir : **carte validée 19:38**, `20261004T170051Z-a788fcddd0dc`.
+  `build_tile_set` 1 973 s. Tests candidat (8003) et service (8002) passés, sinon aucune bascule.
+  Avertissement podman « SIGTERM failed … resorting to SIGKILL » à l'arrêt du test : sans effet.
 - Ménage manuel après succès : candidats échoués `20261004T041931Z-…` (8,4 Go) et `20260927T175800Z-…`.
 
 ## Choix Rapide / Éco 04/10
