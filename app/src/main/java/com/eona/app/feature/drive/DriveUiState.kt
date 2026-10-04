@@ -74,6 +74,11 @@ data class DriveUiState(
     val media: MediaPlaybackState = MediaPlaybackState.PermissionMissing,
     /** The music banner is open. HUD state only, never persisted. */
     val musicOpen: Boolean = false,
+    /**
+     * La limitation officielle, avant permis probatoire : signalement de limite, sondes,
+     * vitesses partagées. [speedLimitKmh] est celle affichée au conducteur.
+     */
+    val officialLimitKmh: Int? = null,
     /** Where [speedLimitKmh] comes from: the road's own limit or a radar's VMA. */
     val speedLimitSource: SpeedLimitSource? = null,
     /** Traffic on the route being followed (TomTom's and the drivers' jams); null until known. */

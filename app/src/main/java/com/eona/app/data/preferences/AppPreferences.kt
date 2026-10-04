@@ -119,6 +119,10 @@ data class AppSettings(
     val preferredFuel: FuelType = FuelType.Gazole,
     /** "Proche uniquement" in the nearby "Carburant" search: the nearest open stations, no price. */
     val fuelNearestOnly: Boolean = false,
+    /** « Permis probatoire » : limitations jeune conducteur affichées et alertes (ProbationaryLimits). */
+    val probationary: Boolean = false,
+    /** « Protection pluie » : écran verrouillé dès 15 km/h, levé sous 10 ou GPS perdu. */
+    val rainLock: Boolean = false,
     // Confidentialité.
     /** "Aide au trafic partagé": a slowdown on a fast road is sent anonymously to the shared
      *  traffic (and may ask "Ralentissement du trafic ?"). Off: nothing of this driver feeds it. */
@@ -129,8 +133,9 @@ data class AppSettings(
     /** "Statistiques de conduite": trips and driving time are recorded and sent to the account. */
     val drivingStats: Boolean = true,
     /** "Présence et position": the backend counts the app open and a trip running, and the
-     *  EONA team sees where this driver is. Off unless the driver turns it on. */
-    val presence: Boolean = false,
+     *  EONA team sees where this driver is. Turned on once for everyone (iOS build 28,
+     *  presenceOnByDefault); a refusal after that stays. */
+    val presence: Boolean = true,
     /** "Temps d'utilisation": the time spent with the app open adds up on the account. */
     val usageTime: Boolean = true,
     /** The version of the terms the driver accepted, and when. Empty: never accepted. */
@@ -165,6 +170,10 @@ object AppPreferences {
             guidanceVolume = p.getFloat("guidanceVolume", 1f).coerceIn(0f, 1f),
             alertVolume = p.getFloat("alertVolume", 1f).coerceIn(0f, 1f),
         )
+        // Activée d'office une fois (iOS build 28), même coupée avant ; un refus ensuite reste.
+        if (!p.contains("presenceOnByDefault")) {
+            p.edit().putBoolean("presence", true).putBoolean("presenceOnByDefault", true).apply()
+        }
         _settings.value = AppSettings(
             theme = enumOrDefault(p.getString("theme", null), legacyTheme(p)),
             accent = AccentColor.fromHex(p.getString("accent", null)),
@@ -174,11 +183,13 @@ object AppPreferences {
             avoidFerries = p.getBoolean("avoidFerries", false),
             preferredFuel = enumOrDefault(p.getString("preferredFuel", null), FuelType.Gazole),
             fuelNearestOnly = p.getBoolean("fuelNearestOnly", false),
+            probationary = p.getBoolean("probationary", false),
+            rainLock = p.getBoolean("rainLock", false),
             // Stored under its first name: the choice made before the rename stays.
             sharedTraffic = p.getBoolean("shareSlowdowns", true),
             tripSuggestions = p.getBoolean("tripSuggestions", true),
             drivingStats = p.getBoolean("drivingStats", true),
-            presence = p.getBoolean("presence", false),
+            presence = p.getBoolean("presence", true),
             usageTime = p.getBoolean("usageTime", true),
             termsVersion = p.getString("termsVersion", null).orEmpty(),
             termsAcceptedAt = p.getLong("termsAcceptedAt", 0L).takeIf { it > 0L },
@@ -249,6 +260,8 @@ object AppPreferences {
             putBoolean("avoidFerries", updated.avoidFerries)
             putString("preferredFuel", updated.preferredFuel.name)
             putBoolean("fuelNearestOnly", updated.fuelNearestOnly)
+            putBoolean("probationary", updated.probationary)
+            putBoolean("rainLock", updated.rainLock)
             putBoolean("shareSlowdowns", updated.sharedTraffic)
             putBoolean("tripSuggestions", updated.tripSuggestions)
             putBoolean("drivingStats", updated.drivingStats)

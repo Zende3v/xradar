@@ -26,6 +26,7 @@ import com.eona.app.core.model.Place
 import com.eona.app.core.model.Radar
 import com.eona.app.core.model.ReportRelevance
 import com.eona.app.core.model.RadarZone
+import com.eona.app.core.model.ProbationaryLimits
 import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.RoadAlert
 import com.eona.app.core.model.Route
@@ -305,6 +306,20 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }.combine(osmLimit) { state, live ->
         // The road's own limit beats the radar VMA: it is true everywhere, all the time.
         if (live != null) state.copy(speedLimitKmh = live, speedLimitSource = SpeedLimitSource.Road) else state
+    }.combine(AppPreferences.settings) { state, settings ->
+        // Permis probatoire : limitation affichée, dépassement, panneaux et voix des alertes. La
+        // limitation officielle reste à part (signalement de limite, sondes, vitesses partagées).
+        val official = state.copy(officialLimitKmh = state.speedLimitKmh)
+        if (!settings.probationary) {
+            official
+        } else {
+            fun shown(kmh: Int?) = ProbationaryLimits.shown(kmh, probationary = true, capKmh = null)
+            official.copy(
+                speedLimitKmh = shown(state.speedLimitKmh),
+                alert = state.alert?.let { it.copy(speedLimitKmh = shown(it.speedLimitKmh)) },
+                alerts = state.alerts.map { it.copy(speedLimitKmh = shown(it.speedLimitKmh)) },
+            )
+        }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -1073,7 +1088,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val slowdown = slowdownDetector.update(
             sample = fix,
             speedKmh = state.speedKmh,
-            limitKmh = state.speedLimitKmh,
+            limitKmh = state.officialLimitKmh,
             limitFromRoad = state.speedLimitSource == SpeedLimitSource.Road,
             paused = paused,
         ) ?: return
@@ -1326,7 +1341,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     lat = fix.latitude,
                     lon = fix.longitude,
                     bearingDeg = fix.bearingDeg?.toDouble(),
-                    displayedKmh = shown.speedLimitKmh,
+                    displayedKmh = shown.officialLimitKmh,
                     displayedSource = shown.speedLimitSource,
                     newKmh = newKmh,
                 ),
@@ -1522,7 +1537,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val sampler = speedSampler ?: return
         if (!AppPreferences.settings.value.sharedTraffic || !_tripUnderway.value || ActiveTripRepository.start.value != null) return
         val now = System.currentTimeMillis()
-        sampler.add(fix, driveState.value.speedLimitKmh, now)
+        sampler.add(fix, driveState.value.officialLimitKmh, now)
         val batch = sampler.due(now) ?: return
         viewModelScope.launch { trafficApi.speeds(sampler.tripKey, batch, AccountRepository.token) }
     }

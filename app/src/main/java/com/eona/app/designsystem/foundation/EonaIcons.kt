@@ -102,6 +102,12 @@ object EonaIcons {
         moveTo(4f, 11f); lineTo(12f, 4f); lineTo(20f, 11f)
         moveTo(6f, 9.5f); lineTo(6f, 20f); lineTo(18f, 20f); lineTo(18f, 9.5f)
     }
+    /** Protection pluie : écran verrouillé. */
+    val Lock = line("Lock") {
+        moveTo(6.5f, 11f); lineTo(17.5f, 11f); lineTo(17.5f, 20f); lineTo(6.5f, 20f); close()
+        moveTo(8.5f, 11f); lineTo(8.5f, 8f); arcTo(3.5f, 3.5f, 0f, false, true, 15.5f, 8f); lineTo(15.5f, 11f)
+        moveTo(12f, 14.5f); lineTo(12f, 16.5f)
+    }
     val VolumeHigh = line("VolumeHigh") {
         moveTo(4f, 9f); lineTo(8f, 9f); lineTo(12f, 5f); lineTo(12f, 19f); lineTo(8f, 15f); lineTo(4f, 15f); close()
         moveTo(15.5f, 9f); curveTo(17.3f, 10.8f, 17.3f, 13.2f, 15.5f, 15f)

@@ -2,6 +2,7 @@ package com.eona.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import com.eona.app.navigation.DeepLinks
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,6 +23,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Écran jamais en veille tant que l'app est au premier plan, sans limite de temps (iOS
+        // builds 22-23). En arrière-plan, le réglage du téléphone reprend la main.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // Read the stored scheme before the first frame, so the app never flashes
         // the default theme on launch.
         AppPreferences.init(applicationContext)

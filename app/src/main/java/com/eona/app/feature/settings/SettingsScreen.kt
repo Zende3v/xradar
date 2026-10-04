@@ -39,6 +39,7 @@ import com.eona.app.data.preferences.OverspeedWarning
 import com.eona.app.designsystem.component.EonaIcon
 import com.eona.app.designsystem.component.EonaListGroup
 import com.eona.app.designsystem.component.EonaListRow
+import com.eona.app.designsystem.component.EonaSwitch
 import com.eona.app.designsystem.component.EonaScreenScaffold
 import com.eona.app.designsystem.component.EonaText
 import com.eona.app.designsystem.foundation.EonaIcons
@@ -82,6 +83,15 @@ fun SettingsScreen(
                 AccentSetting()
             }
 
+            val settings by AppPreferences.settings.collectAsStateWithLifecycle()
+            SettingsGroup("Véhicule", "Protection pluie : écran verrouillé dès 15 km/h.") {
+                SettingSwitch("Protection pluie", settings.rainLock) { on -> AppPreferences.updateSettings { it.copy(rainLock = on) } }
+            }
+
+            SettingsGroup("Conduite", "110 km/h sur autoroute, 100 sur voie rapide, 80 sur route.") {
+                SettingSwitch("Permis probatoire", settings.probationary) { on -> AppPreferences.updateSettings { it.copy(probationary = on) } }
+            }
+
             EonaListGroup(title = "Alertes") {
                 OverspeedSetting()
             }
@@ -101,6 +111,31 @@ fun SettingsScreen(
             Spacer(Modifier.height(spacing.xxl))
         }
     }
+}
+
+/** Un groupe et sa note dessous (iOS : footer de section). */
+@Composable
+private fun SettingsGroup(title: String, footer: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.sm)) {
+        EonaListGroup(title = title) { content() }
+        EonaText(
+            footer,
+            style = EonaTheme.typography.footnote,
+            color = EonaTheme.colors.textTertiary,
+            modifier = Modifier.padding(horizontal = EonaTheme.spacing.md),
+        )
+    }
+}
+
+/** Un interrupteur de réglage. */
+@Composable
+private fun SettingSwitch(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    EonaListRow(
+        title = title,
+        onClick = { onChange(!checked) },
+        trailing = { EonaSwitch(checked = checked, onCheckedChange = onChange) },
+        modifier = Modifier.height(56.dp),
+    )
 }
 
 /** "Thème général": the app, the map and the HUD together; "Auto" by day and night. */

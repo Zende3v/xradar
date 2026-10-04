@@ -10,6 +10,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -35,6 +36,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
@@ -196,6 +201,27 @@ fun DriveScreen(
     var card by remember { mutableStateOf<MemberCardTarget?>(null) }
     /** Stopping the navigation during a group trip is leaving the group: asked first. */
     var confirmStop by remember { mutableStateOf(false) }
+    // Protection pluie (iOS updateRainLock) : verrou à 15 km/h, levé sous 10. Un feu rouge
+    // déverrouille, un ralentissement non. GPS perdu : levé, jamais bloqué sans vitesse connue.
+    val settingsNow by AppPreferences.settings.collectAsStateWithLifecycle()
+    var rainLocked by remember { mutableStateOf(false) }
+    LaunchedEffect(state.speedKmh, state.isSearchingGps, settingsNow.rainLock) {
+        val next = settingsNow.rainLock && !state.isSearchingGps &&
+            (state.speedKmh >= RAIN_LOCK_KMH || (rainLocked && state.speedKmh >= RAIN_UNLOCK_KMH))
+        if (next == rainLocked) return@LaunchedEffect
+        rainLocked = next
+        if (next) {
+            // Feuilles et menus fermés : les gouttes ne touchent rien.
+            reportOpen = false
+            limitReportOpen = false
+            shareOpen = false
+            card = null
+            audioMenu = null
+            pendingDelete = null
+            dockCloseRequest += 1
+            dockOpen = false
+        }
+    }
     val groupState = group?.group?.collectAsStateWithLifecycle()
     val currentGroup = groupState?.value
     val groupLive = currentGroup?.isLive == true
@@ -523,9 +549,30 @@ fun DriveScreen(
             )
         }
 
+        // Protection pluie : le cadenas à la place des boutons de carte.
+        AnimatedVisibility(
+            visible = rainLocked,
+            modifier = Modifier.align(Alignment.CenterEnd),
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(end = spacing.lg)
+                    .size(MAP_CONTROL_SIZE)
+                    .clip(CircleShape)
+                    .background(colors.surface.copy(alpha = 0.62f))
+                    .border(1.dp, colors.border, CircleShape)
+                    .semantics { contentDescription = "Écran verrouillé, protection pluie" },
+                contentAlignment = Alignment.Center,
+            ) {
+                EonaIcon(EonaIcons.Lock, contentDescription = null, tint = colors.textSecondary, size = 22.dp)
+            }
+        }
+
         // Map controls: they step out of the way while the dock is deployed.
         AnimatedVisibility(
-            visible = !dockOpen,
+            visible = !dockOpen && !rainLocked,
             modifier = Modifier.align(Alignment.CenterEnd),
             enter = fadeIn() + slideInHorizontally { it / 2 },
             exit = fadeOut() + slideOutHorizontally { it / 2 },
@@ -594,7 +641,7 @@ fun DriveScreen(
 
         if (limitReportOpen) {
             SpeedLimitSheet(
-                currentKmh = state.speedLimitKmh,
+                currentKmh = state.officialLimitKmh,
                 onReport = { kmh ->
                     onReportSpeedLimit(kmh)
                     limitReportOpen = false
@@ -655,6 +702,19 @@ fun DriveScreen(
         }
 
         offers?.let { reason -> OffersSheet(reason, account, onClose = onCloseOffers) }
+
+        // Verrouillé : aucun geste ne passe, la carte et le HUD restent lisibles.
+        if (rainLocked) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                        }
+                    },
+            )
+        }
     }
 }
 
@@ -789,6 +849,8 @@ private enum class TopMode { Search, Guidance, None }
 
 /** Recenter, music and report share one size: the report button's. */
 private val MAP_CONTROL_SIZE = 56.dp
+private const val RAIN_LOCK_KMH = 15
+private const val RAIN_UNLOCK_KMH = 10
 
 /** A report closer than this shows "toujours là / plus là". */
 private const val VOTE_DISTANCE_M = 300

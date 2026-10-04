@@ -99,6 +99,18 @@ data class EonaColors(
     val radarMobile: Color,
     val controlZone: Color,
     val hazard: Color,
+    // Menu Signaler (iOS 04/10) : teintes sobres par famille, ni orange ni rouge. Claires en
+    // sombre pour la lueur, plus denses en clair pour la lisibilité.
+    /** Contrôles : acier minéral. */
+    val reportSteel: Color = Color(0xFF9DB4CE),
+    /** Dangers : ambre dépoli. */
+    val reportAmber: Color = Color(0xFFE2B56E),
+    /** Accident, contresens : orchidée. */
+    val reportOrchid: Color = Color(0xFFCB9BE8),
+    /** Travaux, personnel : sauge. */
+    val reportSage: Color = Color(0xFF9CC0AC),
+    /** Embouteillage : lavande minérale. */
+    val reportLavender: Color = Color(0xFFADA8E6),
     // Report picker and Menu: a white icon with a soft glow on a dark tile, same in both themes.
     val glowTile: Color = Palette.ReportDisc,
     val glowIcon: Color = Color.White,
@@ -196,6 +208,11 @@ val EonaLightColors = EonaColors(
     radarMobile = Palette.OrangeL,
     controlZone = Palette.IndigoL,
     hazard = Palette.YellowL,
+    reportSteel = Color(0xFF4F6D8F),
+    reportAmber = Color(0xFF9C6B22),
+    reportOrchid = Color(0xFF84509F),
+    reportSage = Color(0xFF4F7462),
+    reportLavender = Color(0xFF5F5BA6),
     glowTile = Palette.ReportDisc,
     glowIcon = Color.White,
 )

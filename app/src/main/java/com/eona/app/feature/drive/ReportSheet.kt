@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -372,14 +373,16 @@ private fun ReportTile(type: ReportType, onClick: () -> Unit, modifier: Modifier
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.sm, Alignment.CenterVertically),
     ) {
-        // Every category on the same disc: its icon (Arthur's set, 30/09) in white with a soft glow.
+        // Disque teinté par famille, icône dans sa teinte, lueur discrète (iOS 04/10).
+        val tint = type.menuTint()
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .background(colors.glowTile, CircleShape),
+                .background(tint.copy(alpha = 0.16f), CircleShape)
+                .border(0.75.dp, tint.copy(alpha = 0.32f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            EonaGlowIcon(painter = painter, contentDescription = null, tint = colors.glowIcon, size = 32.dp)
+            EonaGlowIcon(painter = painter, contentDescription = null, tint = tint, size = 28.dp, glowRadius = 6.dp, glowAlpha = 0.45f)
         }
         EonaText(
             type.label,
@@ -390,6 +393,24 @@ private fun ReportTile(type: ReportType, onClick: () -> Unit, modifier: Modifier
             // Two lines kept for every name: a short one does not drop its icon lower.
             minLines = 2,
         )
+    }
+}
+
+/**
+ * Teinte du menu Signaler par famille (iOS 04/10) : contrôles, dangers, urgences, travaux,
+ * trafic. Ni orange ni rouge.
+ */
+@Composable
+private fun ReportType.menuTint(): Color {
+    val colors = EonaTheme.colors
+    return when (this) {
+        ReportType.VoitureRadar, ReportType.Camera, ReportType.RadarMobile, ReportType.ControlZone -> colors.reportSteel
+        ReportType.Accident, ReportType.WrongWay -> colors.reportOrchid
+        ReportType.Roadworks, ReportType.RoadCrew -> colors.reportSage
+        ReportType.TrafficJam -> colors.reportLavender
+        ReportType.Hazard, ReportType.StoppedVehicle, ReportType.ObjectOnRoad, ReportType.DamagedRoad,
+        ReportType.SlipperyRoad, ReportType.LowVisibility,
+        -> colors.reportAmber
     }
 }
 

@@ -164,7 +164,7 @@ fun ProfileScreen(
                 EonaListRow(
                     title = "Version",
                     trailing = {
-                        EonaText(BuildConfig.VERSION_NAME, style = EonaTheme.typography.callout, color = colors.textTertiary)
+                        EonaText("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = EonaTheme.typography.callout, color = colors.textTertiary)
                     },
                 )
             }
