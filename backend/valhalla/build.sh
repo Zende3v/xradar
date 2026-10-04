@@ -9,6 +9,21 @@ STAMP=/var/lib/eona-signs/pbf-verified.sha256
 ID=preparation
 CANDIDATE="$ROOT"
 TEST_NAME=''
+# Ménage après succès : cartes `current` et `previous` gardées, échecs et anciennes cartes retirés.
+# Cible courante introuvable ou hors graphs : rien supprimé.
+purge_graphs() {
+  local keep_current keep_previous dir real
+  keep_current=$(readlink -f "$ROOT/current")
+  [[ -d "$keep_current" && "$keep_current" == "$ROOT/graphs/"?* ]] || return 0
+  keep_previous=$(readlink -f "$ROOT/previous" 2>/dev/null || true)
+  for dir in "$ROOT"/graphs/*/; do
+    real=$(readlink -f "$dir")
+    if [[ "$real" == "$ROOT/graphs/"?* && "$real" != "$keep_current" && "$real" != "$keep_previous" ]]; then
+      echo "[valhalla] ménage : ${real##*/}"
+      rm -rf -- "$real"
+    fi
+  done
+}
 cleanup() {
   code=$?
   [[ -z "$TEST_NAME" ]] || podman rm -f "$TEST_NAME" > /dev/null 2>&1 || true
@@ -87,4 +102,5 @@ if [[ -n "$OLD" && -d "$OLD" ]]; then
   ln -s "$OLD" "$ROOT/previous.new"
   mv -Tf "$ROOT/previous.new" "$ROOT/previous"
 fi
+purge_graphs
 echo "[valhalla] carte validée : $ID"

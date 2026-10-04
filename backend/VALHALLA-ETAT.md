@@ -15,7 +15,9 @@
   `build_tile_set` 1 973 s. Tests candidat (8003) et service (8002) passés, sinon aucune bascule.
   Avertissement podman « SIGTERM failed … resorting to SIGKILL » à l'arrêt du test : sans effet.
 - Contrôle Arthur 04/10 : `current` = carte 04/10, `previous` = carte 27/09, `/health` ok. Candidats
-  échoués supprimés. Restent 2 cartes, 8,4 Go chacune. Aucune purge auto : +8,4 Go par dimanche.
+  échoués supprimés. Restent 2 cartes, 8,4 Go chacune.
+- Ménage auto ajouté (accord Arthur 04/10) : après build validé, seules `current` et `previous` restent.
+  Testé sur dossiers temporaires. À déployer : `valhalla/build.sh` seul.
 
 ## Choix Rapide / Éco 04/10
 

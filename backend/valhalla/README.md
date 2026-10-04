@@ -49,8 +49,10 @@ Build exige preuve datant de moins de 24 h et hash différent de carte courante.
 Échec téléchargement : aucun build Valhalla. Carte active conservée.
 
 Chaque candidat possède dossier `graphs/<date>-<hash>` : admins, fuseaux, tuiles, archive,
-`build-metrics.json`, taille, hash PBF et résultats tests. Aucun ancien graphe supprimé automatiquement.
-Contrôler disque ; conserver au minimum cibles `current` et `previous` avant toute purge manuelle.
+`build-metrics.json`, taille, hash PBF et résultats tests. Ménage automatique après succès seulement
+(04/10) : cibles `current` et `previous` gardées, autres dossiers `graphs/` supprimés, chacun écrit au
+journal. Échec : candidat gardé pour diagnostic, retiré au succès suivant. Cible `current` introuvable :
+rien supprimé.
 
 `test.sh` interroge status détaillé, 50 trajets fixes (`valhalla/trajets.json`), une route Éco et
 une route avec étape, avec fournisseur EONA. Aucun appel ORS ou HERE. Tests arrêtent promotion au
