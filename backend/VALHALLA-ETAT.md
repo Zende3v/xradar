@@ -42,7 +42,8 @@
   X1 = E.Leclerc Orly (position Orlydis), appliqué à chaud 04/10. X2 = Fitness Park Orly : absent d'OSM
   (Fitness Park le plus proche : Thiais, 2,8 km), point BAN de l'avenue, position approchée.
 - Route Valhalla : champ additif `roads` (péage, autoroute, ferry) pour le choix d'itinéraire iOS (build 29).
-  À vérifier sur VPS : `classes` présentes dans la réponse OSRM de Valhalla 3.9.
+- Déployé par Arthur 05/10 01:04 (`f51cbbd`), `/health` ok. `extra.sql` appliqué : X1 et X2 en service.
+  Valhalla 3.9, Orly → Rouen, format OSRM : classes `toll`, `motorway`, `tunnel`, `restricted` présentes.
 
 ## Choix Rapide / Éco 04/10
 
