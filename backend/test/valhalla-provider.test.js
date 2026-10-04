@@ -390,14 +390,29 @@ describe('routes read back', () => {
       steps: APP_STEPS,
       engine: 'valhalla',
       mapVersion: null,
+      // « A 13 » : autoroute ; aucune classe péage ni ferry.
+      roads: { toll: false, motorway: true, ferry: false },
     });
+  });
+
+  it('reads tolls, motorways and ferries from the intersections', async () => {
+    const steps = structuredClone(OSRM_STEPS).map((step) => ({ ...step, ref: undefined }));
+    steps[1].intersections[0].classes = ['toll', 'motorway'];
+    steps[5].mode = 'ferry';
+    const { valhalla } = fake(() => answer(200, osrmAnswer({ routes: [osrmRoute({ steps })] })));
+    const [route] = await valhalla.routes(FROM, TO);
+    assert.deepEqual(route.roads, { toll: true, motorway: true, ferry: true });
+    const bare = structuredClone(OSRM_STEPS).map(({ intersections, ref, ...step }) => step);
+    const { valhalla: other } = fake(() => answer(200, osrmAnswer({ routes: [osrmRoute({ steps: bare })] })));
+    const [unknown] = await other.routes(FROM, TO);
+    assert.equal(unknown.roads, null);
   });
 
   it('keeps the fields and types of ORS normalized routes and steps', async () => {
     const { valhalla } = fake(() => answer(200, osrmAnswer()));
     const [route] = await valhalla.routes(FROM, TO);
-    // normalizeOrsFeature (ors.js): the same keys, in the same order.
-    assert.deepEqual(Object.keys(route), ['distanceM', 'durationS', 'coordinates', 'steps', 'engine', 'mapVersion']);
+    // normalizeOrsFeature (ors.js): the same keys, in the same order, plus `roads` (Valhalla seul, 04/10).
+    assert.deepEqual(Object.keys(route), ['distanceM', 'durationS', 'coordinates', 'steps', 'engine', 'mapVersion', 'roads']);
     for (const step of route.steps) {
       assert.deepEqual(Object.keys(step), [
         'type', 'modifier', 'location', 'exit', 'name', 'exitNumber', 'towardRefs', 'toward', 'distanceM', 'durationS',

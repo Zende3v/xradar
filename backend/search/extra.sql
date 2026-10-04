@@ -22,6 +22,9 @@ SELECT (SELECT coalesce(max(id), 0) FROM :"schema".poi) + e.n, 'X', e.n, e.key, 
 FROM (VALUES
     -- 04/10 (Arthur) : OSM n'a que le centre commercial Orlydis (w143320617, operator=E.Leclerc).
     -- Position : celle d'Orlydis.
-    (1, 'shop', 'supermarket', 'E.Leclerc', 'Leclerc Orlydis', '8', 'Place Gaston Viens', '94310', 'Orly', 48.74318::float8, 2.40728::float8)
+    (1, 'shop', 'supermarket', 'E.Leclerc', 'Leclerc Orlydis', '8', 'Place Gaston Viens', '94310', 'Orly', 48.74318::float8, 2.40728::float8),
+    -- 04/10 (Arthur) : absent d'OSM (Fitness Park le plus proche : Thiais, 2,8 km).
+    -- Position : point BAN de l'avenue, sans numéro, approchée.
+    (2, 'leisure', 'fitness_centre', 'Fitness Park', 'Fitness Park Orly', NULL, 'Avenue des Martyrs de Châteaubriant', '94310', 'Orly', 48.748502::float8, 2.406903::float8)
 ) AS e(n, key, value, name, aliases, housenumber, street, postcode, city, lat, lon);
 COMMIT;

@@ -145,8 +145,9 @@ const LAST_SECOND = 253_402_300_799;
  * }} Step
  * @typedef {{
  *   distanceM: number, durationS: number, coordinates: [number, number][], steps: Step[],
- *   engine: 'valhalla', mapVersion: string | null,
+ *   engine: 'valhalla', mapVersion: string | null, roads: Roads | null,
  * }} Route
+ * @typedef {{ toll: boolean, motorway: boolean, ferry: boolean }} Roads
  */
 
 /**
@@ -565,6 +566,7 @@ function normalizeRoute(route, mapVersion) {
   // Two points asked, one leg.
   if (!Array.isArray(route.legs) || route.legs.length !== 1) throw badAnswer('route legs unreadable');
   const steps = normalizeSteps(route.legs[0]?.steps);
+  const roads = roadsOf(route.legs[0].steps);
   // Every step starts on a point of the shape, the first on its first, the last on its last:
   // a shape that stops elsewhere was cut short.
   const [first, last] = [steps[0], steps[steps.length - 1]];
@@ -579,7 +581,34 @@ function normalizeRoute(route, mapVersion) {
     steps,
     engine: 'valhalla',
     mapVersion,
+    roads,
   };
+}
+
+/** Numéro d'autoroute française : « A 6 », « A13 ». */
+const MOTORWAY_REF = /^A ?\d/;
+
+/**
+ * Ce que traverse la route (04/10, additif) : péage, autoroute, ferry. Classes OSRM des
+ * intersections (`toll`, `motorway`, `ferry`), mode `ferry`, numéro « A … ». Aucune
+ * intersection lue : null, inconnu.
+ */
+function roadsOf(steps) {
+  const roads = { toll: false, motorway: false, ferry: false };
+  let known = false;
+  for (const step of steps) {
+    if (step?.mode === 'ferry') roads.ferry = true;
+    if (typeof step?.ref === 'string' && step.ref.split(';').some((ref) => MOTORWAY_REF.test(ref.trim()))) roads.motorway = true;
+    if (!Array.isArray(step?.intersections)) continue;
+    known = true;
+    for (const crossing of step.intersections) {
+      const classes = Array.isArray(crossing?.classes) ? crossing.classes : [];
+      if (classes.includes('toll')) roads.toll = true;
+      if (classes.includes('motorway')) roads.motorway = true;
+      if (classes.includes('ferry')) roads.ferry = true;
+    }
+  }
+  return known ? roads : null;
 }
 
 /**

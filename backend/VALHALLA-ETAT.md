@@ -39,8 +39,10 @@
   Seul le centre commercial porte l'enseigne : w143320617 `shop=mall`, `name=Centre Commercial Orlydis`,
   `operator=E.Leclerc`. L'index ignore `operator` : « leclerc » ne trouve pas Orlydis.
 - Choix Arthur : `search/extra.sql`, lieux ajoutés à la main (`osm_type = 'X'`), réappliqués à chaque rebuild.
-  X1 = E.Leclerc Orly (position Orlydis). Fitness Park Orly (av. des Martyrs de Châteaubriant) : en attente
-  du contrôle BAN / index (même salle que le Fitness Park classé Thiais ?).
+  X1 = E.Leclerc Orly (position Orlydis), appliqué à chaud 04/10. X2 = Fitness Park Orly : absent d'OSM
+  (Fitness Park le plus proche : Thiais, 2,8 km), point BAN de l'avenue, position approchée.
+- Route Valhalla : champ additif `roads` (péage, autoroute, ferry) pour le choix d'itinéraire iOS (build 29).
+  À vérifier sur VPS : `classes` présentes dans la réponse OSRM de Valhalla 3.9.
 
 ## Choix Rapide / Éco 04/10
 

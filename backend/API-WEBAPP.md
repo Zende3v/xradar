@@ -682,3 +682,16 @@ Cyclomoteurs 50 cm³ et voiturettes : 45 km/h, ni autoroute ni voie rapide. Anci
 ## Contactez-nous : 04/10/2026
 
 - `POST /api/bugs` accepte `category: "suggestion"`. Même flux que les bugs.
+
+## Péage, autoroute, ferry : 04/10/2026
+
+- Route Valhalla (`/api/route`, `better.route` de `/faster`) : champ additif `roads`.
+  - `{ "toll": bool, "motorway": bool, "ferry": bool }` : traversés ou non.
+  - Lu sur les classes OSRM des intersections (`toll`, `motorway`, `ferry`), le mode `ferry`, les numéros « A … ».
+  - Aucune intersection dans la réponse : `null`, inconnu. ORS : champ absent, JSON inchangé.
+- À vérifier sur VPS : Valhalla 3.9 remplit bien `classes` en format OSRM.
+
+## Lieux ajoutés à la main : 04/10/2026
+
+- `search/extra.sql`, réappliqué à chaque rebuild de la recherche. Résultats `id: "osm:X<n>"`.
+- X1 E.Leclerc Orly (8 place Gaston Viens), X2 Fitness Park Orly (av. des Martyrs de Châteaubriant, position approchée).

@@ -291,7 +291,15 @@ async function withRest(detour, rest, heading, avoid, draw, preference = null, v
     // The detour is what changes: its engine and map describe the answer (spec §1).
     engine: detour.engine,
     mapVersion: detour.mapVersion ?? route.mapVersion ?? null,
+    // Valhalla seul (04/10) : JSON ORS inchangé.
+    ...(detour.roads !== undefined || route.roads !== undefined ? { roads: joinRoads(detour.roads, route.roads) } : {}),
   };
+}
+
+/** Détour puis reste : péage, autoroute, ferry sur l'un ou l'autre ; un des deux inconnu : null. */
+function joinRoads(a, b) {
+  if (!a || !b) return null;
+  return { toll: a.toll || b.toll, motorway: a.motorway || b.motorway, ferry: a.ferry || b.ferry };
 }
 
 /** A closed road outweighs any delay. */
