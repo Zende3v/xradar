@@ -28,6 +28,7 @@
 - `/api/bugs` : catégorie `suggestion` (« Contactez-nous »).
 - 174 tests backend passent. Non déployé.
 - À vérifier sur VPS : voies rapides (`motorroad=yes`) exclues par `motor_scooter`.
+- iOS build 28 (`a9ca0d1`) envoie `vehicle=moped` et `suggestion` : déployer backend avant tests téléphone.
 
 ## Choix Rapide / Éco 04/10
 
