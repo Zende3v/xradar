@@ -7,45 +7,13 @@ Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'impor
 - **ChatGPT : iOS et backend.** Codex travaille directement dans ces périmètres.
 - **Claude local : Android.** Session locale rattrape les fonctionnalités iOS.
 - Respecter périmètres disjoints. Aucun travail dupliqué.
-- **Bridge uniquement sur demande explicite d'Arthur.** Ancien pilotage Codex/Claude via bridge abandonné.
+- Ne pas utiliser le bridge. Sessions autonomes, coordonnées par Arthur.
 - Tests automatiques uniquement indispensables à correction ou risque concret. Aucune campagne par défaut ni relance sans nécessité.
   Arthur réalise validation fonctionnelle et téléphone. Ne pas ajouter tests pour changements mineurs.
 - Revue croisée ciblée : contrat, changements risqués, défauts concrets. Pas de double audit ni double campagne de tests.
 - Rapports ultra courts : résultat, blocage, prochaine étape. Conserver point de reprise précis après chaque lot.
 - Les deux : skill **caveman** à chaque réponse, en français. Commits et docs en caveman aussi.
 - Arthur ne travaille plus qu'à deux.
-
-### Bridge (uniquement sur demande d'Arthur)
-
-- Dossier : `C:/Users/usr/bidirectional-bridge-claude-codex`. Codex 0.158.0-alpha.13 requis pour
-  gpt-6-astra.
-- Déroulé :
-  1. `bridge_server_info` ;
-  2. tâche racine (depth 0) ;
-  3. délégations depth 1 (`max_attempts: 0`, délai 15 à 30 min, scopes d'écriture disjoints) ;
-  4. vérifier chaque livrable ;
-  5. `bridge_record_verification` pour les seules vérifs réellement lancées.
-- Tâche coupée ou bloquée : `bridge_resume_delegated_task` sur la tâche existante, jamais de
-  tâche de remplacement.
-- Agent indisponible ou quota épuisé : le dire en une ligne. Ne pas reprendre gros lot côté Codex sans accord Arthur.
-- Bridge bloqué : diagnostic borné, point de reprise conservé. Ne pas transformer incident en chantier prolongé par défaut.
-- Config : `.codex/config.toml` (Codex, `caller=codex`) et `.mcp.json` (Claude, `caller=claude`),
-  locaux, non versionnés. Base partagée : `.bridge/bridge.db`.
-
-### Worker Claude (lancé par le bridge quand Codex délègue)
-
-- Commande imposée par le bridge : `claude -p … --model opus --effort max --permission-mode
-  acceptEdits`, outils `Read`, `Edit`, `Write`, `Bash` seulement. Pas d'outils MCP, pas de
-  skills, pas de `Grep`/`Glob` : chercher avec `grep` dans `Bash`.
-- Tours : 12 par défaut. Mettre `max_turns` 32 à 64 dans la tâche pour un vrai travail (build +
-  corrections, relecture large).
-- Build Android dans `Bash` : `export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" &&
-  ./gradlew :app:assembleRelease`.
-- Le livrable part tout seul à la fin de la tâche : le worker ne l'appelle pas lui-même.
-- Inclure dans chaque contrat : français, caveman ultra, livrable bref, tests indispensables seulement.
-  Appliquer ces règles directement ; worker ne dispose pas d'outil skills.
-- Scopes relatifs au workspace du bridge. `../xradar_ios/**` est refusé (`INVALID_ARGUMENT`).
-  Pour iOS, ouvrir bridge sur `C:/Users/usr/Documents/xradar_ios`, puis déléguer avec scopes relatifs à ce repo.
 
 ### Caveman (Codex et Claude, toujours)
 
@@ -88,7 +56,7 @@ irréversibles.
   - AGP 9 embarque Kotlin : **ne jamais** appliquer `org.jetbrains.kotlin.android`.
   - KGP 2.2.10 : aucune lib compilée avec Kotlin ≥ 2.4.
   - Pas de tests unitaires Android.
-- Version : 1.0.1 (versionCode 22). **Monter le `versionCode` à chaque nouvel APK.**
+- Versions courantes : `versionName` et `versionCode` dans `app/build.gradle.kts`. **Monter le `versionCode` à chaque nouvel APK.**
 
 ## iOS (`xradar_ios`)
 
@@ -131,7 +99,7 @@ irréversibles.
 - **Aucun déploiement, installation ni redémarrage sur le VPS sans accord explicite d'Arthur, à
   chaque fois.** Lecture seule libre.
 
-## Chantier en cours : ORS remplacé par Valhalla
+## Routage actuel : Valhalla et HERE
 
 - Lire d'abord `backend/VALHALLA-ETAT.md` (état du chantier, à mettre à jour à chaque étape),
   puis :
@@ -146,5 +114,6 @@ irréversibles.
   - HERE à économiser ;
   - aucun chiffre inventé : ce qui n'est pas mesuré est « à mesurer ».
 - Phase 1 : collecte depuis le 25/09. Bilan après 2 à 3 semaines.
-- Historique documenté : Valhalla généralisé le 29/09 ; phase 5 livrée le 30/09.
-- Prochaine phase à confirmer avec Arthur : `VALHALLA-ETAT.md` contient des sections historiques contradictoires.
+- Phases 1 à 5 livrées. Valhalla généralisé le 29/09 ; phase 5 livrée le 30/09.
+- Phases 6 à 8 du plan initial non implémentées : trafic traité dans backend, sans injection dans Valhalla.
+- Prochaine étape choisie par Arthur. État et preuves : `backend/VALHALLA-ETAT.md`.

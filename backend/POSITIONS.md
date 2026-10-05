@@ -5,14 +5,18 @@ en service ; rien n'est prévu « pour plus tard ».
 
 ---
 
-## 1. Rien ne part sans un oui
+## 1. Réglages actuels (05/10/2026)
 
-Deux réglages, tous les deux **éteints par défaut**, dans Menu → Confidentialité :
+Deux réglages dans Menu > Confidentialité :
 
 | Réglage | Ce qu'il autorise |
 |---|---|
 | **Présence et position** | Le décompte des apps ouvertes, et la position + la vitesse du conducteur |
 | **Temps d'utilisation** | Le cumul du temps passé dans l'app sur le compte |
+
+Présence activée par défaut. Migration l'active une fois : iOS build 28, Android lot de parité du 05/10.
+Migration réactive aussi un ancien refus. Refus après migration conservé.
+Temps d'utilisation activé sans préférence enregistrée. Choix existant conservé, sans réactivation forcée.
 
 Les deux éteints, l'app **ne fait aucun appel** : pas de requête vide, pas de ping. C'est la
 condition `privacy.presence || privacy.usageTime` avant l'envoi, côté iOS comme Android.
@@ -37,8 +41,9 @@ Authorization: Bearer <jeton de session>
 - `session: true` : **seulement** si « Temps d'utilisation » est actif.
 - `closing: true` : l'app est quittée hors trajet. Dernière position connue, où l'app a servi.
 
-L'app n'envoie jamais un champ que le conducteur n'a pas autorisé. C'est décidé au moment de
-construire le corps de la requête, pas filtré plus loin.
+Chaque champ dépend du réglage actuel, lors de construction de la requête.
+Couper présence arrête nouvelles positions ; positions déjà enregistrées gardent conservation prévue, sauf suppression du compte.
+Dernier point peut rester visible dans `/online` pendant 90 secondes, puis coordonnées nulles.
 
 ---
 

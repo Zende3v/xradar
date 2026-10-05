@@ -2,7 +2,8 @@
 
 Reprise temporaire d'EONA par Claude seul : ni Codex ni bridge. Android non touché.
 Arthur déploie le VPS et lance Codemagic. SSH VPS impossible depuis le cloud.
-Branche `claude/inspiring-planck-vksc4r` sur les deux repos. Pas encore fusionnée.
+Branche de session : `claude/inspiring-planck-vksc4r` sur les deux repos.
+Recalage 05/10 : intégrée dans iOS `main` (push `252fb9d`) et x_radar `feature/mini-player-musique` (cloud `1455c5b`).
 
 ## État final (05/10, 01:10)
 
@@ -82,8 +83,9 @@ Aucune compilation locale (pas de Mac). Codemagic a validé jusqu'au build 29.
 - Scooter : exclusion des voies rapides (`motorroad=yes`) pas encore prouvée.
 - Android : aucun lot de cette session porté. Parité cassée : choix Rapide / Éco, multi-arrêts, stationnement,
   Scooter 50 / Sans permis, protection pluie, menu, coût du trajet, carburant, consommation.
-- Fusion de `claude/inspiring-planck-vksc4r` dans les branches de travail : décision Arthur / Codex.
+- Fusion réalisée le 05/10 en avance rapide, sans réécriture. Branche cloud conservée.
 - Fitness Park : numéro exact à fournir, pour corriger X2.
 - Leclerc : si OSM corrigé, retirer X1 d'`extra.sql`.
 - Rebuild dimanche 11/10 03:30 : premier passage avec `extra.sql`. Vérifier `/var/lib/eona-signs/rebuild.log`.
-- Chantier Valhalla : phase 1 (collecte) continue ; prochaine étape phase 2 (mode ombre). Voir `backend/VALHALLA-ETAT.md`.
+- Valhalla : phases 1 à 5 livrées ; collecte continue. Phases 6 à 8 non implémentées dans moteur.
+  Statut et preuves : `backend/VALHALLA-ETAT.md`. Aucune nouvelle phase 2 à lancer.

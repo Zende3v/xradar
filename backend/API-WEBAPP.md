@@ -236,7 +236,7 @@ journal (section 6 bis).
 | `mapVersion` | texte ou `null` | carte de la route au départ |
 | `appVersion` | texte | ex. `1.0.1 (4)` |
 | `platform` | texte | `android` ou `ios` |
-| `etaMode` | texte | `proportional` (phase 1) |
+| `etaMode` | texte | `dynamic` actuellement ; `proportional` sur anciens trajets |
 | `trafficSources` | liste | sources de trafic vues (`here`, `tomtom` avant le 30/09, `crowd`, `datagouv`) |
 
 Le rapport `bin/eona-eta-report.js` exclut les trajets avec `retargeted: true` de toutes les
@@ -260,7 +260,7 @@ des trajets (D1.10).
 pour les autres). Un compte reste « en ligne » 90 secondes après son dernier signe de vie.
 
 Depuis le 28/09, une position n'est gardée que **pendant un trajet**, plus une à la **fermeture de
-l'app** hors trajet. Hors trajet, un compte en ligne a donc `lat` à null. Dans `/positions`, un
+l'app** hors trajet. Hors trajet, nouveaux pings sans coordonnées. Dans `/positions`, un
 point `inTrip: false` est une fermeture d'app : le dernier point d'un compte donne sa dernière
 connexion avec sa position.
 
@@ -288,11 +288,19 @@ vide comme une anomalie.
 | Réglage dans l'app | Par défaut | Effet quand il est éteint |
 |---|---|---|
 | Statistiques de conduite | activé | Aucun trajet, aucune statistique envoyés : `stats` et `trips` restent vides |
-| Présence et position | **désactivé** | Aucune position : le compte n'apparaît pas sur la carte de `/api/live/online` et n'a aucune trace |
-| Temps d'utilisation | **désactivé** | `stats.appDurationSeconds` n'augmente pas ; `lastActiveAt` reste tenu à jour dès que l'app appelle le serveur |
+| Présence et position | **activé** | Aucune nouvelle position ni nouvelle trace |
+| Temps d'utilisation | **activé sans préférence enregistrée** | `stats.appDurationSeconds` n'augmente pas ; `lastActiveAt` reste tenu à jour dès que l'app appelle le serveur |
 | Aide au trafic partagé | activé | Aucun ralentissement remonté : moins de bouchons détectés automatiquement |
 | Suggestions de trajets | activé | Ne change rien côté serveur : les destinations récentes restent sur le téléphone |
 | Statistiques visibles du groupe | activé | Dans un trajet en groupe, la fiche du conducteur montre photo, pseudo et note seulement (`stats: null`) |
+
+Présence activée une fois lors de migration : iOS build 28, Android lot de parité du 05/10.
+Migration réactive aussi un ancien refus. Tout refus enregistré après migration reste conservé.
+Temps d'utilisation : un choix existant reste conservé, sans réactivation forcée.
+Présence coupée mais temps d'utilisation actif : compte toujours compté en ligne.
+Dernier point peut rester visible dans `/online` pendant 90 secondes, puis coordonnées nulles.
+Deux réglages coupés : aucun appel `/api/live/presence`.
+Couper présence n'efface pas positions déjà enregistrées : conservation 30 jours, sauf suppression du compte.
 
 ---
 
@@ -476,17 +484,17 @@ Gardé **un an**, puis effacé. Les corrections de signalisation ont déjà leur
 
 ## 6 ter. Routage : moteur, compteurs, banc
 
-Phase 1 du plan Valhalla (`PLAN-VALHALLA.md`) : mesurer l'existant, rien ne change pour les
-conducteurs.
+Instrumentation livrée depuis le 25/09. Valhalla principal pour tous depuis le 29/09 ; ORS reste secours.
+État actuel et preuves : `VALHALLA-ETAT.md`.
 
 **Itinéraires.** `GET /api/route` et `POST /api/route/faster` (`better.route`) ajoutent deux champs :
 
 | Champ | Valeurs |
 |---|---|
-| `engine` | `ors` (OpenRouteService) ou `osrm` (repli sans clé ORS) |
-| `mapVersion` | ORS : `metadata.engine.graph_date` de sa réponse ; `null` si absente ou OSRM |
+| `engine` | `valhalla` ou `ors` ; OSRM démo retiré |
+| `mapVersion` | Valhalla : date des tuiles ; ORS : `metadata.engine.graph_date` ; `null` si absente |
 
-Même chose sur une réponse du cache d'une minute. Rien d'autre ne change.
+Champs conservés sur réponse du cache. Ajouts ultérieurs documentés dans sections Rapide / Éco, multi-arrêts et scooter.
 
 **Compteurs dans `/health`** (jour UTC, gardés sur disque, survivent au redémarrage) :
 
@@ -528,15 +536,16 @@ coordonnée. 90 jours.
 
 ---
 
-## 6 quater. Valhalla : API préparée, non déployée au 26/09
+## 6 quater. Valhalla : API en service
 
-Contrat apps conservé. Après déploiement phase 2, `engine` vaut `ors` ou `valhalla` ; OSRM démo retiré.
+Contrat apps conservé. `engine` vaut `ors` ou `valhalla` ; OSRM démo retiré.
 `mapVersion` Valhalla vient de `tileset_last_modified` : date des tuiles, pas date certaine des données OSM.
 
 Sans `VALHALLA_ENABLED=1`, aucun appel Valhalla, même pour `/status` ou mode ombre.
 Avec activation et `routingEngine=ors`, ORS sert apps, Valhalla calcule après réponse, hors cache.
 `admins` sert Valhalla aux admins ; `all` à tous. ORS reste secours.
-Passage admins/tous exige validation Arthur et critères phase 3 ; API seule ne constitue pas cette validation.
+Mode `all` en service depuis le 29/09, confirmé sur VPS le 05/10. Changement de mode décidé par Arthur.
+Trafic traité dans backend ; `hasLiveTraffic = false` sur moteur Valhalla au 05/10.
 
 ### Administration
 

@@ -1,380 +1,82 @@
 # Valhalla : état du chantier
 
-Bilan complet de la session Claude du 02/10 au 05/10 : `../BILAN-SESSION-CLAUDE-20261005.md`.
+Mis à jour : **05/10/2026**. Code relu, VPS contrôlé en lecture seule.
 
-## Build Valhalla du 04/10 échoué (mail 06:53)
+## Point de reprise
 
-- Premier build automatique (cron geodata dimanche 03:30). Routage OK le soir : carte active conservée,
-  à confirmer (`readlink -f /var/lib/valhalla/current`).
-- Cause confirmée sur VPS (04/10 soir) : `/opt/eona-backend/bench` absent ; candidat
-  `20261004T041931Z-a788fcddd0dc` construit (8,4 Go, même taille que carte 27/09), échec au test.
-  `valhalla/test.mjs` lisait `bench/trajets.json`, supprimé le 30/09 (`cd3240c`, retrait TomTom).
-- Fix : trajets versionnés `valhalla/trajets.json`, test Éco et étape ajouté, ligne d'échec
-  écrite dans `/var/lib/eona-signs/rebuild.log`. Mock local : 50 trajets + Éco + étape passent.
-- Fix déployé 04/10 soir (`valhalla/` seul). Test sur Valhalla réel port 8002 : 50 trajets + Éco +
-  étape passent. Valhalla 3.9 accepte `type: via` et `auto.shortest` sur carte France.
-- Relance build par Arthur 04/10 soir : **carte validée 19:38**, `20261004T170051Z-a788fcddd0dc`.
-  `build_tile_set` 1 973 s. Tests candidat (8003) et service (8002) passés, sinon aucune bascule.
-  Avertissement podman « SIGTERM failed … resorting to SIGKILL » à l'arrêt du test : sans effet.
-- Contrôle Arthur 04/10 : `current` = carte 04/10, `previous` = carte 27/09, `/health` ok. Candidats
-  échoués supprimés. Restent 2 cartes, 8,4 Go chacune.
-- Ménage auto ajouté (accord Arthur 04/10) : après build validé, seules `current` et `previous` restent.
-  Testé sur dossiers temporaires. À déployer : `valhalla/build.sh` seul.
+- Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
+- ORS reste secours et comparaison en ombre. OSRM démo retiré.
+- Trafic traité dans le backend : **HERE, EONA, data.gouv**.
+- ETA dynamique dans les apps. HERE Route Import chronomètre notre tracé ; dernière durée valide conservée.
+- **Phases 1 à 5 livrées.** Collecte et validation de précision continuent, sans nouvelle phase 2.
+- **Phases 6 à 8 du plan initial non implémentées.** Clôture ou maintien en attente à trancher avec Arthur.
+- Aucun chantier supplémentaire lancé. Arthur choisit prochaine étape.
 
-## Scooter 50, sans permis, recherche 04/10 (Claude, session cloud)
+## Phases du plan initial
 
-- `/api/route` et `/faster` : `vehicle=moped`. Valhalla `motor_scooter`, 45 km/h, sans autoroute.
-  ORS secours sans autoroute. Pas de HERE ni d'ombre. Détails : `API-WEBAPP.md`.
-- Recherche : enseigne + commune (« Fitness Park Orly »), lieux à 8 km de la commune.
-  Cause réelle de l'échec non vérifiée : lieu absent de l'index ou classé trop loin. À mesurer sur VPS.
-- `/api/bugs` : catégorie `suggestion` (« Contactez-nous »).
-- 174 tests backend passent. Non déployé.
-- À vérifier sur VPS : voies rapides (`motorroad=yes`) exclues par `motor_scooter`.
-- iOS build 28 (`a9ca0d1`) envoie `vehicle=moped` et `suggestion` : déployer backend avant tests téléphone.
-- Déployé par Arthur 04/10 22:16 (`f2643e8`), `/health` ok. Sauvegarde : `eona-backend-src-backup-20261004-2214.tgz`.
-- Contrôle Valhalla Orly → Porte d'Italie : `auto` prend A 6b ; `motor_scooter` reste sur D 7, sans autoroute.
-  Exclusion des voies rapides (`motorroad=yes`) pas encore prouvée : ce trajet n'en a pas côté scooter.
-- Recherche, cause confirmée dans `search.poi` : aucun Fitness Park à Orly (Thiais, Fresnes, Créteil,
-  Montgeron). L'ancien filtre exigeait « orly » dans la commune du lieu : zéro résultat. Repli
-  enseigne + ville : Fitness Park de Thiais. Leclerc à Orly dans l'index : station-service seule.
-- E.Leclerc Orly (8 place Gaston Viens), carte OSM du 04/10 : aucun objet `shop=supermarket`.
-  Seul le centre commercial porte l'enseigne : w143320617 `shop=mall`, `name=Centre Commercial Orlydis`,
-  `operator=E.Leclerc`. L'index ignore `operator` : « leclerc » ne trouve pas Orlydis.
-- Choix Arthur : `search/extra.sql`, lieux ajoutés à la main (`osm_type = 'X'`), réappliqués à chaque rebuild.
-  X1 = E.Leclerc Orly (position Orlydis), appliqué à chaud 04/10. X2 = Fitness Park Orly : absent d'OSM
-  (Fitness Park le plus proche : Thiais, 2,8 km), point BAN de l'avenue, position approchée.
-- Route Valhalla : champ additif `roads` (péage, autoroute, ferry) pour le choix d'itinéraire iOS (build 29).
-- Déployé par Arthur 05/10 01:04 (`f51cbbd`), `/health` ok. `extra.sql` appliqué : X1 et X2 en service.
-  Valhalla 3.9, Orly → Rouen, format OSRM : classes `toll`, `motorway`, `tunnel`, `restricted` présentes.
-
-## Choix Rapide / Éco 04/10
-
-- Constat Arthur : Éco 34 min, Rapide 37 min. Aucune inversion : temps HERE par tracé, profils
-  justes (Valhalla `auto` temps, `auto.shortest` distance). Valhalla choisit Rapide sans trafic.
-- Fix iOS : deux temps HERE connus et Éco plus rapide, Rapide prend route Éco. Aucun appel en plus.
-
-## Multi-arrêts 04/10/2026 (Claude, session cloud)
-
-- Backend : `via` sur `/api/route` (10 étapes, Valhalla `type: via`, ORS coordonnées) et `/faster`.
-  Contrat inchangé sans `via`. Détails : `API-WEBAPP.md`, section Multi-arrêts.
-- Colonne `routing.route_log.stops`, ajoutée seule au redémarrage (`ADD COLUMN IF NOT EXISTS`).
-- 167 tests backend passent (10 nouveaux, `test/routing-stops.test.js`).
-- À vérifier sur VPS : Valhalla réel avec étapes, `waypoints` listant ou non les étapes.
-- Non déployé : Arthur déploie (README §4). SSH VPS refusé depuis cloud.
-- iOS build 26 : multi-arrêts, permis probatoire, Garer mon véhicule, menu Signaler sobre.
-
-## Bilan ETA 03/10/2026 01:12 (rapport `--since=2026-10-01T14:25+02:00`)
-
-- 14 trajets, tous iOS. 8 arrêtés en route, exclus. 1 iOS (11) ancien mode `proportional`.
-- Mode `dynamic`, 5 trajets gardés. 25 à 75 % : 5/5 bons, écart médian 1,1 min, biais nul.
-- Départ (0 %) : 1/5 bon, arrivée médiane +6,6 min plus tard qu'annoncé.
-- Cause vue trajet par trajet : relevé 0 % = temps Valhalla seul sur 9 trajets `dynamic` sur 13.
-  Premier point GPS sur route avant première réponse HERE.
-- Correctif iOS build 25 (`8489a68`) : ETA départ = temps HERE du choix d'itinéraire. Aucun appel en plus.
-- Échantillon trop petit : 5 trajets, Wilson 95 % large. Collecte continue (Arthur).
-- Déploiement backend `19aa105` : 03/10 01:11:42, sauvegarde `/opt/eona-backend-src-backup-20261003-0110.tgz`.
-  `/health` ok, colonne `routing.route_log.preference` présente.
-
-## Choix d'itinéraire 02/10/2026 (Claude, session cloud)
-
-- Backend : `preference=shortest` (Éco) et `timed=1` sur `/api/route`, Éco sur `/faster`. Contrat inchangé sans eux.
-- Colonne `routing.route_log.preference`, ajoutée seule au redémarrage. Rapport ETA : option `--since`.
-- 157 tests backend passent (12 nouveaux). Valhalla `shortest` réel, exclusions avec Éco : à vérifier sur VPS.
-- Déployé par Arthur 03/10 01:11 (SSH et HTTPS du VPS refusés depuis cloud).
-- iOS build 24 : choix Rapide / Éco / Perso. Build 25 : ETA départ juste.
-
-## Livraison 01/10/2026 : trois lots trafic
-
-Arthur valide développement, push deux repos et déploiement. Reprise Codex seul autorisée après quota Claude épuisé.
-
-- Budget HERE mensuel **estimé 5 €**. Réservation disque avant chaque appel, compteur repris, quotas ETA/détours séparés.
-- Tarifs configurables : hypothèses Traffic 2,33 €/1000, Import 4,66 €/1000 ; marge 20 %, franchise supposée zéro.
-- Hypothèses sans garantie de facture HERE. Tarifs du compte restent à confirmer.
-- Cache exact 60 s, 128 entrées ; appels identiques simultanés partagés. Fermetures toujours contrôlées.
-- ETA HERE valide conservée si flow échoue. Apps conservent dernière durée valide si import échoue.
-- Détours : durées HERE sur même portion, raccords vérifiés, deux variantes maximum.
-- Variante fermée ou contrôle HERE incomplet refusé. Seuils 3 min/5 %, cooldown et évitements stricts conservés.
-- EONA complète HERE. Couverture locale seule ne coupe plus HERE avant validation de précision.
-- Réglage « Éviter les bouchons » supprimé. Évitement automatique sur trajets réels, Android 20 et iOS 19.
-- Vérifications : 34 tests backend ciblés passent. APK Android 20 construit. Swift vérifié statiquement ; Codemagic par Arthur.
-- Backend **déployé 01/10 à 14:25 Europe/Paris**, code `197f5f6`. Huit fichiers vérifiés SHA-256 ; `/health` local/public OK.
-- Compteur repris : 27 appels octobre, estimation 0,100656 €. Budget actif 5 €, aucun appel HERE ajouté aux contrôles.
-- Sauvegarde avant déploiement : `/opt/eona-backend-src-backup-20261001-142420.tgz`. Aucun changement de dépendance.
-- Push iOS `22ef528` : build 19. APK Android 20 : build réussi en 69 s ; artefact disponible localement.
-- Validation Arthur : cinq trajets, un campagne et quatre région parisienne. Précision réelle reste à mesurer.
-
-
-Mis à jour : **30/09/2026** (Claude : phase 5, constat ETA). Exploitation vérifiée le 26/09 à **15:10**, collecte le 27/09 à **02:43, Europe/Paris**.
-
-Objectif : remplacer ORS par Valhalla auto-hébergé, trafic temps réel, ETA ultra précise,
-itinéraires plus malins, sans casser les apps.
-
-## Documents
-
-| Fichier | Rôle |
-|---|---|
-| `VALHALLA-ETAT.md` | ce fichier : où on en est |
-| `../BILAN-SESSION-CLAUDE-20261005.md` | bilan session Claude cloud, 02/10 → 05/10 : backend, iOS 24 à 30, VPS, reste à faire |
-| `PLAN-VALHALLA.md` | plan en phases (validé le 25/09) |
-| `VALHALLA-DECISIONS.md` | journal des décisions : D1–D8 (atelier), P1.1–P1.7 (choix phase 1) |
-| `CHECKLIST-TRAJETS.md` | trajets tests de l'équipe |
-| `VALHALLA.md` | conditions d'origine, remplacé par le plan et le journal |
-
-L'audit du 24/09 (A à O) n'existe que dans la conversation, pas dans le repo. Ses constats utiles
-sont repris dans le journal.
-
-## Phases
-
-| Phase | Contenu | État |
+| Phase | Contenu | État au 05/10 |
 |---|---|---|
-| 1 | Mesurer l'existant | **en service depuis le 25/09**, collecte en cours |
-| 2 | Valhalla installé, en mode ombre | **en ombre depuis 27/09 20:54** : backend phase 2, Podman, swap 4 Go, carte France (36 min, 50/50), `VALHALLA_ENABLED=1`, `routingEngine=ors`, cron dimanche = signalisation + Valhalla ; banc ORS + Valhalla (3c1bd99), build 11 Gio, alertes mail build/panne vers Arthur |
-| 3 | Valhalla pour les admins, puis pour tous | **admins sur Valhalla depuis 27/09 23:45** (banc 472 mesures : Valhalla +6 % vs meilleur TomTom, ORS +12 %) ; cap envoyé par les apps (Android 6, iOS 4) contre demi-tours ; **28/09 : trajets admins** ; tempête de recalculs corrigée (Android 7, iOS 5) ; tous : à décider |
-| 4 | ETA dynamique, data.gouv, cap, ferries | à faire |
-| 5 | Politique de confidentialité et CGU | à faire |
-| 6 | Trafic dans Valhalla : fermetures et travaux | à faire |
-| 7-8 | Vitesses en direct, historique | à détailler après mesure |
-| — | Sytadin | en attente d'un accès DiRIF |
+| 1 | Mesurer l'existant | Instrumentation livrée le 25/09. Collecte en cours ; bilan de précision reste à mesurer. |
+| 2 | Valhalla installé, mode ombre | Livrée le 27/09. Installation et mode ombre déjà réalisés. |
+| 3 | Valhalla admins, puis tous | Livrée : admins le 27/09, tous le 29/09. Mode `all` vérifié sur VPS le 05/10. |
+| 4 | ETA dynamique, data.gouv, cap, ferries | Livrée le 29/09, complétée par HERE puis budget et détours du 01/10. |
+| 5 | Politique de confidentialité et CGU | Pages mises en ligne le 30/09 à 22:18, selon journal de déploiement. |
+| 6 | Fermetures et travaux dans Valhalla | Non implémentée : aucun `traffic.tar` ni outil d'écriture versionné. Fermetures traitées par backend et `/faster`. |
+| 7 | Vitesses en direct dans Valhalla | Non implémentée : vitesses HERE/EONA/data.gouv traitées dans backend, sans injection dans tuiles. |
+| 8 | Historique appris dans Valhalla | Non implémentée : aucun `valhalla_add_predicted_traffic` dans construction. |
+| — | Sytadin | Accès officiel DiRIF toujours absent du dossier projet. |
 
-## Phase 1 : ce qui tourne
+## Preuves des limites du moteur
 
-- **Backend** déployé le 25/09 à 19:34 (sauvegarde `/opt/eona-backend-src-backup-20260925-1934.tgz`).
-  Champs `engine`/`mapVersion`, mesures des trajets, contexte des bugs, timeout ORS, compteurs
-  ORS et TomTom dans `/health`, journal `routing.route_log`.
-- **Banc** : cron `/etc/cron.d/eona-bench` (08:00, 12:30, 18:00, 23:00), log
-  `/var/log/eona-bench.log`, résultats `routing.bench_run`. 1er passage manuel : 6/6 OK,
-  12 requêtes TomTom.
-- **Passage automatique vérifié** : 25/09 à 23:00, créneau `nuit`, **6/6 OK**, curseur 12.
-  Passages 26/09 à 08:00 et 12:30 : **6/6 OK chacun**, curseur 24.
-  Total banc : **24 lignes réussies**, dont 18 automatiques. Log midi : 24 requêtes TomTom banc ce jour-là.
-  Contrôle 20:25 : passage 18:00 **6/6 OK** ; total **30 lignes réussies**, dont 24 automatiques.
-- **Android** 1.0.1 (4) et **iOS** 1.0.0 (2) : buildent et se lancent (Arthur, 25/09).
-- **Commits** : iOS `55c56c9` poussé. x_radar `b7759b0` phase 1, puis documentation jusqu'à
-  `53a81c4`, sans push. Audit distant 25/09 : branche x_radar avait 9 commits locaux d'avance.
+- VPS, `/status` détaillé : `version = "3.9.0"`, `has_tiles = true`, **`has_live_traffic = false`**.
+- VPS, `/health` : `status = "ok"`, `routing.mode = "all"`, `traffic.provider = "here"`.
+- `valhalla/valhalla.json` : `tile_extract` configuré ; aucun `mjolnir.traffic_extract`.
+- `valhalla/build-in-container.py` : `valhalla_build_extract` sans `--with-traffic` ; aucun ajout d'historique.
+- `src/traffic/routes.js` fusionne HERE, EONA et data.gouv sur le tracé reçu.
+- `src/routing/faster.js` traite fermetures, polygones d'évitement et contrôle des variantes.
 
-## Reprise vérifiée le 26/09
+Trafic opérationnel dans backend ne prouve pas injection dans Valhalla prévue par phases 6 à 8.
+Ne pas déclarer ces trois phases livrées sans changement correspondant et preuve vérifiée.
 
-- `/health` local `ok`, public HTTP 200. Backend démarré depuis 25/09 19:34:38 ; aucun redémarrage pendant correction sauvegardes.
-- Avant préparation phase 2 : 62 fichiers backend suivis comparés au VPS, identiques après normalisation CRLF.
-- À 15:10 : `routing.route_log` vide ; 7 anciens trajets, aucun exploitable.
-  À **20:25** : **22 lignes de routage**, **9 trajets enregistrés**, dont **2 nouveaux exploitables** sur iOS 1.0.0 (2).
-  Deux trajets courts, hors pointe, ORS ; arrivée reconnue, départ réel et relevés ETA présents.
-  **8 relevés exploitables sur 8**, tous dans tolérance prévue. Erreur absolue médiane : départ **90 s**, 25 % **23 s**, 50 % **24 s**, 75 % **12 s**.
-  Variantes avec/sans arrêts incertains identiques. Sept anciens trajets exclus normalement, faute de mesures phase 1.
-  Collecte bout en bout confirmée pour ces deux trajets iOS ; Android et précision générale restent à confirmer.
-  `/health` public HTTP 200. Vérification lecture seule ; aucun test, déploiement ni redémarrage.
-- Sauvegarde cassée confirmée : `runuser: command not found` sous PATH cron réduit.
-  Correction autorisée par Arthur, installée **26/09 à 02:13** : PATH explicite, verrou, archives temporaires vérifiées.
-- Sauvegarde réelle exécutée avec `PATH=/usr/bin:/bin` : succès ; dump **89 765 octets**, archive **36 427 octets**, mode 0600.
-  Schémas `crowd` et `routing` présents ; archive données contient comptes, appareils, avatars et fichiers persistants disponibles.
-  **Cron 03:10 confirmé** : succès à 03:10:01, dump 89 765 octets, données 36 525 octets, archives intègres et 0600.
-  Restauration réelle non testée.
-- Sauvegardes avant intervention : `/opt/eona-backend-src-backup-20260925-214605.tgz`
-  et `/opt/eona-cron-backup-20260925-214605.tgz`. Fichiers installés contrôlés par SHA-256.
-- `rebuild.sh` et `import.sh` déployés avec correction PATH seulement.
-  Nouvelle chaîne Valhalla et preuve PBF restent **locales**, non installées.
-- Bridge Windows réparé, revue indépendante Claude sans défaut bloquant, commit local **`1d5a856`**, sans push.
-  Délégations Claude réelles exécutées via nouvelles instances MCP ; ancien connecteur devra être reconnecté.
-- Revue scripts interrompue par timeout ; bridge avait marqué tâche `FAILED`, reprise stricte refusée.
-  Reprise renvoie `ILLEGAL_TRANSITION`. Correction bridge elle-même interrompue ; aucune correction timeout intégrée.
-  Revue indépendante des scripts reste ouverte. Conserver mêmes tâches, aucun remplacement.
-  Lot local livré sans prolonger dépannage bridge ; détails de reprise conservés dans `.bridge/tools/REPRISE-20260926.md`.
-- Arthur demande désormais **majorité du travail chez Claude**. Codex cadre, intègre et relit risques ciblés ; français caveman ultra.
+## Production documentée
 
-## Phase 2 : préparation locale
+- Dernier déploiement backend documenté : **`f51cbbd`**, 05/10 à 01:04 ; `/health` alors OK.
+- Carte validée le 04/10 à 19:38 : **`20261004T170051Z-a788fcddd0dc`**.
+- Carte précédente documentée : `20260927T180134Z-717bad2d052c`.
+- Rebuild dimanche 03:30 : signalisation, Valhalla, recherche ; même extrait France vérifié.
+- Nouvelle carte testée avant bascule. Échec : ancienne carte conservée, journal et notification.
+- Après build validé : seules cartes `current` et `previous` conservées.
+- Sauvegardes avant déploiement `src` : `/opt/eona-backend-src-backup-*.tgz`, selon bilan.
+- **Aucun déploiement, installation ni redémarrage sans accord explicite d'Arthur.**
 
-- Claude : fournisseur Valhalla, façade, secours ORS, disjoncteur, mode ombre, réglage admin, `/faster`, santé et tests.
-- Codex : scripts installation/build/test/rollback, Quadlet, sauvegardes, documentation et revue indépendante.
-- Routage reste ORS par défaut. Aucun appel Valhalla sans `VALHALLA_ENABLED=1`.
-- Ombre après réponse ; mesures 90 jours sans compte ni coordonnées. Tracés divergents admin seulement, 30 jours.
-- Image officielle `3.9.0` fixée par digest. Voir [exploitation préparée](valhalla/README.md).
-- **Aucun Podman, swap ni service Valhalla installé sur VPS. Aucun backend phase 2 déployé.**
-- Tests locaux backend : **102 réussis, 0 échec**, relancés par Codex après correction de rétention.
-  Purge ombre au démarrage puis chaque heure, même sans trajet ; lectures filtrées immédiatement par durée de conservation.
-  Arthur demande contrôles ciblés, sans répétition des campagnes déjà réussies. Validation téléphone par Arthur.
-  SQL/PostGIS réel, moteur réel, build France, p95, notification et rollback réels : **à vérifier**.
-- Proximité frontière : contrôle d'accroche ne constitue pas frontière géographique exacte.
-  Ne pas valider passage admins/tous avant essais Belgique et cas proches frontière.
+## Livraisons récentes
 
-## Collecte en cours
-
-- Contrôle **27/09 02:43** : **10 trajets enregistrés**, dont **3 exploitables** sur iOS 1.0.0 (2).
-  Un trajet supplémentaire depuis contrôle 26/09 20:25 ; quatre relevés ETA présents pour chacun des trois trajets.
-  Sept anciens trajets restent exclus faute de mesures. `routing.route_log` : **363 lignes** ; ce nombre ne compte pas trajets terminés.
-  `/health` public HTTP 200. Aucune conclusion sur trajets non reçus ; nombre attendu inconnu.
-- Corrections mobiles préparées le 26/09 avec Claude Opus 5.5 : résumé arrivée conservé jusqu'à fermeture,
-  popups routiers limités à 300 m, véhicule local esthétique. Critère arrivée, champs/API collecte et backend inchangés.
-  Android **1.0.1 (5)** compilé ; iOS **1.0.0 (3)** prêt pour Codemagic, compilation non effectuée localement.
-  Versions Android (4) et iOS (2) continuent collecte ; aucune mise à jour obligatoire pour amis cette nuit.
-  Vérification téléphone reste à faire. Aucun test de trajet supplémentaire exigé avant installation facultative des nouvelles apps.
-
-- Durée : 2 à 3 semaines depuis le 25/09 (D1.3), donc un premier bilan entre le 09/10 et le 16/10.
-- Rapport ETA sur le VPS : `cd /opt/eona-backend && node bin/eona-eta-report.js data/accounts.json`.
-- Banc et journal de routage : requêtes SQL dans `README.md` §7 bis.
-- Après la collecte : chiffrer la cible (D1.3) et la largeur d'intervalle qui rend une tranche
-  concluante (D1.6).
-
-Premiers signaux, 6 trajets en ville le vendredi à 19 h 30 : rien à conclure. La route ORS est
-souvent plus lente que la meilleure route TomTom, de 4 à 11 min sur 4 trajets. ORS sous-estime
-beaucoup la durée (14 min annoncées contre 29 min pour TomTom). Toulouse (Capitole → Rangueil) fait
-1,9 km sur des petites routes, contre 0,65 km pour TomTom.
+- 01/10 : budget HERE mensuel **estimé 5 €**, cache 60 s, appels identiques partagés, quotas persistants.
+- Détours : durées HERE comparées sur même portion ; fermeture ou contrôle incomplet refuse variante.
+- EONA complète HERE. Couverture seule ne coupe plus HERE avant preuve de précision.
+- 02/10 : Rapide / Éco, `preference`, `timed=1`, temps HERE au départ du trajet.
+- 04/10 : multi-arrêts `via`, 10 étapes au plus, cache distinct, aucune arrivée intermédiaire.
+- 04/10 : Scooter 50 / Sans permis, `vehicle=moped`, Valhalla `motor_scooter`, 45 km/h, sans HERE.
+- 04/10 : recherche enseigne + commune, catégorie `suggestion`, lieux manuels `search/extra.sql`.
+- 05/10 : champ additif `roads`, X1 E.Leclerc Orly et X2 Fitness Park Orly en service selon bilan.
+- 05/10 : branches cloud intégrées. iOS `main` poussé à `252fb9d`, build 30 ; x_radar fusionné localement.
 
 ## Points ouverts
 
-- Heure de remise à zéro du quota TomTom : à vérifier (le compteur suppose minuit UTC).
-- Seuil « nettement plus de km » (itinéraires bizarres) : thème 4, après quelques jours de banc.
-- Politique de confidentialité : inexacte jusqu'à la phase 5, risque accepté (D8.2).
-- Revue Codex reprise : arrivée automatique, départ réel, pauses, relevés ETA, `retargeted`, sérialisation Android/iOS et filtre rapport.
-  Contrôles exécutés : 14 assertions sur exclusions, pauses après relevé, variantes, tolérance et heures Paris, toutes réussies.
-  Aucun défaut trouvé dans chaîne relue. Libellés historiques F1–F4 absents du dépôt : correspondance exacte non reconstructible.
-  Collecte bout en bout confirmée le 26/09 à 20:25 sur deux nouveaux trajets iOS après aller-retour signalé par Arthur.
-  Autres situations et Android restent à couvrir ; deux trajets ne suffisent pas pour bilan de précision.
-- Signalisation : reconstruction automatique 27/09 03:30–03:46 réussie.
-  Puis lot recherche + feux `620462b` déployé 27/09 18:13 (accord Arthur), hors Valhalla : voir `REPRISE-RECHERCHE-SIGNALISATION.md`.
-  Sauvegarde `/opt/eona-backend-src-backup-20260927-175606.tgz`. Backend redémarré 18:12:58 ; `/health` local et public `ok`.
-  `rebuild.sh`/`import.sh` production inchangés ; chaîne Valhalla toujours locale.
-- **Banc 27/09 18:00 : 0/6**, erreur `routing budget reached`, avant début déploiement.
-  `/health` 17:52 : ORS 2 clés bloquées jusqu'au 28/09 00:00 UTC (201 et 45 appels), `budgetLeft` 0. Cause à diagnostiquer.
-- Sauvegardes uniquement sur le VPS, aucune copie ailleurs.
+- **Précision ETA : à mesurer.** Instrumentation livrée ne constitue pas bilan de précision.
+- Dernier bilan documenté du 03/10 : 5 trajets `dynamic` exploitables, échantillon insuffisant pour conclusion générale.
+- Scooter : exclusion `motorroad=yes` encore non prouvée. Test A 6b / D 7 prouve seulement ce trajet sans autoroute.
+- Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
+- X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
+- Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
+- Build iOS 30 et tests téléphone : validation par Arthur, résultat à documenter.
+- Phases 6 à 8 : statut futur en attente de réponse d'Arthur ; aucune implémentation demandée.
 
-## Ménage du 28/09 (aspirateurs)
+## Documents
 
-Cause : recalcul tous les 150 m (hors route mesuré au sommet, pas au segment). Corrigé Android (7), iOS (5).
-Revue des autres aspirateurs, décisions d'Arthur :
-- **TomTom coupé partout** jusqu'à l'ETA dynamique : interrupteur `TOMTOM_ENABLED` (absent = aucun appel).
-  Trafic `/api/traffic/route` et `/faster` : 503, apps gèrent déjà. Recherche : Photon + BAN seuls. Banc : cron retiré.
-- **Présence** : position seulement en trajet, plus une à la fermeture de l'app (`closing`). Hors trajet en
-  arrière-plan : aucun ping. Serveur jette les positions hors trajet des anciennes apps.
-- **Limite de vitesse hors route** : requête tous les 100 m au lieu de 40 m.
-- **Code mort supprimé** : Android `data/geocoding`, `SignApi.near` ; iOS `SignAPI.near` ;
-  backend `/api/live/position` et `/api/live/near`.
-- **Copies `accounts.backup-*`** : gardées 14 jours (jamais purgées avant).
-- **Signalements** : rechargés toutes les 30 s, toutes les 90 s après 2 min d'arrêt (Android 9, iOS 7).
-- Gardé : `avoid=traffic` (contrat `/api/route`), ORS en secours et en ombre encore un peu (Arthur), `signs_prev` (retour arrière).
-- Batterie (GPS en arrière-plan hors trajet) : pas un sujet pour l'instant (Arthur).
-- **Déployé 28/09 20:34** (accord Arthur) : sauvegarde `/opt/eona-backend-src-backup-20260928-2034.tgz`, `/health` ok, trafic `null`.
-  Quarantaine `/root/eona-quarantaine-20260928/` : cron `eona-bench`, `liste-des-passages-a-niveau.geojson`, `signs-cache/`,
-  `ors-usage.json.bak-20260927-1938`, `bench-intensif.sh`, 4 anciennes sauvegardes `src` (3 dernières gardées).
-- Politique de confidentialité : collecte réduite, texte à réécrire en phase 5.
-
-## Corrections du 28/09 soir (Arthur)
-
-- **3.2 Guidage autoroute** : étapes Valhalla avec `exitNumber`, `towardRefs`, `toward` (additif, vides pour ORS).
-  Bannière : pastille « Sortie 8 », ligne « N 104 · Sénart, Corbeil-Essonnes ». Voix courte : « prenez la sortie 8 vers Sénart ».
-- **3.3 Curseur qui tremble à l'arrêt** : filtre d'arrêt (Android `StandstillFilter.kt`, iOS `StandstillFilter.swift`).
-  Arrêté : position figée, cap gelé, 0 km/h. Départ seulement si les fixes s'éloignent vraiment.
-- **3.4 Arrêter le trajet** : résumé affiché (« Trajet terminé ») et trajet enregistré, comme à l'arrivée.
-  Groupe et partage : inchangés (pas de « arrivé » annoncé à tort). Mesure ETA : trajet toujours `arrived: false`.
-- **Déployé 28/09 21:17** : sauvegarde `/opt/eona-backend-src-backup-20260928-2117.tgz`, `/health` ok ; vérifié Paris-Évry : sortie 8, N 104, Sénart.
-- **3.1 Sens des radars : option 1 seule** (Arthur, 28/09 22:20) :
-  - « Pas dans mon sens » sur l'alerte radar : 2 votes à moins de 45° = radar muet dans ce sens pour tous
-    (admin : 1 vote suffit) ; muet tout de suite pour le votant, tant que l'app tourne ;
-  - sans vote : le radar sonne dans les deux sens, comme avant.
-  - Option 2 (sens aspiré sur le site officiel) supprimée : faite par erreur à 21:31 (Arthur avait mal
-    compris la question). Collecte arrêtée à 22:20 ; cron, `radar-directions.json` et journal en
-    quarantaine `/root/eona-quarantaine-20260928/radar-directions/` ; code retiré.
-  - **Retrait déployé 28/09 à 22:38** par Codex, accord Arthur : `config.js` et `radars/store.js` remplacés.
-    Module, script et cron source obsolètes déplacés dans `radar-directions/code-20260928-223651/`, sous la quarantaine précédente.
-    Sauvegarde vérifiée : `/opt/eona-backend-src-backup-20260928-223651.tgz` (src, manifests, script et cron source).
-    Backend actif ; `/health` local HTTP 200, public `status: ok`. API publique : 83 radars vérifiés, tous avec `quietCourse`, aucun avec `course`.
-    Aspirateur arrêté ; cron actif et fichier de directions absents. 3 309 radars chargés après redémarrage.
-  - **iOS 1.0.0 (10)** : `f98041b` poussé sur `main`. `RadarAPI.notMyWay` vérifie le JSON optionnel avant lecture.
-    Compilation et tests Swift restent à lancer par Arthur sur Codemagic. Aucun build iOS local.
-  - **Android 1.0.1 (12)** : APK existant, produit par Claude à 22:23 ; aucun nouveau build pendant reprise.
-    Vérifications Codex : test ciblé votes réussi (1/1), différences Git sans erreur, fichiers déployés identiques par SHA-256.
-    Relecture Claude indisponible : quota mensuel atteint. Aucun nouveau chantier repris.
-
-## Phase 3 finie, phase 4 commencée (29/09)
-
-- **`routingEngine=all`** le 29/09 (Arthur) : tout le monde sur Valhalla, ORS en secours et en ombre.
-  Avant : admins seuls, 136 routes, 0 erreur, 0 repli, 16 ms en moyenne.
-- **Phase 4, lot 1 : ETA dynamique** (D2.1, D2.4), sans TomTom (coupé) :
-  - apps : `EtaEstimator` (Kotlin `core/drive`, Swift `EonaCore/Drive`, 4 tests Swift) ;
-    temps restant = base du moteur répartie par durées d'étapes + bouchons encore devant ;
-    avec TomTom plus tard : base = temps TomTom moins ses bouchons listés ;
-  - arrivée affichée bouge seulement de 1 min ou plus (`ArrivalClock`) ; HUD, partage, groupe et
-    mesures (`etaChecks`) sur la même ETA ; mode d'ETA enregistré `dynamic` ;
-  - backend : `/api/traffic/route` sans TomTom rend les bouchons EONA (plus de 503), `source` sur chaque section ;
-  - Android 1.0.1 (14), iOS 1.0.0 (12).
-- **Lot 1 déployé** le 29/09 à 14:46 (sauvegarde `/opt/eona-backend-src-backup-20260929-1446.tgz`).
-- **Lot 2 : recalage TomTom sur événement** (D2.2, D3.1) : `TrafficRefresh` (Kotlin, Swift) ; TomTom à la nouvelle route,
-  écart d'arrivée ≥ 2 min et ≥ 10 % du restant, bouchon TomTom dépassé, ou au plus tard 5/10/15 min selon le restant
-  (valeurs de départ, à mesurer) ; reste du trajet seulement ; EONA et data.gouv toutes les 2 min sans TomTom.
-  Backend : budget du jour 2 300 (ETA 1 700, `/faster` 400, banc à part), une requête TomTom par minute et par compte,
-  `minGapS` 10 min passé 50 % de la part ETA, 20 min passé 80 %, puis plus de TomTom.
-- **Lot 3 : data.gouv** (D2.6, D3.2) : `src/traffic/datagouv.js` ; vitesses QTV (507 stations placées, retard contre 90 %
-  de la limite OSM) et événements DIR (fermetures, travaux, incidents, files) ; interrupteur `trafficDatagouv` (admin,
-  actif par défaut) ; apps : chaque source entière (`raw`), fusion côté app, deux ETA enregistrées par relevé.
-- **Sytadin** : pas de flux ouvert trouvé (data.gouv, transport.data.gouv, Bison Futé sans station IDF, Cerema).
-  sytadin.fr : « Toute reproduction interdite sans l'accord écrit préalable de la DiRIF ». Source prête à brancher
-  dès qu'Arthur donne l'adresse d'un jeu ouvert ou l'accord DiRIF.
-- **Lot 4** : option « Éviter les ferries » (D4.2) ; « À propos » : Valhalla, TomTom, DIR data.gouv (D8.1).
-- Android 1.0.1 (15), iOS 1.0.0 (14) (build 13 : test `AccountAPITests` cassé par un NSNull dans `etaChecks`, corrigé).
-- **Lots 2 à 4 déployés le 29/09 à 22:19** (accord Arthur) : sauvegarde `/opt/eona-backend-src-backup-20260929-2219.tgz`,
-  TomTom rallumé (drop-in `tomtom-on.conf`, `TOMTOM_ENABLED=1`). `/health` : plafond 2 300, data.gouv 503 stations,
-  868 vitesses, 465 événements, aucune erreur.
-
-## TomTom remplacé par HERE (29-30/09, Arthur)
-
-- **HERE Traffic API v7** (offre standard ; Deep Coverage plus tard, `HERE_DEEP_COVERAGE=1`) : vitesses et
-  incidents dans un couloir autour du reste du trajet (`src/traffic/here.js`), 2 requêtes par rafraîchissement.
-  Tarifs relevés sur here.com le 29/09 : Traffic 5 000 gratuites par mois puis 2,33 € les 1 000 ; Advanced
-  Traffic (Deep Coverage) 2 500 gratuites puis 4,66 € les 1 000.
-- Pas de plafond global (Arthur) ; garde par compte : un rafraîchissement par minute, 150 par jour ; `/faster` une
-  vérification par minute. Compteur jour et mois dans `/health` `traffic.here`.
-- **Vitesses EONA** (`src/traffic/speeds.js`, `POST /api/traffic/speeds`) : échantillons anonymes pendant les
-  trajets avec « Aide au trafic partagé » (clé aléatoire du trajet), 30 min en mémoire. Route couverte à 80 % par
-  les conducteurs : HERE pas appelé. Plus d'EONA, moins de HERE.
-- `/faster` : temps = temps moteur + retards live (HERE + conducteurs), plus de chronométrage TomTom.
-- **TomTom retiré** : trafic, `/faster`, recherche POI, banc (historique gardé, lecture seule).
-- Apps : source « here », vitesses partagées, `etaS` envoyé à `/faster`, « À propos ». Android 1.0.1 (16), iOS 1.0.0 (15).
-- **Recherche : moteur EONA** (30/09, option A d'Arthur ; Google écarté : ses conditions EEE interdisent d'afficher
-  les lieux Places près d'une carte non Google). Index OSM dans PostGIS (schéma `search`, 2,4 M lieux, rebuild hebdo
-  dans la chaîne geodata) + BAN ; Photon en secours seulement. 30 à 100 ms. README §5 bis.
-- Déployé 30/09 nuit : HERE (TomTom en quarantaine `/root/eona-quarantaine-20260930-here/`), doublons HERE
-  corrigés, recherche EONA. Android 1.0.1 (17), iOS 1.0.0 (16) : crédit OSM pour la recherche.
-
-## Icônes de signalement (30/09)
-
-- Les 15 SVG d'Arthur (`Downloads/assets/newsvg`) partout : marqueurs carte (un par type de signalement,
-  radars compris), boutons Signaler, alertes, interrupteurs. Android 1.0.1 (18) `8cb51c2`, iOS build 17 `84fce33`.
-
-## Phase 5 faite (30/09)
-
-- Politique de confidentialité (30/09/2026) : HERE à la place de TomTom, Valhalla sur nos serveurs, ORS en
-  secours et en comparaison, vitesses partagées, avis « Pas dans mon sens », rapports de bug et trajet joint,
-  présence (position seulement en trajet, une fois à la fermeture), mesures d'ETA des trajets, journal de
-  routage, mode ombre, recherche (index EONA, BAN et Photon reçoivent texte + position), Cloudflare à la place
-  de Tailscale, sauvegardes 14 jours.
-- CGU 1.2, article 11.1 : Valhalla, ORS en secours, HERE, data.gouv (DIR), BAN, Photon, Spotify. Sans nouvelle
-  acceptation (D8.3).
-- **Pages en ligne le 30/09 à 22:18** (accord Arthur).
-
-## Constat ETA (30/09, 15:00, trajet d'Arthur Choisy → Tour Eiffel)
-
-Mesuré sur le VPS, même route (Valhalla, 22,9 km) :
-
-| Source | Durée |
-|---|---|
-| Valhalla seul (ce que l'app affichait) | 26,7 min |
-| EONA avec retards HERE (bouchons seulement, contre vitesse fluide HERE) | 34,1 min |
-| Valhalla + vitesse HERE mesurée sur les 16 km couverts | 40 min |
-| **HERE Route Import sur notre route, trafic compris** | **53,1 min** (sans trafic 30,6, habituel 40,4) |
-| HERE Routing, meilleure route (27,5 km) | 47,8 min |
-| Waze (capture d'Arthur) | 50 min, 30 km |
-
-- Valhalla trop optimiste : sur les 16 km couverts par HERE, 18,1 min contre 22,7 min à vitesse fluide HERE.
-- EONA ne compte que le surplus des bouchons (facteur ≥ 2) contre la vitesse fluide HERE : l'écart de base reste.
-- Rues hors couverture HERE (6,9 km) : feux et carrefours sous-estimés.
-- `/faster` jamais appelé le 30/09 (compteur 0) : option « Éviter les bouchons » sans doute coupée.
-- **Correctif codé (30/09, Arthur : « 27 min pour la tour Eiffel depuis Choisy c'est impossible »)** : à chaque
-  rafraîchissement HERE, notre route chronométrée par HERE Route Import (1 requête, 0,5 s ; testé Paris-Marseille
-  775 km, 3 000 points acceptés) renvoyée en `travelS` ; les apps partent de ce temps moins les bouchons HERE listés
-  (comme avec TomTom). Correspondance refusée si la longueur HERE s'écarte de plus de 10 %. Coût : 2 500 gratuites
-  par mois, puis 4,66 € les 1 000. Android 1.0.1 (19), iOS build 18. **Déployé 30/09 22:18** (sauvegarde `/opt/eona-backend-src-backup-20260930-2218.tgz`).
-
-## Prochaine étape
-
-1. Arthur : tests téléphone de l'ETA (Android 19, iOS 18), puis bilan.
-2. Phase 6 : fermetures et travaux dans Valhalla.
-3. Arthur : moyen de paiement HERE (Base Plan), plus tard. Clé HERE gardée (choix d'Arthur). ORS gardé en secours.
+- `PLAN-VALHALLA.md` : plan initial validé le 25/09 ; lire statuts actuels dans ce fichier.
+- `VALHALLA-DECISIONS.md` : décisions et mesures datées ; dernières décisions remplacent anciennes hypothèses.
+- `../BILAN-SESSION-CLAUDE-20261005.md` : bilan cloud du 02/10 au 05/10.
+- `CHECKLIST-TRAJETS.md` : trajets et points à vérifier par l'équipe.
+- `API-WEBAPP.md` : contrat de la console, ajouts API et confidentialité.
+- `../README.md` : exploitation backend ; `valhalla/README.md` : installation et retour arrière du moteur.

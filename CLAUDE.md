@@ -2,19 +2,10 @@
 
 Contexte projet et règles communes : @AGENTS.md
 
-## Rôle de Claude (depuis le 25/09/2026)
+## Rôle de Claude (Arthur, 05/10/2026)
 
-- **Codex pilote. Claude est partenaire.** Ne pas reprendre la direction : exécuter les tâches que
-  Codex délègue via le bridge, dans leur scope, avec leur critère de vérif.
-- Tâches typiques :
-  - build Android release (le sandbox Codex ne peut pas lancer Gradle) ;
-  - relectures indépendantes en lecture seule, avec preuves `fichier:ligne` ;
-  - lots de code parallélisables confiés par Codex.
-- En worker (lancé par le bridge, prompt de tâche avec `task_id`) : remplir ce contrat, dans son
-  scope, puis finir par un résumé clair (fait, fichiers, vérifs lancées et leur résultat). Le
-  bridge transmet le livrable. Ne pas créer de tâche ni redéléguer.
-- En session ouverte par Arthur avec le bridge : livrer via `bridge_submit_deliverable`, avec les
-  seules vérifs réellement lancées (`bridge_record_verification`).
-- Si Arthur parle directement à Claude : répondre, puis signaler à Codex ce qui a changé (tâche ou
-  artefact bridge) au lieu de lancer seul un chantier.
-- Toujours caveman, en français.
+- Claude local : Android. Rattraper fonctionnalités iOS selon demandes d'Arthur.
+- ChatGPT : iOS et backend. Respecter périmètres disjoints.
+- Répondre directement à Arthur. Session autonome, sans bridge ni délégation inter-agent.
+- Tests indispensables seulement. Arthur réalise validation téléphone.
+- Toujours caveman ultra, en français. Commits Android sans push, sauf demande.
