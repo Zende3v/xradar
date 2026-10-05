@@ -116,6 +116,44 @@ object EonaIcons {
         moveTo(4f, 7f); lineTo(20f, 7f); moveTo(4f, 12f); lineTo(20f, 12f); moveTo(4f, 17f); lineTo(20f, 17f)
         moveTo(9f, 5f); lineTo(9f, 9f); moveTo(15f, 10f); lineTo(15f, 14f); moveTo(8f, 15f); lineTo(8f, 19f)
     }
+    /** Stationnement : le P. */
+    val Parking = line("Parking", width = 1.9f) {
+        moveTo(6f, 4f); lineTo(18f, 4f); lineTo(20f, 6f); lineTo(20f, 18f); lineTo(18f, 20f); lineTo(6f, 20f); lineTo(4f, 18f); lineTo(4f, 6f); close()
+        moveTo(10f, 16.5f); lineTo(10f, 7.5f); lineTo(13f, 7.5f); arcTo(2.5f, 2.5f, 0f, false, true, 13f, 12.5f); lineTo(10f, 12.5f)
+    }
+    /** Véhicule garé : voiture. */
+    val ParkCar = line("ParkCar", width = 1.9f) {
+        moveTo(4f, 16f); lineTo(4f, 12.5f); lineTo(6.2f, 8f); lineTo(17.8f, 8f); lineTo(20f, 12.5f); lineTo(20f, 16f); close()
+        moveTo(4f, 12.5f); lineTo(20f, 12.5f)
+        circle(7.5f, 17f, 1.6f); circle(16.5f, 17f, 1.6f)
+    }
+    /** Véhicule garé : moto. */
+    val ParkMoto = line("ParkMoto", width = 1.9f) {
+        circle(6f, 16f, 3f); circle(18f, 16f, 3f)
+        moveTo(6f, 16f); lineTo(10f, 11f); lineTo(14.5f, 11f); lineTo(18f, 16f)
+        moveTo(14.5f, 11f); lineTo(13f, 7.5f); lineTo(15.5f, 7.5f)
+    }
+    /** Véhicule garé : vélo. */
+    val Bicycle = line("Bicycle", width = 1.9f) {
+        circle(6f, 16f, 3.2f); circle(18f, 16f, 3.2f)
+        moveTo(6f, 16f); lineTo(9.5f, 9.5f); lineTo(15f, 9.5f); lineTo(18f, 16f)
+        moveTo(9.5f, 9.5f); lineTo(12f, 16f); lineTo(15f, 9.5f)
+        moveTo(8.5f, 7.5f); lineTo(10.5f, 7.5f); moveTo(15f, 9.5f); lineTo(14f, 6.5f); lineTo(16f, 6.5f)
+    }
+    /** Véhicule garé : trottinette. */
+    val KickScooter = line("KickScooter", width = 1.9f) {
+        circle(6f, 18f, 1.8f); circle(18f, 18f, 1.8f)
+        moveTo(7.8f, 18f); lineTo(14f, 18f); lineTo(16.5f, 6f); lineTo(19f, 6f)
+        moveTo(16.5f, 6f); lineTo(14.5f, 6f)
+    }
+    /** « Y aller à pied ». */
+    val Walk = line("Walk", width = 1.9f) {
+        circle(13f, 4.5f, 1.7f)
+        moveTo(12f, 8f); lineTo(10f, 14f); lineTo(7.5f, 20f)
+        moveTo(10f, 14f); lineTo(13.5f, 16f); lineTo(14.5f, 20f)
+        moveTo(12f, 8f); lineTo(15.5f, 11.5f); lineTo(18f, 12f)
+        moveTo(12f, 8f); lineTo(8.5f, 10.5f); lineTo(7f, 13f)
+    }
     /** Protection pluie : écran verrouillé. */
     val Lock = line("Lock") {
         moveTo(6.5f, 11f); lineTo(17.5f, 11f); lineTo(17.5f, 20f); lineTo(6.5f, 20f); close()
@@ -351,3 +389,11 @@ private fun line(
         pathBuilder = block,
     )
 }.build()
+
+/** Un cercle de centre ([cx], [cy]) et de rayon [r], en deux demi-arcs. */
+private fun PathBuilder.circle(cx: Float, cy: Float, r: Float) {
+    moveTo(cx - r, cy)
+    arcToRelative(r, r, 0f, true, true, 2 * r, 0f)
+    arcToRelative(r, r, 0f, true, true, -2 * r, 0f)
+    close()
+}

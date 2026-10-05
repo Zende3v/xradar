@@ -226,6 +226,10 @@ fun DriveScreen(
     var confirmStop by remember { mutableStateOf(false) }
     /** La feuille « Étapes ». */
     var stopsOpen by remember { mutableStateOf(false) }
+    /** La feuille « Stationnement » ; [parkingFocus] : repère touché sur la carte, sa fiche d'abord. */
+    var parkingOpen by remember { mutableStateOf(false) }
+    var parkingFocus by remember { mutableStateOf<String?>(null) }
+    val parked by com.eona.app.data.parking.ParkingRepository.spots.collectAsStateWithLifecycle()
     // Protection pluie (iOS updateRainLock) : verrou à 15 km/h, levé sous 10. Un feu rouge
     // déverrouille, un ralentissement non. GPS perdu : levé, jamais bloqué sans vitesse connue.
     val settingsNow by AppPreferences.settings.collectAsStateWithLifecycle()
@@ -254,6 +258,7 @@ fun DriveScreen(
             limitReportOpen = false
             shareOpen = false
             stopsOpen = false
+            parkingOpen = false
             card = null
             audioMenu = null
             pendingDelete = null
@@ -297,6 +302,11 @@ fun DriveScreen(
             preview = RoutePreview.of(choice, choiceHeightPx + choiceInsetPx),
             stops = stops,
             onStopTap = { stopsOpen = true },
+            parking = parked,
+            onParkingTap = { id ->
+                parkingFocus = id
+                parkingOpen = true
+            },
             onMemberTap = group?.let { session -> { id: String -> card = session.cardTarget(id) } },
         )
 
@@ -691,6 +701,21 @@ fun DriveScreen(
                     border = BorderStroke(1.dp, colors.border),
                     size = MAP_CONTROL_SIZE,
                 )
+                // « Stationnement » hors trajet : repères posés, gérés dans la feuille.
+                if (state.trip == null) {
+                    EonaIconButton(
+                        icon = EonaIcons.Parking,
+                        contentDescription = "Stationnement",
+                        onClick = {
+                            parkingFocus = null
+                            parkingOpen = true
+                        },
+                        tint = if (parked.isNotEmpty()) ParkingBlue else colors.textSecondary,
+                        background = colors.surface.copy(alpha = 0.62f),
+                        border = BorderStroke(1.dp, colors.border),
+                        size = MAP_CONTROL_SIZE,
+                    )
+                }
                 // Primary crowdsourcing action: signal something on the road. Neutral glass and a
                 // grey triangle, like the other controls (no orange, no glow).
                 EonaIconButton(
@@ -709,6 +734,16 @@ fun DriveScreen(
                     size = MAP_CONTROL_SIZE,
                 )
             }
+        }
+
+        if (parkingOpen) {
+            // Véhicule d'un nouveau repère, tiré du véhicule des réglages.
+            val vehicle = when (settingsNow.vehicleType) {
+                com.eona.app.data.preferences.VehicleType.Motorcycle, com.eona.app.data.preferences.VehicleType.Scooter50 ->
+                    com.eona.app.core.model.ParkedVehicle.Motorcycle
+                else -> com.eona.app.core.model.ParkedVehicle.Car
+            }
+            ParkingSheet(vehicle = vehicle, focus = parkingFocus, onClose = { parkingOpen = false })
         }
 
         if (stopsOpen) {

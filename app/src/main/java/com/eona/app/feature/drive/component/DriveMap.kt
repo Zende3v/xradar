@@ -38,6 +38,8 @@ import com.eona.app.core.model.AlertType
 import com.eona.app.core.model.Radar
 import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.RouteChoice
+import com.eona.app.feature.drive.ParkingBlue
+import com.eona.app.feature.drive.icon
 import com.eona.app.core.model.RoutePreference
 import com.eona.app.core.model.UserReport
 import com.eona.app.data.preferences.AppPreferences
@@ -132,6 +134,9 @@ fun DriveMap(
     /** Étapes du trajet, numérotées dans l'ordre ; touchées : leur liste. */
     stops: List<com.eona.app.core.model.Place> = emptyList(),
     onStopTap: (() -> Unit)? = null,
+    /** Véhicules garés : repères bleu acier ; touchés : leur fiche. */
+    parking: List<com.eona.app.core.model.ParkingSpot> = emptyList(),
+    onParkingTap: ((String) -> Unit)? = null,
 ) {
     // Compose previews have no GL context — show a plain backdrop instead.
     if (LocalInspectionMode.current) {
@@ -176,6 +181,8 @@ fun DriveMap(
     val latestOnGesture by rememberUpdatedState(onUserGesture)
     val latestOnReportTap by rememberUpdatedState(onReportTap)
     val latestOnStopTap by rememberUpdatedState(onStopTap)
+    val latestOnParkingTap by rememberUpdatedState(onParkingTap)
+    val parkingPainters = com.eona.app.core.model.ParkedVehicle.entries.map { it to rememberVectorPainter(it.icon) }
     val locationState = rememberUpdatedState(location)
     val followingState = rememberUpdatedState(following)
     val speedLimitState = rememberUpdatedState(speedLimitKmh)
@@ -281,6 +288,12 @@ fun DriveMap(
                         CLUSTER_ZOOM_MS,
                     )
                     return@addOnMapClickListener true
+                }
+                latestOnParkingTap?.let { open ->
+                    ready.queryRenderedFeatures(screen, PARKING_LAYER).firstOrNull()?.getStringProperty("pid")?.let { id ->
+                        open(id)
+                        return@addOnMapClickListener true
+                    }
                 }
                 latestOnStopTap?.let { open ->
                     if (ready.queryRenderedFeatures(screen, STOPS_LAYER).isNotEmpty()) {
@@ -421,6 +434,18 @@ fun DriveMap(
                 ).also { it.setFilter(Expression.not(Expression.has(CLUSTER_COUNT))) },
             )
             addBadgeClusterLayer(style, REPORT_SOURCE, REPORT_CLUSTER, CLUSTER_ALERT_IMAGE, alertOffsetEm, darkMap)
+            // Véhicules garés : disque bleu acier, pictogramme du véhicule.
+            parkingPainters.forEach { (vehicle, painter) ->
+                style.addImage("park-${vehicle.wire}", markerBitmap(painter, markerPx + stopPinExtraPx, ParkingBlue, density))
+            }
+            style.addSource(GeoJsonSource(PARKING_SOURCE))
+            style.addLayer(
+                SymbolLayer(PARKING_LAYER, PARKING_SOURCE).withProperties(
+                    PropertyFactory.iconImage(Expression.get("icon")),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                ),
+            )
             // Étapes numérotées : disque accent, numéro blanc, au-dessus des signalements.
             (1..MAX_STOP_PINS).forEach { n -> style.addImage("stop-$n", stopPinBitmap(n, markerPx + stopPinExtraPx, accent)) }
             style.addSource(GeoJsonSource(STOPS_SOURCE))
@@ -517,6 +542,21 @@ fun DriveMap(
     LaunchedEffect(traffic, styleReady) {
         val style = map?.style ?: return@LaunchedEffect
         if (styleReady) applyTraffic(style, drawnPath, routeFrom[0], traffic, accentState.value)
+    }
+
+    LaunchedEffect(map, styleReady, parking) {
+        val style = map?.style ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        style.getSourceAs<GeoJsonSource>(PARKING_SOURCE)?.setGeoJson(
+            FeatureCollection.fromFeatures(
+                parking.map { spot ->
+                    Feature.fromGeometry(Point.fromLngLat(spot.lon, spot.lat)).apply {
+                        addStringProperty("icon", "park-${spot.vehicle.wire}")
+                        addStringProperty("pid", spot.id)
+                    }
+                },
+            ),
+        )
     }
 
     LaunchedEffect(map, styleReady, stops) {
@@ -1320,6 +1360,8 @@ private const val ZONE_LINE = "xr-zones-line"
 private const val ROUTE_SOURCE = "xr-route"
 private const val PREVIEW_SOURCE = "xr-preview"
 private const val STOPS_SOURCE = "xr-stops"
+private const val PARKING_SOURCE = "xr-parking"
+private const val PARKING_LAYER = "xr-parking-pins"
 private const val STOPS_LAYER = "xr-stops-pins"
 private const val MAX_STOP_PINS = 10
 private const val PREVIEW_OTHER = "xr-preview-other"
