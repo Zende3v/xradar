@@ -31,6 +31,9 @@ irréversibles.
 - Rapports courts : ce qui est fait, où, ce qu'il doit trancher.
 - Design premium sur mesure, inspiré d'Apple. Refus du look Material ou « interface générée par
   IA ». Chaque écran a tous ses états (chargement, erreur, vide).
+- DA EONA : OLED `#0A0A0C`, bordures ultra-fines `0,5` blanc `8 %`, verre dépoli, accents minéraux et ambre.
+- Hiérarchie strictement à gauche. Micro-libellés majuscules, lettres espacées. Textes minimaux, directs, proches d'iOS.
+- Interdits : cartes centrées génériques, ombres floues lourdes, rayons uniformes `16`, dégradés violets ou bleus, remplissage marketing.
 
 ## Repos
 
@@ -64,7 +67,7 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 32. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 33. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
