@@ -5,7 +5,7 @@ Mis à jour : **05/10/2026**. Backend déployé, contrôles ciblés validés.
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
-- Backend **`d2e505d`** en production. iOS **`1bda35e`**, build **34**, poussé ; Arthur lance Codemagic et tests téléphone.
+- Backend **`d2e505d`** en production. iOS **`c2d88fe`**, build **35**, poussé ; Arthur lance Codemagic et tests téléphone.
 - ORS reste secours et comparaison en ombre. OSRM démo retiré.
 - Trafic traité dans le backend : **HERE, EONA, data.gouv**.
 - ETA dynamique dans les apps. HERE Route Import chronomètre notre tracé ; dernière durée valide conservée.
@@ -73,6 +73,8 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Radar EONA animé, offres compactes, sept avantages illustrés avec fiches natives. Carte membre, compteur et numérotation retirés.
 - Comparatif dépliable conservé. Animation suspendue hors écran, sous feuille, en arrière-plan, avec mouvements réduits.
 - Paiement toujours indisponible, signalé avant clic et dans alerte. Essai invité et accès compte EONA+ conservés.
+- 05/10 : DA iOS 34 validée sur iPhone par Arthur. Référence durable consignée dans `AGENTS.md`.
+- iOS 35 : accroche demandée, fonds gris navigation/action remplacés par OLED ; particules 18 à 21, vitesse orbitale +15 %.
 - Profil Taxi accepté sur VPS : trajet Paris de 6 070 m, péages/autoroutes/ferries exclus, aucune alerte d'exclusion ignorée.
 - Accès réservés dépend de cartographie OSM. Validation sur voies Taxi par Arthur reste à réaliser.
 
@@ -84,7 +86,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 34 : vérification statique ciblée réalisée. Compilation Codemagic et tests téléphone par Arthur ; résultats à documenter.
+- Build iOS 35 : diff vérifié, cause des bandes ciblée. Compilation Codemagic et rendu téléphone par Arthur ; résultats à documenter.
 - Perso reporté. Feux en direct toujours en préparation, cadenas gratuit ; aucune donnée réelle actuellement.
 - Catalogue iOS : Trajets intelligents `1 / jour` / `Illimités`, Feux en direct `Inclus`, selon libellés demandés par Arthur.
 - Ces libellés ne livrent aucune logique Perso ni source temps réel pour feux.
