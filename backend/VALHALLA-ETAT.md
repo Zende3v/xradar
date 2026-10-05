@@ -1,10 +1,11 @@
 # Valhalla : état du chantier
 
-Mis à jour : **05/10/2026**. Code relu, VPS contrôlé en lecture seule.
+Mis à jour : **05/10/2026**. Backend déployé, contrôles ciblés validés.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
+- Backend **`d2e505d`** en production. iOS **`4937793`**, build **31**, poussé ; Arthur lance Codemagic et tests téléphone.
 - ORS reste secours et comparaison en ombre. OSRM démo retiré.
 - Trafic traité dans le backend : **HERE, EONA, data.gouv**.
 - ETA dynamique dans les apps. HERE Route Import chronomètre notre tracé ; dernière durée valide conservée.
@@ -40,7 +41,11 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 
 ## Production documentée
 
-- Dernier déploiement backend documenté : **`f51cbbd`**, 05/10 à 01:04 ; `/health` alors OK.
+- Dernier déploiement backend : **`d2e505d`**, 05/10 à **16:07 Europe/Paris** ; `/health` local et public OK.
+- Sauvegarde code et comptes : `/opt/eona-backend-src-backup-20261005-160743.tgz`. Ancien code conservé hors dossier actif.
+- Node **20.20.2** : treize contrôles ciblés passent. Sources vérifiées contre commit ; onze comptes antérieurs conservés.
+- Contrôle production : aperçu sans débit, quatre départs acceptés, cinquième refusé, recalcul admis au plafond.
+- Taxi et groupes gratuits refusés. Compte temporaire de contrôle supprimé, fichier comptes vérifié.
 - Carte validée le 04/10 à 19:38 : **`20261004T170051Z-a788fcddd0dc`**.
 - Carte précédente documentée : `20260927T180134Z-717bad2d052c`.
 - Rebuild dimanche 03:30 : signalisation, Valhalla, recherche ; même extrait France vérifié.
@@ -60,7 +65,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - 04/10 : recherche enseigne + commune, catégorie `suggestion`, lieux manuels `search/extra.sql`.
 - 05/10 : champ additif `roads`, X1 E.Leclerc Orly et X2 Fitness Park Orly en service selon bilan.
 - 05/10 : branches cloud intégrées. iOS `main` poussé à `252fb9d`, build 30 ; x_radar fusionné localement.
-- 05/10 : iOS 31 préparé, Taxi natif Valhalla, accès invité permanent, essai EONA+ et quotas au départ.
+- 05/10 : iOS 31 poussé, backend déployé : Taxi natif, invité permanent, essai EONA+, quotas au départ, offres refaites.
 - Profil Taxi accepté sur VPS : trajet Paris de 6 070 m, péages/autoroutes/ferries exclus, aucune alerte d'exclusion ignorée.
 - Accès réservés dépend de cartographie OSM. Validation sur voies Taxi par Arthur reste à réaliser.
 
@@ -72,7 +77,8 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 30 et tests téléphone : validation par Arthur, résultat à documenter.
+- Build iOS 31 : compilation Codemagic et tests téléphone par Arthur ; résultats à documenter.
+- Perso reporté. Feux en direct toujours en préparation, cadenas gratuit ; aucune donnée réelle actuellement.
 - Phases 6 à 8 : statut futur en attente de réponse d'Arthur ; aucune implémentation demandée.
 
 ## Documents
