@@ -5,7 +5,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,10 +29,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
@@ -32,7 +47,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eona.app.R
+import com.eona.app.core.model.FuelType
 import com.eona.app.data.preferences.AccentColor
+import com.eona.app.data.preferences.CONSUMPTION_RANGE
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.data.preferences.AppTheme
 import com.eona.app.data.preferences.OverspeedWarning
@@ -85,7 +102,19 @@ fun SettingsScreen(
 
             val settings by AppPreferences.settings.collectAsStateWithLifecycle()
             SettingsGroup("Véhicule", "Protection pluie : écran verrouillé dès 15 km/h.") {
+                VehiclePicker(settings.vehicleType) { type -> AppPreferences.updateSettings { it.copy(vehicleType = type) } }
                 SettingSwitch("Protection pluie", settings.rainLock) { on -> AppPreferences.updateSettings { it.copy(rainLock = on) } }
+            }
+
+            SettingsGroup("Carburant", "Filtre des stations proches. Coût estimé des trajets.") {
+                Segmented(
+                    title = "Carburant préféré",
+                    options = FuelType.entries.map { it.label to it },
+                    selected = settings.preferredFuel,
+                    onSelect = { fuel -> AppPreferences.updateSettings { it.copy(preferredFuel = fuel, fuelNearestOnly = false) } },
+                    perRow = 3,
+                )
+                ConsumptionSetting(settings.consumption)
             }
 
             SettingsGroup("Conduite", "110 km/h sur autoroute, 100 sur voie rapide, 80 sur route.") {
@@ -151,49 +180,112 @@ private fun ThemeSetting() {
         ),
         selected = settings.theme,
         onSelect = { theme -> AppPreferences.updateSettings { it.copy(theme = theme) } },
-        hint = "L'app, la carte et le HUD ensemble. Auto suit le jour et la nuit à ta position : clair de jour, sombre de nuit.",
+        hint = "Auto : clair de jour, sombre de nuit.",
     )
 }
 
-/** "Couleur de l'app": the tint of everything interactive, and of the route drawn on the map. */
+/** « Couleur de l'app » : boutons, tracé du trajet, détails. La palette en piste, un cran par teinte. */
 @Composable
 private fun AccentSetting() {
     val settings by AppPreferences.settings.collectAsStateWithLifecycle()
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
     Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
-        EonaText("Couleur de l'app", style = EonaTheme.typography.body, color = colors.textPrimary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            EonaText("Couleur de l'app", style = EonaTheme.typography.body, color = colors.textPrimary, modifier = Modifier.weight(1f))
+            EonaText(settings.accent.label, style = EonaTheme.typography.callout, color = colors.textSecondary)
+        }
         Spacer(Modifier.height(spacing.sm))
-        AccentColor.entries.chunked(ACCENTS_PER_ROW).forEach { row ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(spacing.sm),
-                modifier = Modifier.padding(bottom = spacing.sm),
-            ) {
-                row.forEach { colour ->
-                    val chosen = settings.accent == colour
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .clip(CircleShape)
-                            .background(Color(0xFF000000.toInt() or colour.rgb))
-                            .border(if (chosen) 2.5.dp else 0.dp, colors.textPrimary, CircleShape)
-                            .clickable { AppPreferences.updateSettings { it.copy(accent = colour) } },
-                    )
-                }
-                // The last row keeps the size of the others.
-                repeat(ACCENTS_PER_ROW - row.size) { Spacer(Modifier.weight(1f)) }
+        AccentSlider(settings.accent) { colour -> AppPreferences.updateSettings { it.copy(accent = colour) } }
+    }
+}
+
+/** Glisser ou toucher choisit la teinte sous le doigt ; pastille blanche cerclée sur la piste. */
+@Composable
+private fun AccentSlider(selection: AccentColor, onPick: (AccentColor) -> Unit) {
+    val palette = AccentColor.entries
+    val haptic = LocalHapticFeedback.current
+    val pick = rememberUpdatedState { x: Float, width: Int ->
+        if (width > 0) {
+            val picked = palette[(x / width * palette.size).toInt().coerceIn(0, palette.size - 1)]
+            if (picked != selection) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onPick(picked)
             }
         }
-        EonaText(
-            "La teinte des boutons, du tracé du trajet et des détails de l'interface.",
-            style = EonaTheme.typography.footnote,
-            color = colors.textTertiary,
+    }
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(ACCENT_THUMB + 4.dp)
+            .pointerInput(Unit) {
+                detectTapGestures { pick.value(it.x, size.width) }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures { change, _ -> pick.value(change.position.x, size.width) }
+            }
+            .semantics { contentDescription = "Couleur de l'app, ${selection.label}" },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(12.dp)
+                .clip(CircleShape),
+        ) {
+            palette.forEach { colour ->
+                Box(Modifier.weight(1f).fillMaxHeight().background(Color(0xFF000000.toInt() or colour.rgb)))
+            }
+        }
+        val step = maxWidth / palette.size
+        val offset by animateDpAsState(step * (palette.indexOf(selection) + 0.5f) - ACCENT_THUMB / 2, label = "accent")
+        Box(
+            Modifier
+                .offset(x = offset)
+                .size(ACCENT_THUMB)
+                .shadow(3.dp, CircleShape)
+                .clip(CircleShape)
+                .background(Color(0xFF000000.toInt() or selection.rgb))
+                .border(3.dp, Color.White, CircleShape),
         )
     }
 }
 
-private const val ACCENTS_PER_ROW = 6
+private val ACCENT_THUMB = 30.dp
+
+/** « Consommation » : 1,0 à 30,0 L/100 km, cran de 0,1, enregistrée au lâcher. */
+@Composable
+private fun ConsumptionSetting(stored: Double) {
+    val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
+    var value by remember(stored) { mutableFloatStateOf(stored.toFloat()) }
+    val rounded = (value * 10).roundToInt() / 10.0
+    Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.sm)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            EonaText("Consommation", style = EonaTheme.typography.body, color = colors.textPrimary, modifier = Modifier.weight(1f))
+            EonaText(
+                "${"%.1f".format(rounded).replace('.', ',')} L/100 km",
+                style = EonaTheme.typography.callout,
+                color = colors.textSecondary,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = { value = it },
+            onValueChangeFinished = { AppPreferences.updateSettings { it.copy(consumption = rounded) } },
+            valueRange = CONSUMPTION_RANGE.start.toFloat()..CONSUMPTION_RANGE.endInclusive.toFloat(),
+            // Cran de 0,1 : 290 valeurs, 288 crans entre les bouts.
+            steps = 288,
+            colors = SliderDefaults.colors(
+                thumbColor = colors.accent,
+                activeTrackColor = colors.accent,
+                inactiveTrackColor = colors.surfaceHigh,
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
+        )
+    }
+}
 
 /** "Dépassement limitation": spoken, a beep of its own, or nothing. */
 @Composable
@@ -208,7 +300,7 @@ private fun OverspeedSetting() {
         ),
         selected = alerts.overspeed,
         onSelect = { warning -> AppPreferences.updateAlerts { it.copy(overspeed = warning) } },
-        hint = "Plus de 5 km/h au-dessus de la limite, puis un rappel par minute tant que ça dure. Vocal suit le bouton des annonces vocales, Bip celui du son.",
+        hint = "Au-delà de 5 km/h, rappel chaque minute.",
     )
 }
 
@@ -249,14 +341,18 @@ private fun <T> Segmented(
     selected: T,
     onSelect: (T) -> Unit,
     hint: String? = null,
+    /** Pastilles par ligne : six carburants tiennent en deux lignes de trois. */
+    perRow: Int = options.size,
 ) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
     Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
         EonaText(title, style = EonaTheme.typography.body, color = colors.textPrimary)
         Spacer(Modifier.height(spacing.sm))
+        options.chunked(perRow).forEachIndexed { index, row ->
+        if (index > 0) Spacer(Modifier.height(spacing.sm))
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
-            options.forEach { (label, value) ->
+            row.forEach { (label, value) ->
                 val on = value == selected
                 Box(
                     modifier = Modifier
@@ -275,6 +371,8 @@ private fun <T> Segmented(
                     )
                 }
             }
+            repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
+        }
         }
         if (hint != null) {
             Spacer(Modifier.height(spacing.xs))

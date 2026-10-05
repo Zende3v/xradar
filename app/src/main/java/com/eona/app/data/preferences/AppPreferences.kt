@@ -86,11 +86,11 @@ enum class AccentColor(val hex: String, val label: String) {
 }
 
 /**
- * "Véhicule", in Mon compte: the drawing of the driver's own position on the map, nothing else
- * (no routing, speed, statistics or rights). Kept on the phone only, stored as [wire] ("car",
- * "motorcycle", "taxi", "truck", as on iOS); anything else reads as an arrow.
+ * "Véhicule", dans Réglages : le dessin de la position sur la carte. Gardé sur le téléphone,
+ * stocké en [wire] ("car", "motorcycle", "taxi", "truck", comme iOS) ; inconnu = flèche.
+ * [moped] : 45 km/h, sans voie rapide (itinéraire, limites, alertes) ; autres : curseur seul.
  */
-enum class VehicleType(val wire: String, val label: String) {
+enum class VehicleType(val wire: String, val label: String, val moped: Boolean = false) {
     Arrow("arrow", "Flèche"),
     Car("car", "Voiture"),
     Motorcycle("motorcycle", "Moto"),
@@ -101,6 +101,10 @@ enum class VehicleType(val wire: String, val label: String) {
         fun fromWire(wire: String?): VehicleType = entries.firstOrNull { it.wire == wire } ?: Arrow
     }
 }
+
+/** Consommation par défaut, L/100 km : valeur de départ choisie, pas mesurée (iOS, 6,5). */
+const val DEFAULT_CONSUMPTION = 6.5
+val CONSUMPTION_RANGE = 1.0..30.0
 
 /** Look-and-feel and routing choices (persisted), edited from Réglages and the Options dock. */
 data class AppSettings(
@@ -119,6 +123,8 @@ data class AppSettings(
     val preferredFuel: FuelType = FuelType.Gazole,
     /** "Proche uniquement" in the nearby "Carburant" search: the nearest open stations, no price. */
     val fuelNearestOnly: Boolean = false,
+    /** « Consommation », L/100 km : coût estimé des trajets. 1,0 à 30,0, cran 0,1. */
+    val consumption: Double = DEFAULT_CONSUMPTION,
     /** « Permis probatoire » : limitations jeune conducteur affichées et alertes (ProbationaryLimits). */
     val probationary: Boolean = false,
     /** « Protection pluie » : écran verrouillé dès 15 km/h, levé sous 10 ou GPS perdu. */
@@ -183,6 +189,8 @@ object AppPreferences {
             avoidFerries = p.getBoolean("avoidFerries", false),
             preferredFuel = enumOrDefault(p.getString("preferredFuel", null), FuelType.Gazole),
             fuelNearestOnly = p.getBoolean("fuelNearestOnly", false),
+            consumption = p.getFloat("consumption", DEFAULT_CONSUMPTION.toFloat()).toDouble()
+                .takeIf { it in CONSUMPTION_RANGE }?.let { Math.round(it * 10) / 10.0 } ?: DEFAULT_CONSUMPTION,
             probationary = p.getBoolean("probationary", false),
             rainLock = p.getBoolean("rainLock", false),
             // Stored under its first name: the choice made before the rename stays.
@@ -260,6 +268,7 @@ object AppPreferences {
             putBoolean("avoidFerries", updated.avoidFerries)
             putString("preferredFuel", updated.preferredFuel.name)
             putBoolean("fuelNearestOnly", updated.fuelNearestOnly)
+            putFloat("consumption", updated.consumption.toFloat())
             putBoolean("probationary", updated.probationary)
             putBoolean("rainLock", updated.rainLock)
             putBoolean("shareSlowdowns", updated.sharedTraffic)

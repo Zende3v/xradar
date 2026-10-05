@@ -117,9 +117,6 @@ fun ProfileScreen(
                 GuestNote(account)
             }
 
-            // The drawing of my position on the map: a choice of this phone, never sent.
-            VehiclePicker()
-
             if (com.eona.app.data.account.GoogleAuth.isAvailable && account != null) {
                 val linked = "google" in account.providers
                 Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
