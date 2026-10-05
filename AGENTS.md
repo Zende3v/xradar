@@ -34,6 +34,8 @@ irréversibles.
 - DA EONA : OLED `#0A0A0C`, bordures ultra-fines `0,5` blanc `8 %`, verre dépoli, accents minéraux et ambre.
 - Hiérarchie strictement à gauche. Micro-libellés majuscules, lettres espacées. Textes minimaux, directs, proches d'iOS.
 - Interdits : cartes centrées génériques, ombres floues lourdes, rayons uniformes `16`, dégradés violets ou bleus, remplissage marketing.
+- EONA+ : référence Telegram Premium choisie le 05/10. Pastels mixtes, radar animé, icônes colorées, offres compactes.
+- Exception EONA+ : dégradés pastel autorisés sur emblème et action. Animation suspendue hors écran, en arrière-plan, avec mouvements réduits.
 
 ## Repos
 
@@ -67,7 +69,7 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 33. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 34. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
