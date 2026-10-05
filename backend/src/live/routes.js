@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { config } from '../config.js';
-import { authAccount, isAdminRequest } from '../accounts/auth.js';
+import { authAccount, isAdminRequest, publicView } from '../accounts/auth.js';
 import { accountStore } from '../accounts/store.js';
 import { liveStore } from './store.js';
 import { positionStore } from './positions.js';
@@ -11,11 +11,19 @@ export const liveRouter = Router();
 function presentAccount(req, res) {
   const account = authAccount(req);
   if (!account) {
+    const token = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') || '')?.[1];
+    const blocked = accountStore.blockedForToken(token);
+    if (blocked) {
+      res.status(403).json({ error: accountStore.blockReason(blocked), account: publicView(blocked) });
+      return null;
+    }
     res.status(401).json({ error: 'unauthorized' });
     return null;
   }
-  if (account.banned) {
-    res.status(403).json({ error: 'banned' });
+  const denied = accountStore.blockReason(account);
+  if (denied) {
+    liveStore.remove(account.id);
+    res.status(403).json({ error: denied, account: publicView(account) });
     return null;
   }
   return account;
@@ -61,7 +69,7 @@ liveRouter.post('/presence', guarded(async (req, res) => {
  */
 liveRouter.get('/online', guarded(async (req, res) => {
   if (!isAdminRequest(req)) return res.status(403).json({ error: 'admin only' });
-  const online = liveStore.entries();
+  const online = liveStore.entries().filter(([id]) => accountStore.accessFor(accountStore.get(id)).canNavigate);
   const points = new Map((await positionStore.live()).map((p) => [p.accountId, p]));
   const users = online.map(([id, seen]) => {
     const account = accountStore.get(id);

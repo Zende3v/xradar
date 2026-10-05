@@ -1,16 +1,18 @@
 import { config } from '../config.js';
 import { accountStore } from './store.js';
 
-/** Resolve the caller's account from a Bearer session token, or a deviceId (guests). */
+/** Bearer invalide ferme accès. Compatibilité deviceId limitée aux invités. */
 export function authAccount(req) {
   const header = req.get('authorization');
-  const m = header && /^Bearer\s+(.+)$/i.exec(header);
-  if (m) {
-    const account = accountStore.resolveToken(m[1]);
-    if (account) return account;
+  if (header !== undefined && header !== null) {
+    const token = /^Bearer\s+(\S+)$/i.exec(header)?.[1];
+    return token ? accountStore.resolveToken(token) : null;
   }
   const deviceId = req.body?.deviceId || req.query?.deviceId;
-  if (deviceId) return accountStore.getByDevice(String(deviceId));
+  if (deviceId) {
+    const account = accountStore.getByDevice(String(deviceId));
+    return account?.role === 'guest' ? account : null;
+  }
   return null;
 }
 
@@ -20,13 +22,15 @@ export function authAccount(req) {
  * actor, so that what they do can be written in the journal.
  */
 export function adminActor(req) {
-  const m = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '');
+  const header = req.get('authorization');
+  const m = /^Bearer\s+(\S+)$/i.exec(header || '');
   const token = m?.[1] ?? null;
-  if (config.adminToken && (token === config.adminToken || req.get('x-admin-token') === config.adminToken)) {
+  if (header != null && !token) return null;
+  if (config.adminToken && (token === config.adminToken || (header == null && req.get('x-admin-token') === config.adminToken))) {
     return { kind: 'token', id: null, name: 'ADMIN_TOKEN' };
   }
   const account = token ? accountStore.resolveToken(token) : null;
-  if (account?.role === 'admin' && !account.banned) {
+  if (account?.role === 'admin' && accountStore.accessFor(account).canNavigate) {
     return { kind: 'account', id: account.id, name: account.username ?? account.displayName ?? account.id };
   }
   return null;
@@ -47,7 +51,9 @@ export function publicView(account) {
     username: account.username ?? null,
     displayName: account.displayName ?? null,
     avatarUrl: account.avatarUrl ?? null,
-    banned: Boolean(account.banned),
+    banned: accountStore.blockReason(account) === 'banned',
+    suspended: Boolean(account.suspended),
+    revoked: Boolean(account.revoked),
     access: access.status,
     canNavigate: access.canNavigate,
     accessEndsAt: access.endsAt,

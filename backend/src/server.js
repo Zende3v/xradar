@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { avatarRouter } from './accounts/avatar.js';
 import { accountRouter, adminAccountRouter } from './accounts/routes.js';
 import { adminRouter } from './admin/routes.js';
+import { dashboardRouter } from './admin/dashboard.js';
 import { settingsStore } from './accounts/settings.js';
 import { accountStore } from './accounts/store.js';
 import { fuelStore } from './fuel/store.js';
@@ -127,6 +128,7 @@ export function createApp() {
   app.get('/t/:token', sharePage);
   app.get('/g/:token', groupPage);
   app.use('/api/admin/accounts', adminAccountRouter);
+  app.use('/api/admin', dashboardRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/live', liveRouter);
   app.use('/api/places', placeRouter);

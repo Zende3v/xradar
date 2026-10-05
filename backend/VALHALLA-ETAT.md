@@ -1,11 +1,13 @@
 # Valhalla : état du chantier
 
-Mis à jour : **05/10/2026**. Backend déployé, contrôles ciblés validés.
+Mis à jour : **05/10/2026**. Production conservée ; lot Pilotage EONA prêt, accord déploiement attendu.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
-- Backend **`d2e505d`** en production. iOS **`1e85ac7`**, build **36**, poussé ; Arthur lance Codemagic et tests téléphone.
+- Backend **`d2e505d`** en production. iOS **`4e784ac`**, build **37**, poussé ; Arthur lance Codemagic et tests téléphone.
+- Lot backend Pilotage EONA prêt : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Aucun déploiement effectué.
+- **48 contrôles backend ciblés passent** : sécurité/accès 25, consommation/cache 19, dashboard 4. Revue contrat backend/iOS réalisée.
 - ORS reste secours et comparaison en ombre. OSRM démo retiré.
 - Trafic traité dans le backend : **HERE, EONA, data.gouv**.
 - ETA dynamique dans les apps. HERE Route Import chronomètre notre tracé ; dernière durée valide conservée.
@@ -77,6 +79,12 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - iOS 35 : accroche demandée, fonds gris navigation/action remplacés par OLED ; particules 18 à 21, vitesse orbitale +15 %.
 - iOS 36 : fonds navigation/action transparents, séparateur retiré, effets de bord désactivés. Réponse aux démarcations restantes signalées.
 - « Vos avantages EONA+ » : sept descriptions précises, reprises dans fiches. Prestations prévues présentées au présent, selon demande Arthur.
+- iOS 37 : texte Trajets intelligents ajusté, icône Feux vectorielle, logo radar dans catégorie EONA+.
+- Onze couleurs conservées ; Pastels EONA+ et Minéral ajoutés. Interface, tracé, curseur suivent choix sans relance.
+- Pilotage EONA réservé administrateurs : présence par droits, activité anonyme, comptes, bannissements, mesures Valhalla et HERE.
+- Compteurs HERE cumulés et hebdomadaires persistants ; semaine lundi Paris, migration ancien mois sans historique antérieur inventé.
+- Bans indépendants du fichier comptes : compte, emails, appareils EONA connus et fournisseurs. Déban possible après suppression source.
+- Suspension réversible, sessions coupées ; aucun nouveau bouton suppression définitive. Protection propre compte et dernier administrateur actif.
 - Profil Taxi accepté sur VPS : trajet Paris de 6 070 m, péages/autoroutes/ferries exclus, aucune alerte d'exclusion ignorée.
 - Accès réservés dépend de cartographie OSM. Validation sur voies Taxi par Arthur reste à réaliser.
 
@@ -88,7 +96,10 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 36 : diff vérifié, API de masquage des effets confirmée. Compilation Codemagic et rendu téléphone par Arthur.
+- Build iOS 37 : diff vérifié, contrat backend/iOS revu. Compilation, contrôles Swift ciblés et rendu téléphone par Arthur via Codemagic.
+- Déploiement Pilotage EONA attend accord explicite Arthur. Sauvegarder comptes, registre bannissements et budget HERE avant transfert.
+- Sessions backend restent en mémoire. Membres exigent Bearer valide ; redémarrage impose reconnexion, cache iOS périmé effacé.
+- Identifiant appareil EONA reste dans Keychain ; aucun HWID matériel accessible. Blocage limite appareils connus par ce service.
 - Perso reporté. Feux en direct toujours en préparation, cadenas gratuit ; aucune donnée réelle actuellement.
 - Catalogue iOS : Trajets intelligents `1 / jour` / `Illimités`, Feux en direct `Inclus`, selon libellés demandés par Arthur.
 - Ces libellés ne livrent aucune logique Perso ni source temps réel pour feux.

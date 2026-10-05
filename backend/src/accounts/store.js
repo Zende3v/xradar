@@ -1,9 +1,11 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
-import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
 import { haversine } from '../radars/geo.js';
 import { settingsStore } from './settings.js';
+import { BanRegistry, normalizedDevice, normalizedEmail } from './bans.js';
+import { liveStore } from '../live/store.js';
 
 export const ROLES = ['guest', 'client', 'admin'];
 
@@ -217,7 +219,11 @@ function noteReferral(entry, line) {
  * assigned by an admin (CLI / admin API). Persisted to a JSON file — no DB.
  */
 export class AccountStore {
-  constructor() {
+  constructor({ accountsFile = config.accountsFile } = {}) {
+    this.accountsFile = accountsFile;
+    this.bans = new BanRegistry(`${accountsFile}.bans.json`);
+    this.blockedSessions = new Map();
+    this.saveChain = Promise.resolve();
     this.byId = new Map();
     this.byDevice = new Map();
     this.byUsername = new Map(); // lowercase -> account
@@ -233,19 +239,29 @@ export class AccountStore {
   }
 
   async load() {
+    // Registre corrompu : démarrage refusé plutôt que perdre protection contre bans.
+    this.bans.load();
+    this.loading = true;
     try {
-      const raw = await readFile(config.accountsFile, 'utf8');
+      const raw = await readFile(this.accountsFile, 'utf8');
       const list = JSON.parse(raw);
       if (Array.isArray(list)) {
         for (const a of list) if (a && a.id) this.index(a);
       }
-      console.log(`[accounts] loaded ${this.byId.size} accounts from ${config.accountsFile}`);
+      console.log(`[accounts] loaded ${this.byId.size} accounts from ${this.accountsFile}`);
     } catch (e) {
       if (e.code !== 'ENOENT') console.error('[accounts] load failed:', e.message);
-    }
+    } finally { this.loading = false; }
+    this.bans.save();
   }
 
   normalizeAccount(account) {
+    account.deviceId = normalizedDevice(account.deviceId);
+    account.knownDeviceIds = [...new Set([...(Array.isArray(account.knownDeviceIds) ? account.knownDeviceIds : []), account.deviceId]
+      .map(normalizedDevice).filter(Boolean))];
+    account.emailLower = normalizedEmail(account.email ?? account.emailLower) || null;
+    account.suspended = account.suspended === true;
+    account.revoked = account.revoked === true;
     // A photo stored under an earlier public address (Tailscale Funnel) now points to the current one.
     const legacy = config.legacyPublicBaseUrls.find((base) => account.avatarUrl?.startsWith(base + '/'));
     if (legacy) {
@@ -271,6 +287,7 @@ export class AccountStore {
 
   index(account) {
     this.normalizeAccount(account);
+    if (account.banned) this.bans.ban(account, { persist: !this.loading });
     this.byId.set(account.id, account);
     if (account.deviceId) this.byDevice.set(account.deviceId, account);
     if (account.usernameLower) this.byUsername.set(account.usernameLower, account);
@@ -281,7 +298,7 @@ export class AccountStore {
 
   unindex(account) {
     this.byId.delete(account.id);
-    if (account.deviceId) this.byDevice.delete(account.deviceId);
+    if (account.deviceId && this.byDevice.get(account.deviceId) === account) this.byDevice.delete(account.deviceId);
     if (account.usernameLower) this.byUsername.delete(account.usernameLower);
     if (account.emailLower) this.byEmail.delete(account.emailLower);
     for (const link of account.providers ?? []) this.byProvider.delete(`${link.provider}:${link.subject}`);
@@ -300,16 +317,33 @@ export class AccountStore {
   }
 
   async save() {
-    await mkdir(dirname(config.accountsFile), { recursive: true });
-    await writeFile(config.accountsFile, JSON.stringify([...this.byId.values()], null, 2), 'utf8');
+    const contents = JSON.stringify([...this.byId.values()], null, 2);
+    const write = async () => {
+      await mkdir(dirname(this.accountsFile), { recursive: true });
+      const temporary = `${this.accountsFile}.${randomUUID()}.tmp`;
+      await writeFile(temporary, contents, { encoding: 'utf8', mode: 0o600 });
+      try { await rename(temporary, this.accountsFile); } catch (error) {
+        await unlink(temporary).catch(() => {});
+        throw error;
+      }
+    };
+    this.saveChain = this.saveChain.catch(() => {}).then(write);
+    await this.saveChain;
   }
 
   /** Auth by device: return the existing account (touch lastSeen) or create a guest. */
   auth(deviceId, meta = {}) {
+    deviceId = normalizedDevice(deviceId);
+    if (!deviceId) return { error: 'deviceId required' };
+    const denied = this.identityDenied({ deviceId });
+    if (denied) return { error: denied, account: this.byDevice.get(deviceId) ?? null };
     const now = new Date().toISOString();
     const app = appInfo(meta);
     let account = this.byDevice.get(deviceId);
     if (account) {
+      const blocked = this.blockReason(account);
+      if (blocked) return { error: blocked, account };
+      if (account.role !== 'guest') return { error: 'member session required' };
       account.lastSeenAt = now;
       if (meta.platform) account.platform = meta.platform;
       // The phone and the version move on: the card follows.
@@ -339,11 +373,24 @@ export class AccountStore {
   }
 
   getByDevice(deviceId) {
-    return this.byDevice.get(deviceId) ?? null;
+    return this.byDevice.get(normalizedDevice(deviceId)) ?? null;
+  }
+
+  blockReason(account) {
+    if (!account) return null;
+    if (account.banned || this.bans.matches(account)) return 'banned';
+    if (account.suspended) return 'suspended';
+    if (account.revoked) return 'revoked';
+    return null;
+  }
+
+  identityDenied({ account = null, deviceId = null, email = null, providerKey = null } = {}) {
+    if (this.bans.matches({ deviceId, email, providerKey })) return 'banned';
+    return this.blockReason(account);
   }
 
   accessFor(account) {
-    if (!account || account.banned) return { status: 'restricted', canNavigate: false, endsAt: null };
+    if (!account || this.blockReason(account)) return { status: 'restricted', canNavigate: false, endsAt: null };
     if (account.role === 'admin') return { status: 'active', canNavigate: true, endsAt: null };
     if (account.role === 'client') {
       const endsAt = account.subscriptionEndsAt ?? null;
@@ -390,7 +437,7 @@ export class AccountStore {
   }
 
   canReport(account) {
-    return !account.banned;
+    return Boolean(account && !this.blockReason(account));
   }
 
   countReport(account) {
@@ -405,6 +452,7 @@ export class AccountStore {
    * all of today's trips.
    */
   tripCheck(account, to) {
+    if (!account || this.blockReason(account)) return { allowed: false, isNew: false };
     if (this.hasPlus(account)) return { allowed: true, isNew: false };
     const usage = this.usageOf(account);
     const last = usage.lastTo;
@@ -429,6 +477,7 @@ export class AccountStore {
 
   /** Départ iOS : compte une fois, même destination répétée = nouveau trajet. */
   startNavigation(account, to, tripId) {
+    if (!account || this.blockReason(account)) return { allowed: false };
     if (this.navigationMatches(account, to, tripId)) return { allowed: true };
     const usage = this.usageOf(account);
     if (!this.hasPlus(account) && usage.trips >= config.guestTripsPerDay) return { allowed: false };
@@ -440,6 +489,7 @@ export class AccountStore {
 
   /** Recalculs gratuits pendant trajet admis, y compris après minuit. */
   navigationMatches(account, to, tripId) {
+    if (!account || this.blockReason(account)) return false;
     const current = account.navigation;
     return Boolean(tripId && current?.id === tripId && Date.now() - current.startedAt < 7 * 86_400_000
       && haversine(current.to.lat, current.to.lon, to.lat, to.lon) <= config.tripSameDestinationM);
@@ -678,6 +728,9 @@ export class AccountStore {
   }
 
   create({ deviceId, role = 'guest', displayName = null, username = null, email = null, password = null }) {
+    deviceId = normalizedDevice(deviceId);
+    const denied = this.identityDenied({ deviceId, email });
+    if (denied) return { error: denied };
     if (!ROLES.includes(role)) return { error: 'invalid role' };
     if (deviceId && this.byDevice.has(deviceId)) return { error: 'deviceId already exists' };
     // Admins (and clients created here) must have email + password + username.
@@ -713,22 +766,75 @@ export class AccountStore {
     return { account };
   }
 
-  update(id, patch) {
+  update(id, patch, { actor = null } = {}) {
     const account = this.byId.get(id);
     if (!account) return { error: 'not found' };
-    if (patch.role !== undefined) {
-      if (!ROLES.includes(patch.role)) return { error: 'invalid role' };
-      account.role = patch.role;
+    if (patch.role !== undefined && !ROLES.includes(patch.role)) return { error: 'invalid role' };
+    if (patch.role !== undefined && patch.role !== 'guest' && patch.role !== account.role) {
+      const credential = Boolean(account.passwordHash) || (account.providers ?? []).some((link) => link.provider && link.subject);
+      if (!normalizedEmail(account.email ?? account.emailLower) || !account.username || !credential) {
+        return { error: 'member identity required' };
+      }
     }
+    for (const field of ['banned', 'suspended', 'revoked']) {
+      if (patch[field] !== undefined && typeof patch[field] !== 'boolean') return { error: `${field} must be boolean` };
+    }
+    const disabling = patch.banned === true || patch.suspended === true || patch.revoked === true
+      || (patch.role !== undefined && patch.role !== 'admin' && account.role === 'admin');
+    if (actor?.id === id && disabling) return { error: 'cannot demote, ban or suspend yourself' };
+    if (disabling && this.isLastActiveAdmin(account)) return { error: 'cannot disable last admin' };
+    if (patch.banned === true) {
+      const probe = new BanRegistry(this.bans.file);
+      probe.ban(account, { persist: false });
+      const admins = [...this.byId.values()].filter((other) => other.role === 'admin' && !this.blockReason(other));
+      if (actor?.id && admins.some((other) => other.id === actor.id && probe.matches(other))) {
+        return { error: 'cannot ban your own identity' };
+      }
+      if (admins.length && admins.every((other) => probe.matches(other))) return { error: 'cannot disable last admin' };
+      try { this.bans.ban(account, { reason: patch.reason }); } catch (error) {
+        // Échec disque : protection mémoire conservée, aucune présence ni session bloquée ne survit.
+        for (const other of this.byId.values()) if (this.blockReason(other)) this.revokeSessions(other.id);
+        throw error;
+      }
+      for (const other of this.byId.values()) if (this.blockReason(other)) this.revokeSessions(other.id);
+    }
+    if (patch.banned === false) this.bans.unban(account.id);
+    if (patch.role !== undefined) account.role = patch.role;
     if (patch.displayName !== undefined) account.displayName = patch.displayName;
-    if (patch.banned !== undefined) account.banned = Boolean(patch.banned);
+    for (const field of ['banned', 'suspended', 'revoked']) {
+      if (patch[field] !== undefined) account[field] = patch[field];
+    }
+    if (this.blockReason(account) || (patch.role !== undefined && patch.role !== 'admin')) {
+      this.revokeSessions(account.id);
+    }
     this.scheduleSave();
     return { account };
+  }
+
+  isLastActiveAdmin(account) {
+    return account?.role === 'admin' && !this.blockReason(account)
+      && ![...this.byId.values()].some((other) => other.id !== account.id && other.role === 'admin' && !this.blockReason(other));
+  }
+
+  actOnAccount(id, { action, reason = null }, { actor = null } = {}) {
+    const account = this.get(id);
+    if (action === 'unban' && !account && this.bans.records.has(id)) {
+      this.bans.unban(id);
+      return { account: null, unbanned: true };
+    }
+    if (!account) return { error: 'not found' };
+    if (action === 'revokeSessions') return { account, revokedSessions: this.revokeSessions(id) };
+    const patch = { ban: { banned: true }, unban: { banned: false }, suspend: { suspended: true }, restore: { suspended: false, revoked: false } }[action];
+    if (!patch) return { error: 'invalid action' };
+    return this.update(id, { ...patch, reason }, { actor });
   }
 
   remove(id) {
     const account = this.byId.get(id);
     if (!account) return { error: 'not found' };
+    if (this.isLastActiveAdmin(account)) return { error: 'cannot delete last admin' };
+    if (account.banned) this.bans.ban(account);
+    this.revokeSessions(id);
     this.unindex(account);
     this.scheduleSave();
     return { removed: true, id };
@@ -807,7 +913,10 @@ export class AccountStore {
 
   /** Invité permanent : pseudo aléatoire sans mot de passe. Anciennes identités acceptées. */
   claimGuest(deviceId, username, password, meta = {}) {
+    deviceId = normalizedDevice(deviceId);
     if (!deviceId || deviceId.length > 128) return { error: 'deviceId required' };
+    const denied = this.identityDenied({ deviceId, account: this.byDevice.get(deviceId) });
+    if (denied) return { error: denied, account: this.byDevice.get(deviceId) ?? null };
     // Anciennes apps : pseudo/mot de passe acceptés. iOS : identité aléatoire sans mot de passe.
     const legacy = Boolean(username || password);
     if (legacy && String(password || '').length < 8) return { error: 'password too short (min 8)' };
@@ -867,6 +976,9 @@ export class AccountStore {
 
   register({ email, password, username, referralCode = null, app = null, method = 'email', guest = null, deviceId = null }) {
     const e = String(email || '').trim().toLowerCase();
+    deviceId = normalizedDevice(deviceId);
+    const denied = this.identityDenied({ email: e, deviceId, account: guest });
+    if (denied) return { error: denied, account: guest };
     if (!e.includes('@') || e.length > 190) return { error: 'invalid email' };
     if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
     if (guest && (guest.banned || guest.role !== 'guest' || guest.emailLower || guest.providers?.length)) {
@@ -885,7 +997,7 @@ export class AccountStore {
       username,
       usernameLower: String(username).toLowerCase(),
       displayName: username,
-      email,
+      email: e,
       emailLower: e,
       passwordHash: hashPassword(password),
       emailVerified: false,
@@ -934,16 +1046,19 @@ export class AccountStore {
    * address we can write to.
    */
   signInWithProvider(identity, { deviceId = null, app = null } = {}) {
-    const { provider, subject, email, emailVerified, name } = identity;
+    const { provider, subject, emailVerified, name } = identity;
+    const email = normalizedEmail(identity.email) || null;
+    deviceId = normalizedDevice(deviceId);
     const now = new Date().toISOString();
 
     const known = this.byProviderIdentity(provider, subject);
+    const byEmail = email && emailVerified ? this.byEmail.get(email) : null;
+    const denied = this.identityDenied({ account: known ?? byEmail, email, deviceId, providerKey: `${provider}:${subject}` });
+    if (denied) return { error: denied, account: known ?? byEmail };
     if (known) {
+      const binding = this.bindDevice(known, deviceId);
+      if (binding?.error) return binding;
       known.lastSeenAt = now;
-      if (deviceId && !known.deviceId) {
-        known.deviceId = deviceId;
-        this.byDevice.set(deviceId, known);
-      }
       const info = appInfo(app);
       if (info) known.app = { ...known.app, ...info };
       this.scheduleSave();
@@ -951,9 +1066,11 @@ export class AccountStore {
     }
 
     // Same address, already an account: linked rather than doubled.
-    const byEmail = email && emailVerified ? this.byEmail.get(email) : null;
     if (byEmail) {
-      this.linkProvider(byEmail.id, identity);
+      const linked = this.linkProvider(byEmail.id, { ...identity, email });
+      if (linked.error) return linked;
+      const binding = this.bindDevice(byEmail, deviceId);
+      if (binding?.error) return binding;
       byEmail.lastSeenAt = now;
       this.scheduleSave();
       return { account: byEmail, created: false, linked: true };
@@ -992,6 +1109,9 @@ export class AccountStore {
   linkProvider(id, { provider, subject, email }) {
     const account = this.get(id);
     if (!account) return { error: 'not found' };
+    email = normalizedEmail(email) || null;
+    const denied = this.identityDenied({ account, email, providerKey: `${provider}:${subject}` });
+    if (denied) return { error: denied, account };
     this.normalizeAccount(account);
     const taken = this.byProviderIdentity(provider, subject);
     if (taken && taken.id !== account.id) return { error: 'already linked to another account' };
@@ -1105,8 +1225,10 @@ export class AccountStore {
     const account = key.includes('@') ? this.byEmail.get(key) : this.byUsername.get(key);
     if (!account || !account.passwordHash) return { error: 'invalid credentials' };
     if (!verifyPassword(password, account.passwordHash)) return { error: 'invalid credentials' };
-    if (account.banned) return { error: 'banned' };
-    this.bindDevice(account, deviceId);
+    const denied = this.identityDenied({ account, deviceId, email: account.emailLower });
+    if (denied) return { error: denied, account: this.blockReason(account) ? account : null };
+    const binding = this.bindDevice(account, deviceId);
+    if (binding?.error) return binding;
     account.lastSeenAt = new Date().toISOString();
     this.scheduleSave();
     return { account };
@@ -1115,7 +1237,12 @@ export class AccountStore {
   /** Attach [account] to a phone. The bare account that phone had without a password goes. */
   bindDevice(account, deviceId) {
     const id = String(deviceId || '').trim();
-    if (!id || id.length > 128 || account.deviceId === id) return;
+    const denied = this.identityDenied({ account, deviceId: id });
+    if (denied) return { error: denied };
+    if (!id || id.length > 128) return;
+    this.normalizeAccount(account);
+    if (!account.knownDeviceIds.includes(id)) account.knownDeviceIds.push(id);
+    if (account.deviceId === id) return;
     const other = this.byDevice.get(id);
     if (other && other !== account) {
       if (!other.passwordHash && other.role === 'guest') {
@@ -1182,6 +1309,8 @@ export class AccountStore {
   // ---- Sessions (in-memory tokens) ------------------------------------------
 
   issueToken(accountId, ttlMs = config.sessionTtlMs) {
+    const account = this.get(accountId);
+    if (!account || this.blockReason(account)) return null;
     const token = randomBytes(32).toString('hex');
     this.sessions.set(token, { accountId, expiresAt: Date.now() + ttlMs });
     return token;
@@ -1194,11 +1323,46 @@ export class AccountStore {
       this.sessions.delete(token);
       return null;
     }
-    return this.byId.get(s.accountId) ?? null;
+    const account = this.byId.get(s.accountId) ?? null;
+    if (this.blockReason(account)) {
+      this.sessions.delete(token);
+      this.blockedSessions.set(token, s);
+      return null;
+    }
+    return account;
   }
 
   revokeToken(token) {
     this.sessions.delete(token);
+  }
+
+  revokeSessions(accountId) {
+    let revoked = 0;
+    for (const [token, session] of this.sessions) {
+      if (session.accountId !== accountId) continue;
+      this.sessions.delete(token);
+      if (this.blockReason(this.get(accountId))) this.blockedSessions.set(token, session);
+      revoked += 1;
+    }
+    for (const [token, session] of this.blockedSessions) {
+      if (session.expiresAt <= Date.now()) this.blockedSessions.delete(token);
+    }
+    const account = this.get(accountId);
+    if (account) account.sessionsRevokedAt = new Date().toISOString();
+    liveStore.remove(accountId);
+    this.scheduleSave();
+    return revoked;
+  }
+
+  blockedForToken(token) {
+    const session = token && this.blockedSessions.get(token);
+    if (!session) return null;
+    if (session.expiresAt <= Date.now()) {
+      this.blockedSessions.delete(token);
+      return null;
+    }
+    const account = this.get(session.accountId);
+    return this.blockReason(account) ? account : null;
   }
 
   /** Compatibilité CLI : invités permanents, purge automatique sans suppression. */

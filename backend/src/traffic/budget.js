@@ -6,6 +6,71 @@ const USES = ['eta', 'faster'];
 const KINDS = ['flow', 'incidents', 'import'];
 const counts = () => Object.fromEntries(KINDS.map(k => [k, 0]));
 const whole = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+const DAY_MS = 86_400_000;
+const HISTORY_DAYS = 730;
+const parisCalendar = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+});
+function parisParts(at) {
+  return Object.fromEntries(parisCalendar.formatToParts(new Date(at))
+    .filter(part => part.type !== 'literal').map(part => [part.type, Number(part.value)]));
+}
+function parisDay(at) {
+  const p = parisParts(at);
+  return new Date(Date.UTC(p.year, p.month - 1, p.day)).toISOString().slice(0, 10);
+}
+/** Semaine locale : lundi 00:00 Paris. Offset calculé au lundi, y compris changement d'heure. */
+export function hereParisWeek(at = Date.now()) {
+  const p = parisParts(at);
+  const localDay = Date.UTC(p.year, p.month - 1, p.day);
+  const sinceMonday = (new Date(localDay).getUTCDay() + 6) % 7;
+  const nominal = localDay - sinceMonday * DAY_MS;
+  let startAt = nominal;
+  for (let iteration = 0; iteration < 2; iteration++) {
+    const parts = parisParts(startAt);
+    const offset = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - startAt;
+    startAt = nominal - offset;
+  }
+  return { startDay: new Date(nominal).toISOString().slice(0, 10), startAt };
+}
+function sum(byKind) { return KINDS.reduce((total, kind) => total + byKind[kind], 0); }
+function legacyHistory(saved, at) {
+  const totalByKind = counts();
+  for (const kind of KINDS) totalByKind[kind] = whole(saved?.monthByKind?.[kind] ?? saved?.byKind?.[kind]);
+  totalByKind.import += Math.max(0, whole(saved?.monthUsed) - sum(totalByKind));
+  return {
+    version: 1, since: new Date(at).toISOString(),
+    baselineMonth: /^\d{4}-\d{2}$/.test(saved?.month ?? '') ? saved.month : null,
+    totalRequests: sum(totalByKind), totalByKind, daily: {},
+  };
+}
+function restoreHistory(saved) {
+  if (saved?.version !== 1 || !Number.isFinite(Date.parse(saved.since))
+      || !Number.isSafeInteger(saved.totalRequests) || saved.totalRequests < 0
+      || saved.baselineMonth != null && !/^\d{4}-\d{2}$/.test(saved.baselineMonth)
+      || !saved.daily || typeof saved.daily !== 'object' || Array.isArray(saved.daily)) throw Error('invalid history');
+  function checkedCounts(value) {
+    if (!value || !KINDS.every(kind => Number.isSafeInteger(value[kind]) && value[kind] >= 0)) throw Error('invalid history');
+    return Object.fromEntries(KINDS.map(kind => [kind, value[kind]]));
+  }
+  const totalByKind = checkedCounts(saved.totalByKind);
+  if (sum(totalByKind) !== saved.totalRequests) throw Error('invalid history');
+  const daily = {};
+  const detailed = counts();
+  for (const [day, value] of Object.entries(saved.daily)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw Error('invalid history');
+    daily[day] = checkedCounts(value);
+    for (const kind of KINDS) detailed[kind] += daily[day][kind];
+  }
+  if (KINDS.some(kind => detailed[kind] > totalByKind[kind])) throw Error('invalid history');
+  return { version: 1, since: new Date(saved.since).toISOString(), baselineMonth: saved.baselineMonth ?? null,
+    totalRequests: saved.totalRequests, totalByKind, daily };
+}
+function trimHistory(history, at) {
+  const cutoff = new Date(Date.parse(parisDay(at) + 'T00:00:00Z') - (HISTORY_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
+  for (const day of Object.keys(history.daily)) if (day < cutoff) delete history.daily[day];
+}
 
 /** Réservation persistée avant chaque appel. Échec disque : aucun appel payant. */
 export function createHereBudget({ settings = config, now = Date.now } = {}) {
@@ -25,15 +90,19 @@ export function createHereBudget({ settings = config, now = Date.now } = {}) {
     }
   }
   function today() {
-    const day = new Date(now()).toISOString().slice(0, 10);
+    const at = now();
+    const day = new Date(at).toISOString().slice(0, 10);
     const month = day.slice(0, 7);
     if (!state) {
       let saved = null;
+      let history;
       try {
+        if (typeof settings.hereUsageFile !== 'string' || !settings.hereUsageFile.trim()) throw Error('invalid storage');
         if (existsSync(settings.hereUsageFile)) {
           saved = JSON.parse(readFileSync(settings.hereUsageFile, 'utf8'));
           if (!saved || typeof saved.day !== 'string' || !Number.isSafeInteger(saved.monthUsed)) throw Error('invalid');
         }
+        if (saved?.history != null) history = restoreHistory(saved.history);
       } catch { storageError = true; }
       const sameMonth = saved?.month === month;
       const sameDay = saved?.day === day;
@@ -49,8 +118,13 @@ export function createHereBudget({ settings = config, now = Date.now } = {}) {
         byKind: Object.fromEntries(KINDS.map(k=>[k, sameDay ? whole(saved.byKind?.[k]) : 0])),
         monthByKind, monthUsed: Object.values(monthByKind).reduce((a,b)=>a+b,0),
         accounts: sameDay && saved?.accounts && typeof saved.accounts === 'object' ? saved.accounts : {},
+        history: history ?? legacyHistory(storageError ? null : saved, at),
       };
+      trimHistory(state.history, at);
+      // Fixe début de mesure et migration dès première lecture, sans perdre dernier mois connu.
+      if (!storageError && !history) save();
     }
+    trimHistory(state.history, at);
     if (state.day !== day) {
       if (state.month !== month) { state.month = month; state.monthByKind = counts(); state.monthUsed = 0; }
       state.day = day; state.used = 0; state.byKind = counts(); state.byUse = { eta: 0, faster: 0 }; state.accounts = {};
@@ -81,7 +155,15 @@ export function createHereBudget({ settings = config, now = Date.now } = {}) {
     if (denied || !USES.includes(use)) { lastDenied = denied || 'invalid use'; return false; }
     const s = today();
     s.used++; s.monthUsed++; s.byUse[use]++; s.byKind[kind]++; s.monthByKind[kind]++;
-    return save();
+    const day = parisDay(now());
+    const existed = Object.hasOwn(s.history.daily, day);
+    const bucket = s.history.daily[day] ??= counts();
+    s.history.totalRequests++; s.history.totalByKind[kind]++; bucket[kind]++;
+    if (save()) return true;
+    // Réservation disque refusée : fournisseur jamais appelé, historique inchangé.
+    s.history.totalRequests--; s.history.totalByKind[kind]--; bucket[kind]--;
+    if (!existed) delete s.history.daily[day];
+    return false;
   }
   function accountAllows(id, at = now(), use = 'eta') {
     if (!USES.includes(use)) return false;
@@ -100,6 +182,18 @@ export function createHereBudget({ settings = config, now = Date.now } = {}) {
   function usage() {
     const s = today();
     const estimated = cost(s.monthByKind);
+    const week = hereParisWeek(now());
+    const currentDay = parisDay(now());
+    const weekByKind = counts();
+    for (const [day, bucket] of Object.entries(s.history.daily)) {
+      if (day < week.startDay || day > currentDay) continue;
+      for (const kind of KINDS) weekByKind[kind] += bucket[kind];
+    }
+    function historyCost(byKind) {
+      if (storageError) return null;
+      const value = cost(byKind);
+      return Number.isFinite(value) ? Math.round(value * 1e6) / 1e6 : null;
+    }
     return {
       day: s.day, used: s.used, byUse: { ...s.byUse }, byKind: { ...s.byKind },
       month: s.month, monthUsed: s.monthUsed, monthByKind: { ...s.monthByKind },
@@ -109,6 +203,13 @@ export function createHereBudget({ settings = config, now = Date.now } = {}) {
       estimatedMonthEUR: Number.isFinite(estimated) ? Math.round(estimated*1e6)/1e6 : null,
       estimateOnly: true, freeTierAssumed: 0, priceMargin: settings.herePriceMargin,
       trafficEURPer1000: settings.hereTrafficEURPer1000, importEURPer1000: settings.hereImportEURPer1000,
+      history: {
+        since: s.history.since, baselineMonth: s.history.baselineMonth,
+        totalRequests: s.history.totalRequests, totalEstimatedEUR: historyCost(s.history.totalByKind),
+        weekStart: week.startDay, weekRequests: sum(weekByKind), weekEstimatedEUR: historyCost(weekByKind),
+        weekComplete: !storageError && Date.parse(s.history.since) <= week.startAt,
+        earlierHistoryComplete: false,
+      },
       blocked: reason(), lastDenied,
     };
   }

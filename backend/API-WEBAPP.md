@@ -735,3 +735,54 @@ Cyclomoteurs 50 cm³ et voiturettes : 45 km/h, ni autoroute ni voie rapide. Anci
 - Perso reporté par Arthur. Aucune implémentation ni consommation quotidienne ajoutée.
 
 Source profil : [Valhalla 3.9, TaxiCost](https://github.com/valhalla/valhalla/blob/3.9.0/src/sif/autocost.cc#L797).
+
+## Pilotage EONA : 05/10/2026, iOS 37
+
+Code prêt ; déploiement distinct, soumis accord Arthur.
+
+- Tous endpoints admin exigent Bearer administrateur valide. `ADMIN_TOKEN` reste disponible pour scripts.
+- Bearer invalide : aucun repli appareil. Compte membre exige connexion explicite ; appareil seul réservé invité.
+- Sessions restent en mémoire : redémarrage backend exige reconnexion des membres. iOS efface ancien cache après refus confirmé.
+- `GET /api/admin/overview` : `generatedAt`, `presence`, `accounts`, `trips`, `routing`, `routingStats`, `here`.
+- `presence.groups` : `free`, `client`, `admin` ; `total`, `online`, `offline`, `inTrip` par groupe.
+- `free` regroupe invités et membres gratuits ; `client` correspond EONA+ ; administrateurs séparés.
+- Présence observée pendant 90 secondes. Aucun signal récent : hors ligne. Confidentialité personnelle conservée.
+- `accounts` : `total`, `banned`, `suspended`. `trips` : `retainedCount`, `totalRecorded` des comptes conservés.
+- `routing` reprend état réel du moteur et compteurs de secours depuis démarrage.
+- `routingStats` mesure réponses servies Valhalla dans `routing.route_log`, cache compris, conservation 90 jours.
+- `totalRequests`, `weekRequests`, `cacheHits`, `medianMs`, `p95Ms` ; semaine lundi 00:00 Europe/Paris.
+- Base indisponible : `available:false`, métriques `null`. Aucun zéro substitué.
+- Échecs Valhalla sans moteur attribué : `totalErrors`, `weekErrors` restent `null`, `errorAttributionAvailable:false`.
+- `GET /api/admin/trips?limit=40&offset=0` : `{total,count,offset,next,retentionPerAccount,trips}`.
+- Chaque trajet : `id` anonymisé, `startedAt`, `distanceMeters`, `durationSeconds`, `arrived`, `engines`, `platform`.
+- Tri décroissant par départ, identifiant stable pour égalités. Aucun compte, nom, lieu ni coordonnée dans réponse.
+- Historique conservé : 200 trajets par compte par défaut. `startedAt` reste départ ; aucune date de fin inventée.
+
+### HERE : historique mesuré
+
+- `here` conserve ancien contrat budget ; champ additif `history` persisté dans même fichier atomique.
+- `history` : `since`, `baselineMonth`, `totalRequests`, `totalEstimatedEUR`, `weekStart`, `weekRequests`, `weekEstimatedEUR`.
+- `weekComplete` compare début collecte à lundi 00:00 Paris. Changements d'heure inclus.
+- Migration reprend dernier cumul mensuel connu, sans inventer répartition quotidienne ni semaines antérieures.
+- `earlierHistoryComplete:false` : cumul antérieur incomplet. Compteurs hebdomadaires comptent seulement nouvelles réservations enregistrées.
+- Dépenses estimées selon tarifs configurés actuels, aucune franchise supposée. Facturation HERE réelle non importée.
+- 730 jours de détail conservés ; totaux cumulés jamais réduits par purge des jours.
+- Budget quotidien/mensuel reste UTC ; semaine administrative suit Europe/Paris.
+
+### Comptes et bannissements
+
+- `GET /api/admin/accounts` conserve recherche/pagination ; ajoute filtre `suspended=true|false` et présence observée.
+- DTO explicite : aucun mot de passe haché, code de vérification/réinitialisation, jeton ni identifiant fournisseur secret.
+- Champs additifs : `suspended`, `revoked`, `knownDeviceIds`, `online`, `inTrip`, `presenceAt`, `banId`, `banReason`, `bannedAt`.
+- `POST /api/admin/accounts/:id/action` : `{action,reason?}`, actions `ban`, `unban`, `suspend`, `restore`, `revokeSessions`.
+- Retour : `{account,revokedSessions,unbanned}` ; compte peut être `null` après déban d'une source supprimée.
+- `ban` ferme sessions et présence, bloque compte, emails normalisés, appareils connus et identités fournisseur.
+- Registre indépendant : `<ACCOUNTS_FILE>.bans.json`, fichier atomique privé. Suppression compte ne retire aucun bannissement.
+- `suspend` désactive accès sans suppression ; `restore` retire suspension, conserve bannissement éventuel.
+- `revokeSessions` ferme sessions uniquement ; connexion ultérieure reste autorisée.
+- `unban` utilise `banId` effectif, puis recharge compte. Bannissements indépendants peuvent continuer à bloquer identité partagée.
+- `GET /api/admin/accounts/bans` : `{bans,total}`, sources présentes ou supprimées.
+- Chaque source : `accountId`, `accountExists`, `displayName`, `email`, `bannedAt`, `reason`, `deviceCount`.
+- Protection propre compte et dernier administrateur actif. Promotion membre exige email, pseudo et authentification possible.
+- iOS expose suspension réversible, aucun nouveau bouton de suppression définitive.
+- Sauvegarder fichier comptes, registre bannissements et consommation HERE avant déploiement.

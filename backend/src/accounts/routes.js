@@ -13,6 +13,25 @@ import { mailer } from '../mailer.js';
 
 export const accountRouter = Router();
 
+const blockedErrors = new Set(['banned', 'suspended', 'revoked']);
+function accountError(res, result, fallback = 400) {
+  const blocked = blockedErrors.has(result.error);
+  return res.status(blocked ? 403 : fallback).json({
+    error: result.error,
+    ...(blocked && result.account ? { account: publicView(result.account) } : {}),
+  });
+}
+
+// Ancien Bearer désormais suspendu : état restreint renvoyé, sans réautoriser session.
+accountRouter.use((req, res, next) => {
+  if (!req.path.startsWith('/me')) return next();
+  const account = authAccount(req);
+  const token = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') || '')?.[1];
+  const blocked = accountStore.blockedForToken(token) ?? (account && accountStore.blockReason(account) ? account : null);
+  if (blocked) return accountError(res, { error: accountStore.blockReason(blocked), account: blocked });
+  next();
+});
+
 /**
  * Self view: the public view plus what only the owner sees — email, verification,
  * accès gratuit, essai, EONA+ actif ou compte banni.
@@ -53,7 +72,7 @@ accountRouter.post('/auth', (req, res) => {
     return res.status(400).json({ error: 'deviceId is required' });
   }
   const account = accountStore.auth(deviceId, { platform: req.body?.platform, ...(req.body?.app ?? {}) });
-  if (account.banned) return res.status(403).json({ error: 'banned', account: publicView(account) });
+  if (account.error) return accountError(res, account, account.error === 'member session required' ? 401 : 400);
   const token = accountStore.issueToken(account.id);
   res.json({ account: selfView(account), token });
 });
@@ -77,7 +96,7 @@ accountRouter.post('/guest', (req, res) => {
   const result = accountStore.claimGuest(deviceId, String(req.body?.username || '').trim(), req.body?.password, {
     platform: req.body?.platform,
   });
-  if (result.error) return res.status(400).json({ error: result.error });
+  if (result.error) return accountError(res, result);
   const token = accountStore.issueToken(result.account.id);
   res.status(201).json({ account: selfView(result.account), token });
 });
@@ -97,7 +116,7 @@ accountRouter.post('/register', (req, res) => {
     app: req.body?.app ?? null,
     deviceId: req.body?.deviceId ? String(req.body.deviceId).trim() : null,
   });
-  if (result.error) return res.status(400).json({ error: result.error });
+  if (result.error) return accountError(res, result);
   const token = accountStore.issueToken(result.account.id);
   const code = accountStore.setVerifyCode(result.account.id);
   if (code) mailer.sendVerify(result.account.email, code);
@@ -117,7 +136,7 @@ accountRouter.post('/me/register', (req, res) => {
     referralCode: String(req.body?.referralCode || '').trim() || null,
     app: req.body?.app ?? null,
   });
-  if (result.error) return res.status(400).json({ error: result.error });
+  if (result.error) return accountError(res, result);
   const code = accountStore.setVerifyCode(result.account.id);
   if (code) mailer.sendVerify(result.account.email, code);
   res.json({ account: selfView(result.account), token });
@@ -158,7 +177,7 @@ accountRouter.post('/reset', (req, res) => {
  */
 accountRouter.post('/login', (req, res) => {
   const result = accountStore.login(req.body?.identifier ?? req.body?.email, req.body?.password, req.body?.deviceId);
-  if (result.error) return res.status(401).json({ error: result.error });
+  if (result.error) return accountError(res, result, 401);
   // From the admin webapp (web: true), the session lasts a working day, not three months.
   const ttlMs = req.body?.web === true ? config.webSessionTtlMs : config.sessionTtlMs;
   const token = accountStore.issueToken(result.account.id, ttlMs);
@@ -178,7 +197,7 @@ accountRouter.post('/google', async (req, res) => {
     deviceId: req.body?.deviceId ? String(req.body.deviceId).trim() : null,
     app: req.body?.app ?? null,
   });
-  if (outcome.account.banned) return res.status(403).json({ error: 'banned' });
+  if (outcome.error) return accountError(res, outcome, 401);
   const token = accountStore.issueToken(outcome.account.id);
   res.status(outcome.created ? 201 : 200).json({
     account: selfView(outcome.account),
@@ -262,6 +281,7 @@ accountRouter.patch('/me/privacy', (req, res) => {
 accountRouter.delete('/me', async (req, res) => {
   const account = authAccount(req);
   if (!account) return res.status(401).json({ error: 'unauthorized' });
+  if (accountStore.isLastActiveAdmin(account)) return res.status(409).json({ error: 'cannot delete last admin' });
   try {
     await forgetInCrowd([account.id, account.deviceId].filter(Boolean));
   } catch (e) {
@@ -398,8 +418,10 @@ accountRouter.put('/referrals/settings', (req, res) => {
 
 /** POST /api/accounts/logout — revoke the current Bearer token. */
 accountRouter.post('/logout', (req, res) => {
-  const m = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '');
-  if (m) accountStore.revokeToken(m[1]);
+  const token = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') || '')?.[1];
+  const account = token ? accountStore.resolveToken(token) : null;
+  if (account) liveStore.remove(account.id);
+  if (token) accountStore.revokeToken(token);
   res.json({ ok: true });
 });
 
@@ -416,12 +438,48 @@ adminAccountRouter.use((req, res, next) => {
   next();
 });
 
-/** Admin view: full record minus the password hash. */
-function adminView(a) {
-  if (!a) return a;
-  const { passwordHash, ...rest } = a;
-  return rest;
+/** DTO explicite : aucun secret, code, jeton ou champ ajouté implicitement. */
+export function adminView(a, presence = new Map(liveStore.entries())) {
+  if (!a) return null;
+  const seen = accountStore.blockReason(a) ? null : presence.get(a.id);
+  const ban = accountStore.bans.matches(a);
+  const totals = accountStore.statsFor(a.id)?.totals ?? {};
+  return {
+    ...publicView(a),
+    banId: ban?.accountId ?? null,
+    banReason: ban?.reason ?? null,
+    bannedAt: ban?.bannedAt ?? null,
+    email: a.email ?? null,
+    emailVerified: Boolean(a.emailVerified),
+    deviceId: a.deviceId ?? null,
+    knownDeviceIds: [...(a.knownDeviceIds ?? [])],
+    platform: a.platform ?? a.app?.platform ?? null,
+    app: a.app ? Object.fromEntries(['platform', 'model', 'osVersion', 'appVersion', 'locale', 'region'].map((key) => [key, a.app[key] ?? null])) : null,
+    signupMethod: a.signupMethod ?? null,
+    providers: (a.providers ?? []).map((link) => ({ provider: link.provider, email: link.email ?? null, linkedAt: link.linkedAt ?? null })),
+    hasPassword: Boolean(a.passwordHash),
+    createdAt: a.createdAt ?? null,
+    lastSeenAt: a.lastSeenAt ?? null,
+    trialStartedAt: a.trialStartedAt ?? null,
+    trialEndsAt: a.trialEndsAt ?? null,
+    subscriptionEndsAt: a.subscriptionEndsAt ?? null,
+    sessionsRevokedAt: a.sessionsRevokedAt ?? null,
+    groupStatsVisible: !a.groupStatsHidden,
+    stats: totals,
+    trust: trustOf(totals),
+    limits: accountStore.limitsFor(a),
+    online: Boolean(seen),
+    inTrip: Boolean(seen?.inTrip),
+    presenceAt: seen ? new Date(seen.at).toISOString() : null,
+  };
 }
+
+const adminMutation = (handler) => async (req, res) => {
+  try { await handler(req, res); } catch (error) {
+    console.error('[accounts] admin mutation failed:', error.message);
+    if (!res.headersSent) res.status(503).json({ error: 'account update unavailable' });
+  }
+};
 
 /**
  * GET /api/admin/accounts?q=&role=&banned=&signup=&sort=lastSeen|created|username&order=desc|asc
@@ -433,9 +491,11 @@ adminAccountRouter.get('/', (req, res) => {
   const role = req.query.role ? String(req.query.role) : undefined;
   const q = fold(req.query.q);
   const banned = req.query.banned === 'true' ? true : req.query.banned === 'false' ? false : null;
+  const suspended = req.query.suspended === 'true' ? true : req.query.suspended === 'false' ? false : null;
   const signup = req.query.signup ? String(req.query.signup) : null;
   let found = accountStore.list(role).filter((a) =>
-    (banned === null || Boolean(a.banned) === banned)
+    (banned === null || (accountStore.blockReason(a) === 'banned') === banned)
+    && (suspended === null || Boolean(a.suspended) === suspended)
     && (!signup || (a.signupMethod ?? 'email') === signup)
     && (!q || [a.username, a.displayName, a.email, a.id].some((field) => fold(field).includes(q))));
   const sort = { created: 'createdAt', username: 'usernameLower', lastSeen: 'lastSeenAt' }[req.query.sort] ?? 'lastSeenAt';
@@ -443,7 +503,8 @@ adminAccountRouter.get('/', (req, res) => {
   found = found.sort((a, b) => String(a[sort] ?? '').localeCompare(String(b[sort] ?? '')) * (asc ? 1 : -1));
   const limit = Math.min(Math.max(Math.floor(Number(req.query.limit)) || 50, 1), 200);
   const offset = Math.max(Math.floor(Number(req.query.offset)) || 0, 0);
-  const page = found.slice(offset, offset + limit).map(adminView);
+  const presence = new Map(liveStore.entries());
+  const page = found.slice(offset, offset + limit).map((account) => adminView(account, presence));
   res.json({
     total: found.length,
     count: page.length,
@@ -459,13 +520,30 @@ function fold(value) {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
+/** Registre visible même après suppression compte source. Aucun appareil exposé ici. */
+adminAccountRouter.get('/bans', (req, res) => {
+  const bans = [...accountStore.bans.records.values()].map((entry) => {
+    const account = accountStore.get(entry.accountId);
+    return {
+      accountId: entry.accountId,
+      accountExists: Boolean(account),
+      displayName: account?.displayName ?? account?.username ?? null,
+      email: account?.email ?? entry.emails[0] ?? null,
+      bannedAt: entry.bannedAt,
+      reason: entry.reason,
+      deviceCount: entry.deviceIds.length,
+    };
+  }).sort((a, b) => String(b.bannedAt).localeCompare(String(a.bannedAt)));
+  res.json({ bans, total: bans.length });
+});
+
 adminAccountRouter.get('/:id', (req, res) => {
   const account = accountStore.get(req.params.id);
   if (!account) return res.status(404).json({ error: 'not found' });
   res.json({ account: adminView(account) });
 });
 
-adminAccountRouter.post('/', (req, res) => {
+adminAccountRouter.post('/', adminMutation(async (req, res) => {
   const result = accountStore.create({
     deviceId: req.body?.deviceId || null,
     role: req.body?.role || 'guest',
@@ -475,24 +553,29 @@ adminAccountRouter.post('/', (req, res) => {
     password: req.body?.password ?? null,
   });
   if (result.error) return res.status(400).json({ error: result.error });
+  await accountStore.save();
   adminAudit.log(req.actor, 'account.create', 'account', result.account.id, { role: result.account.role, username: result.account.username ?? null });
   res.status(201).json({ account: adminView(result.account) });
-});
+}));
 
-adminAccountRouter.patch('/:id', (req, res) => {
+adminAccountRouter.patch('/:id', adminMutation(async (req, res) => {
   // Nobody locks themselves out: an admin cannot ban themselves nor take their own role away.
-  if (req.actor.id === req.params.id && (req.body?.banned === true || (req.body?.role && req.body.role !== 'admin'))) {
-    return res.status(400).json({ error: 'cannot demote or ban yourself' });
+  if (req.actor.id === req.params.id && (req.body?.banned === true || req.body?.suspended === true || req.body?.revoked === true || (req.body?.role && req.body.role !== 'admin'))) {
+    return res.status(400).json({ error: 'cannot demote, ban or suspend yourself' });
   }
   const before = accountStore.get(req.params.id);
-  const was = before ? { role: before.role, banned: Boolean(before.banned), displayName: before.displayName ?? null } : null;
+  const was = before ? { role: before.role, banned: Boolean(before.banned), suspended: Boolean(before.suspended), revoked: Boolean(before.revoked), displayName: before.displayName ?? null } : null;
   const result = accountStore.update(req.params.id, {
     role: req.body?.role,
     displayName: req.body?.displayName,
     banned: req.body?.banned,
-  });
+    suspended: req.body?.suspended,
+    revoked: req.body?.revoked,
+    reason: req.body?.reason,
+  }, { actor: req.actor });
   if (result.error) return res.status(result.error === 'not found' ? 404 : 400).json({ error: result.error });
-  const now = { role: result.account.role, banned: Boolean(result.account.banned), displayName: result.account.displayName ?? null };
+  await accountStore.save();
+  const now = { role: result.account.role, banned: Boolean(result.account.banned), suspended: Boolean(result.account.suspended), revoked: Boolean(result.account.revoked), displayName: result.account.displayName ?? null };
   const changed = Object.keys(now).filter((key) => was && was[key] !== now[key]);
   if (changed.length) {
     const action = changed.includes('banned')
@@ -502,12 +585,24 @@ adminAccountRouter.patch('/:id', (req, res) => {
       Object.fromEntries(changed.map((key) => [key, { from: was[key], to: now[key] }])));
   }
   res.json({ account: adminView(result.account) });
-});
+}));
 
-adminAccountRouter.delete('/:id', async (req, res) => {
+/** Modération explicite. Révocation sessions ne bloque pas connexion suivante. */
+adminAccountRouter.post('/:id/action', adminMutation(async (req, res) => {
+  const action = String(req.body?.action ?? '');
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : null;
+  const result = accountStore.actOnAccount(req.params.id, { action, reason }, { actor: req.actor });
+  if (result.error) return res.status(result.error === 'not found' ? 404 : 400).json({ error: result.error });
+  await accountStore.save();
+  adminAudit.log(req.actor, `account.${action}`, 'account', req.params.id, { reason, revokedSessions: result.revokedSessions ?? null });
+  res.json({ account: adminView(result.account), revokedSessions: result.revokedSessions ?? null, unbanned: result.unbanned ?? null });
+}));
+
+adminAccountRouter.delete('/:id', adminMutation(async (req, res) => {
   if (req.actor.id === req.params.id) return res.status(400).json({ error: 'cannot delete yourself here' });
   const account = accountStore.get(req.params.id);
   if (!account) return res.status(404).json({ error: 'not found' });
+  if (accountStore.isLastActiveAdmin(account)) return res.status(409).json({ error: 'cannot delete last admin' });
   // Deleted by an admin or by its owner, an account leaves the same thing behind: nothing.
   try {
     await forgetInCrowd([account.id, account.deviceId].filter(Boolean));
@@ -519,7 +614,8 @@ adminAccountRouter.delete('/:id', async (req, res) => {
   await Promise.all(['png', 'jpg', 'webp'].map((ext) => unlink(`${config.avatarsDir}/${account.id}.${ext}`).catch(() => {})));
   const result = accountStore.remove(account.id);
   if (result.error) return res.status(404).json({ error: result.error });
+  await accountStore.save();
   adminAudit.log(req.actor, 'account.delete', 'account', account.id, { role: account.role, username: account.username ?? null });
   res.json(result);
-});
+}));
 
