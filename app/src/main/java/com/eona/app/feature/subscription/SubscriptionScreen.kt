@@ -11,7 +11,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.eona.app.designsystem.component.EonaGlowTile
+import com.eona.app.designsystem.foundation.EonaIcons
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eona.app.core.model.Account
 import com.eona.app.core.model.Role
@@ -28,8 +34,8 @@ import com.eona.app.feature.menu.accessLabel
 import com.eona.app.feature.menu.shortDate
 
 /**
- * "Abonnement": where the account stands; a running subscription's details, or else today's
- * limits and the plans. No payment yet.
+ * « EONA + » (iOS SubscriptionScreen) : l'offre membre. Statut du compte ; EONA + actif : son
+ * détail ; sinon les limites du jour et les formules. Pas encore de paiement.
  */
 @Composable
 fun SubscriptionRoute(onBack: () -> Unit) {
@@ -43,7 +49,7 @@ fun SubscriptionRoute(onBack: () -> Unit) {
 fun SubscriptionScreen(account: Account?, onBack: () -> Unit) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
-    EonaScreenScaffold(title = "Abonnement", onBack = onBack) {
+    EonaScreenScaffold(title = "EONA +", onBack = onBack) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -51,16 +57,10 @@ fun SubscriptionScreen(account: Account?, onBack: () -> Unit) {
                 .padding(horizontal = spacing.lg, vertical = spacing.md),
             verticalArrangement = Arrangement.spacedBy(spacing.xl),
         ) {
-            EonaCard {
-                Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                    EonaText("Statut", style = EonaTheme.typography.caption, color = colors.textTertiary)
-                    EonaBadge(accessLabel(account), glow = true)
-                    EonaText(status(account), style = EonaTheme.typography.subhead, color = colors.textSecondary)
-                }
-            }
+            Hero(account)
 
             if (account?.isSubscriber == true) {
-                EonaListGroup(title = "Ton abonnement") {
+                EonaListGroup(title = "Ton EONA +") {
                     Info("Formule", if (account.role == Role.Admin) "Administrateur" else "Membre")
                     Divider()
                     Info("État", "Actif")
@@ -79,18 +79,38 @@ fun SubscriptionScreen(account: Account?, onBack: () -> Unit) {
                         Info("Trajets", "${limits.tripsUsed()} / ${limits.tripsPerDay}")
                     }
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                    EonaText("OFFRES", style = EonaTheme.typography.caption, color = colors.textTertiary)
-                    SubscriptionPlans()
-                    EonaText("Le paiement dans l'app arrive bientôt.", style = EonaTheme.typography.footnote, color = colors.textTertiary)
-                }
-                EonaListGroup(title = "Avec l'abonnement") {
+                EonaListGroup(title = "Inclus") {
                     MembershipBenefits(Modifier.padding(spacing.lg))
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                    EonaText("FORMULES", style = EonaTheme.typography.caption, color = colors.textTertiary, modifier = Modifier.padding(start = spacing.md))
+                    SubscriptionPlans()
+                    EonaText("Paiement dans l'app bientôt disponible.", style = EonaTheme.typography.footnote, color = colors.textTertiary, modifier = Modifier.padding(horizontal = spacing.md))
                 }
             }
 
             Spacer(Modifier.height(spacing.xxl))
         }
+    }
+}
+
+/** Couronne, nom, promesse, statut du compte. */
+@Composable
+private fun Hero(account: Account?) {
+    val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = spacing.md),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(spacing.md),
+    ) {
+        EonaGlowTile(EonaIcons.Crown, size = 72.dp, iconSize = 32.dp, shape = EonaTheme.shapes.xxl)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+            EonaText("EONA +", style = EonaTheme.typography.titleLarge, color = colors.textPrimary)
+            EonaText("Toute la route, sans limite.", style = EonaTheme.typography.callout, color = colors.textSecondary)
+        }
+        EonaBadge(accessLabel(account), glow = true)
+        EonaText(status(account), style = EonaTheme.typography.footnote, color = colors.textTertiary, textAlign = TextAlign.Center)
     }
 }
 
@@ -107,12 +127,12 @@ private fun Divider() = EonaDivider(Modifier.padding(start = EonaTheme.spacing.l
 
 private fun status(account: Account?): String {
     if (account == null) return "Connecte-toi pour voir ton statut."
-    if (account.role == Role.Admin) return "Accès complet, sans limite."
+    if (account.role == Role.Admin) return "Accès complet."
     if (account.isRestricted) {
-        val ended = if (account.role == Role.Client) "Ton abonnement est terminé" else "Ton essai gratuit est terminé"
-        return "$ended : la carte reste disponible ; la navigation, les alertes et les signalements reviennent avec un abonnement."
+        val ended = if (account.role == Role.Client) "EONA + terminé" else "Essai terminé"
+        return "$ended. La carte reste disponible."
     }
-    if (account.role == Role.Client) return "Navigation, alertes et signalements sans limite."
-    val perDay = account.limits?.let { "${it.reportsPerDay} signalements et ${it.tripsPerDay} trajets par jour" } ?: "avec des limites par jour"
-    return "Essai gratuit jusqu'au ${shortDate(account.accessEndsAt)}, $perDay."
+    if (account.role == Role.Client) return "Tout est inclus, sans limite."
+    val perDay = account.limits?.let { " · ${it.reportsPerDay} signalements et ${it.tripsPerDay} trajets par jour" } ?: ""
+    return "Essai jusqu'au ${shortDate(account.accessEndsAt)}$perDay."
 }

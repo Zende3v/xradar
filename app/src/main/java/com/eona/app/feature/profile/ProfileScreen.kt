@@ -12,10 +12,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,24 +29,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eona.app.BuildConfig
 import com.eona.app.core.model.Account
 import com.eona.app.core.model.Role
+import com.eona.app.core.model.TripRecord
 import com.eona.app.data.account.AccountRepository
+import com.eona.app.data.account.AccountStats
 import com.eona.app.data.stats.TripHistoryRepository
 import com.eona.app.designsystem.component.EonaBadge
 import com.eona.app.designsystem.component.EonaCard
 import com.eona.app.designsystem.component.EonaConfirmDialog
+import com.eona.app.designsystem.component.EonaDivider
+import com.eona.app.designsystem.component.EonaIcon
 import com.eona.app.designsystem.component.EonaListGroup
-import com.eona.app.designsystem.component.EonaListRow
 import com.eona.app.designsystem.component.EonaScreenScaffold
 import com.eona.app.designsystem.component.EonaText
 import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.designsystem.theme.EonaTheme
+import com.eona.app.feature.menu.StatsSections
+import com.eona.app.feature.menu.TripDetailScreen
+import com.eona.app.feature.menu.accessLabel
+import com.eona.app.feature.menu.displayName
+import com.eona.app.feature.menu.loadStats
+import com.eona.app.feature.menu.shortDate
 import com.eona.app.feature.subscription.OffersSheet
 import com.eona.app.feature.subscription.PaywallReason
 import kotlinx.coroutines.launch
@@ -49,17 +68,38 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProfileRoute(onBack: () -> Unit) {
     val account by AccountRepository.account.collectAsStateWithLifecycle()
-    ProfileScreen(account = account, onBack = onBack)
+    val context = LocalContext.current
+    var stats by remember { mutableStateOf<AccountStats?>(null) }
+    var statsLoaded by remember { mutableStateOf(false) }
+    var trip by remember { mutableStateOf<TripRecord?>(null) }
+    LaunchedEffect(Unit) {
+        stats = loadStats(context)
+        statsLoaded = true
+    }
+    trip?.let {
+        TripDetailScreen(it, onBack = { trip = null })
+        return
+    }
+    ProfileScreen(
+        account = account,
+        stats = stats,
+        statsLoaded = statsLoaded,
+        onOpenTrip = { trip = it },
+        onBack = onBack,
+    )
 }
 
 /**
- * "Mon compte": name, role and photo (members change it), "Changer de pseudo" (clients with
- * access), access status, email verification, the guest's trial note, the vehicle drawn on the
- * map, the app version, and the deletion of the account.
+ * « Mon compte & Statistiques » (iOS ProfileScreen), de haut en bas : profil (photo, nom
+ * modifiable, statut), comptes liés (Google ; Apple bientôt), statistiques, puis version et
+ * suppression du compte. Véhicule : dans Réglages.
  */
 @Composable
 fun ProfileScreen(
     account: Account?,
+    stats: AccountStats?,
+    statsLoaded: Boolean,
+    onOpenTrip: (TripRecord) -> Unit,
     onBack: () -> Unit,
 ) {
     val colors = EonaTheme.colors
@@ -79,8 +119,7 @@ fun ProfileScreen(
     ) { uri ->
         if (uri != null) scope.launch { encodeAvatar(context, uri)?.let { AccountRepository.uploadAvatar(it) } }
     }
-    val onPickAvatar: (() -> Unit)? = if (account?.canEditProfile == true) ({ picker.launch("image/*") }) else null
-    EonaScreenScaffold(title = "Mon compte", onBack = onBack) {
+    EonaScreenScaffold(title = "Mon compte & Statistiques", onBack = onBack) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -88,42 +127,31 @@ fun ProfileScreen(
                 .padding(horizontal = spacing.lg, vertical = spacing.md),
             verticalArrangement = Arrangement.spacedBy(spacing.xl),
         ) {
-            Header(account, onPickAvatar, onPhotoOffers = { offers = PaywallReason.Photo })
-
-            // Only a client whose access runs, as the backend says; once a week.
-            if (account?.canChangeUsername == true) {
-                val wait = account.usernameChangeableAt
-                    ?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
-                    ?.takeIf { it.isAfter(java.time.Instant.now()) }
-                    ?.let { "Prochain changement le ${com.eona.app.feature.menu.shortDate(account.usernameChangeableAt)}" }
-                EonaListGroup {
-                    EonaListRow(
-                        title = "Changer de pseudo",
-                        subtitle = wait ?: "Une fois par semaine",
-                        leadingIcon = EonaIcons.User,
-                        leadingTint = colors.accent,
-                        onClick = if (wait == null) ({ renaming = true }) else null,
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                Header(
+                    account = account,
+                    onPhoto = { if (account?.canEditProfile == true) picker.launch("image/*") else offers = PaywallReason.Photo },
+                    onRename = { if (account?.canChangeUsername == true) renaming = true else offers = PaywallReason.Username },
+                )
+                when {
+                    account?.isRestricted == true -> Note("Navigation et signalements : avec EONA +.")
+                    account?.role == Role.Guest ->
+                        Note("Essai 7 jours · ${account.limits?.reportsPerDay ?: 5} signalements et ${account.limits?.tripsPerDay ?: 7} trajets par jour.")
                 }
             }
-
-            AccessCard(account)
 
             if (account?.email != null && account.emailVerified == false) {
                 VerifyEmailCard()
             }
 
-            if (account?.role == Role.Guest) {
-                GuestNote(account)
-            }
-
-            if (com.eona.app.data.account.GoogleAuth.isAvailable && account != null) {
-                val linked = "google" in account.providers
-                Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                    EonaListGroup(title = "Connexion") {
-                        EonaListRow(
-                            title = if (linked) "Dissocier Google" else "Lier mon compte Google",
-                            subtitle = if (linked) "Ce compte peut se connecter avec Google" else "Pour entrer aussi avec Google",
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                EonaListGroup(title = "Comptes liés") {
+                    if (com.eona.app.data.account.GoogleAuth.isAvailable && account != null) {
+                        val linked = "google" in account.providers
+                        LinkedAccountRow(
+                            mark = null,
+                            title = "Google",
+                            subtitle = if (linked) "Lié" else "Non lié",
                             onClick = if (linking) {
                                 null
                             } else {
@@ -146,27 +174,31 @@ fun ProfileScreen(
                                     }
                                 }
                             },
-                        )
+                        ) {
+                            if (linking) {
+                                CircularProgressIndicator(Modifier.size(18.dp), color = colors.accent, strokeWidth = 2.dp)
+                            } else {
+                                EonaText(
+                                    if (linked) "Dissocier" else "Lier",
+                                    style = EonaTheme.typography.label,
+                                    color = if (linked) colors.textSecondary else colors.accent,
+                                )
+                            }
+                        }
+                        EonaDivider(Modifier.padding(start = 62.dp))
                     }
-                    EonaText(
-                        linkMessage ?: "Lier Google te laisse entrer d'un geste. La dissociation est refusée s'il ne te reste aucun autre moyen de te connecter.",
-                        style = EonaTheme.typography.footnote,
-                        color = if (linkMessage != null) colors.textSecondary else colors.textTertiary,
-                        modifier = Modifier.padding(horizontal = spacing.md),
-                    )
+                    LinkedAccountRow(mark = EonaIcons.AppleMark, title = "Apple", subtitle = null, onClick = null) {
+                        EonaBadge("Bientôt", color = colors.textTertiary)
+                    }
+                }
+                linkMessage?.let {
+                    EonaText(it, style = EonaTheme.typography.footnote, color = colors.textSecondary, modifier = Modifier.padding(horizontal = spacing.md))
                 }
             }
 
-            EonaListGroup {
-                EonaListRow(
-                    title = "Version",
-                    trailing = {
-                        EonaText("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = EonaTheme.typography.callout, color = colors.textTertiary)
-                    },
-                )
-            }
+            StatsSections(stats = stats, loaded = statsLoaded, onOpenTrip = onOpenTrip)
 
-            Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.sm), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -183,9 +215,14 @@ fun ProfileScreen(
                     )
                 }
                 deleteError?.let { EonaText(it, style = EonaTheme.typography.footnote, color = colors.danger) }
+                EonaText(
+                    "EONA ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    style = EonaTheme.typography.footnote,
+                    color = colors.textTertiary,
+                )
             }
 
-            Spacer(Modifier.height(spacing.xxl))
+            Spacer(Modifier.height(spacing.xl))
         }
 
         offers?.let { reason -> OffersSheet(reason, account, onClose = { offers = null }) }
@@ -197,8 +234,7 @@ fun ProfileScreen(
         if (confirmDelete) {
             EonaConfirmDialog(
                 title = "Supprimer ton compte ?",
-                message = "Ton compte, ta photo, tes statistiques et tes trajets sont effacés pour de bon. " +
-                    "Tes signalements restent pour les autres conducteurs, sans ton nom.",
+                message = "Compte, photo, statistiques et trajets effacés pour de bon. Tes signalements restent, sans ton nom.",
                 confirmLabel = "Supprimer définitivement",
                 onCancel = { confirmDelete = false },
                 onConfirm = {
@@ -217,53 +253,130 @@ fun ProfileScreen(
     }
 }
 
+/**
+ * Photo (touchée : changée, ou offre EONA +), nom (crayon : pseudo, une fois par semaine ; sinon
+ * l'offre), statut.
+ */
 @Composable
-private fun Header(account: Account?, onPickAvatar: (() -> Unit)?, onPhotoOffers: () -> Unit) {
+private fun Header(account: Account?, onPhoto: () -> Unit, onRename: () -> Unit) {
     val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
     val role = account?.role ?: Role.Guest
-    val name = account?.displayName?.takeIf { it.isNotBlank() } ?: role.label
+    val name = displayName(account)
+    val editable = account?.canEditProfile == true
+    val canRename = account?.canChangeUsername == true
+    val access = accessLabel(account)
+    val wait = account?.usernameChangeableAt
+        ?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+        ?.takeIf { it.isAfter(java.time.Instant.now()) }
+        ?.let { "Prochain changement le ${shortDate(account.usernameChangeableAt)}" }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(EonaTheme.spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(spacing.md),
     ) {
-        // Members change their photo; for the others it is one of the membership's features.
-        val avatar = Modifier.clickable(onClick = onPickAvatar ?: onPhotoOffers)
-        Box(avatar, contentAlignment = Alignment.Center) {
-            AsyncAvatar(url = account?.avatarUrl, initial = name, size = 64.dp)
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .clickable(onClick = onPhoto)
+                .semantics { contentDescription = if (editable) "Changer la photo" else "Photo réservée aux membres" },
+        ) {
+            AsyncAvatar(url = account?.avatarUrl, initial = name, size = 72.dp)
+            if (editable) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 2.dp, y = 2.dp)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(colors.accent)
+                        .border(2.dp, colors.canvas, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    EonaIcon(EonaIcons.Camera, contentDescription = null, tint = colors.onAccent, size = 13.dp)
+                }
+            }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.xs)) {
-            EonaText(name, style = EonaTheme.typography.titleLarge, color = colors.textPrimary)
-            EonaBadge(role.label, glow = true)
-            EonaText(
-                if (onPickAvatar != null) "Changer la photo" else "Photo réservée aux membres",
-                style = EonaTheme.typography.caption,
-                color = colors.accent,
-                modifier = Modifier.clickable(onClick = onPickAvatar ?: onPhotoOffers),
-            )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+            // Nom touché : pseudo changé. Client actif seulement, une fois par semaine (backend) ;
+            // sinon l'offre EONA +.
+            Row(
+                modifier = Modifier
+                    .clip(EonaTheme.shapes.sm)
+                    .clickable(enabled = !(canRename && wait != null), onClick = onRename)
+                    .semantics { contentDescription = "$name, changer de pseudo" },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+            ) {
+                EonaText(name, style = EonaTheme.typography.title, color = colors.textPrimary, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                EonaIcon(
+                    EonaIcons.Pencil,
+                    contentDescription = null,
+                    tint = if (canRename && wait == null) colors.accent else colors.textTertiary,
+                    size = 16.dp,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                EonaBadge(role.label, glow = true)
+                if (access != role.label) {
+                    EonaText(access, style = EonaTheme.typography.footnote, color = colors.textSecondary, maxLines = 1)
+                }
+            }
+            wait?.let { EonaText(it, style = EonaTheme.typography.caption, color = colors.textTertiary) }
         }
     }
 }
 
-/** Status of the account: trial with its end, membership with its end, or restricted. */
 @Composable
-private fun AccessCard(account: Account?) {
+private fun Note(text: String) {
+    EonaText(
+        text,
+        style = EonaTheme.typography.footnote,
+        color = EonaTheme.colors.textSecondary,
+        modifier = Modifier.padding(horizontal = EonaTheme.spacing.xs),
+    )
+}
+
+/** Un compte lié : sa marque (pictogramme, ou initiale), son nom, son état, une action. */
+@Composable
+private fun LinkedAccountRow(
+    mark: ImageVector?,
+    title: String,
+    subtitle: String?,
+    onClick: (() -> Unit)?,
+    trailing: @Composable () -> Unit,
+) {
     val colors = EonaTheme.colors
-    EonaCard {
-        Column(verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.xs)) {
-            EonaText("Statut", style = EonaTheme.typography.caption, color = colors.textTertiary)
-            EonaText(
-                com.eona.app.feature.menu.accessLabel(account),
-                style = EonaTheme.typography.headline,
-                color = colors.textPrimary,
-            )
-            if (account?.isRestricted == true) {
+    val spacing = EonaTheme.spacing
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = spacing.lg, vertical = spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.md),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(EonaTheme.shapes.sm)
+                .background(colors.textPrimary.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (mark != null) {
+                EonaIcon(mark, contentDescription = null, tint = colors.textPrimary, size = 18.dp)
+            } else {
                 EonaText(
-                    "La carte reste disponible ; la navigation et les signalements reviennent avec un abonnement.",
-                    style = EonaTheme.typography.subhead,
-                    color = colors.textSecondary,
+                    title.take(1),
+                    style = EonaTheme.typography.bodyStrong.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary,
                 )
             }
         }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            EonaText(title, style = EonaTheme.typography.body, color = colors.textPrimary)
+            subtitle?.let { EonaText(it, style = EonaTheme.typography.footnote, color = colors.textTertiary) }
+        }
+        trailing()
     }
 }
 
@@ -313,26 +426,15 @@ private fun VerifyEmailCard() {
     }
 }
 
-@Composable
-private fun GuestNote(account: Account) {
-    val reports = account.limits?.reportsPerDay ?: 5
-    val trips = account.limits?.tripsPerDay ?: 7
-    EonaCard {
-        EonaText(
-            "Compte invité : 7 jours d'essai gratuit, $reports signalements et $trips trajets par jour. " +
-                "Ensuite, la carte seule sans abonnement.",
-            style = EonaTheme.typography.subhead,
-            color = EonaTheme.colors.textSecondary,
-        )
-    }
-}
-
 @Preview(name = "Profil · dark", showBackground = true, backgroundColor = 0xFF06070A, widthDp = 380, heightDp = 800)
 @Composable
 private fun ProfileScreenPreview() {
     EonaTheme(darkTheme = true) {
         ProfileScreen(
             account = Account(id = "x", role = Role.Admin, username = "Arthur", displayName = "Arthur", avatarUrl = null, email = "a@b.com", banned = false),
+            stats = null,
+            statsLoaded = true,
+            onOpenTrip = {},
             onBack = {},
         )
     }

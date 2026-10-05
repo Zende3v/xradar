@@ -53,25 +53,28 @@ private fun PlanCard(plan: SubscriptionPlan, modifier: Modifier = Modifier) {
     }
 }
 
-/** What membership brings, ticked. */
+/** Ce qu'EONA + ouvre, coché : seulement ce que l'app débloque vraiment. */
 @Composable
 fun MembershipBenefits(modifier: Modifier = Modifier) {
     val colors = EonaTheme.colors
     val benefits = listOf(
-        EonaIcons.Navigation to "Navigation guidée sans limite",
-        EonaIcons.Radar to "Alertes radars et dangers",
-        EonaIcons.Warning to "Signalements sans limite",
-        ImageVector.vectorResource(R.drawable.ic_music) to "Musique au volant",
-        EonaIcons.User to "Photo de profil",
+        Triple(EonaIcons.Navigation, "Navigation illimitée", "Guidage vocal, trafic en direct"),
+        Triple(EonaIcons.Radar, "Alertes radars et dangers", "Fixes, mobiles, signalés par la communauté"),
+        Triple(EonaIcons.Warning, "Signalements illimités", "Préviens les autres conducteurs"),
+        Triple(ImageVector.vectorResource(R.drawable.ic_music), "Musique au volant", "Ta musique en un geste"),
+        Triple(EonaIcons.User, "Profil complet", "Photo et pseudo"),
     )
     Column(modifier, verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.md)) {
-        benefits.forEach { (icon, title) ->
+        benefits.forEach { (icon, title, detail) ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(EonaTheme.spacing.md),
             ) {
                 EonaGlowTile(icon)
-                EonaText(title, style = EonaTheme.typography.body, color = colors.textPrimary, modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    EonaText(title, style = EonaTheme.typography.body, color = colors.textPrimary)
+                    EonaText(detail, style = EonaTheme.typography.footnote, color = colors.textTertiary)
+                }
                 EonaIcon(EonaIcons.Check, contentDescription = null, tint = colors.success, size = 18.dp)
             }
         }

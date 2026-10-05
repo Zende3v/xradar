@@ -85,7 +85,7 @@ fun OffersSheet(reason: PaywallReason, account: Account?, onClose: () -> Unit) {
                 SubscriptionPlans()
                 EonaCard(modifier = Modifier.fillMaxWidth()) { MembershipBenefits() }
                 EonaText(
-                    "Le paiement dans l'app arrive bientôt.",
+                    "Paiement dans l'app bientôt disponible.",
                     style = EonaTheme.typography.footnote,
                     color = colors.textTertiary,
                     textAlign = TextAlign.Center,

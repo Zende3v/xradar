@@ -23,6 +23,13 @@ enum class BugCategory(val wire: String, val label: String) {
     Alerts("alerts", "Alertes"),
     Account("account", "Compte"),
     Other("other", "Autre"),
+    /** « Contactez-nous » : une idée, pas un bug. Même flux côté backend. */
+    Suggestion("suggestion", "Suggestion");
+
+    companion object {
+        /** Catégories d'un problème ; la suggestion se choisit à part. */
+        val problems = listOf(Map, Navigation, Alerts, Account, Other)
+    }
 }
 
 /** Where a report stands, for the developers: Nouveau → En cours → Résolu. */

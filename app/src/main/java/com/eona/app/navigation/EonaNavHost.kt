@@ -26,7 +26,6 @@ import com.eona.app.feature.menu.BugReportRoute
 import com.eona.app.feature.menu.MenuRoute
 import com.eona.app.feature.menu.PrivacyRoute
 import com.eona.app.feature.menu.ReferralRoute
-import com.eona.app.feature.menu.StatsRoute
 import com.eona.app.feature.profile.ProfileRoute
 import com.eona.app.feature.search.SearchRoute
 import com.eona.app.feature.settings.SettingsRoute
@@ -86,7 +85,6 @@ fun EonaNavHost(modifier: Modifier = Modifier) {
                 onBack = { navController.popBackStack() },
                 onOpenAccount = { navController.navigate(Routes.ACCOUNT) },
                 onOpenSubscription = { navController.navigate(Routes.SUBSCRIPTION) },
-                onOpenStats = { navController.navigate(Routes.STATS) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenReferral = { navController.navigate(Routes.REFERRAL) },
                 onOpenLegal = { navController.navigate(Routes.LEGAL) },
@@ -97,9 +95,6 @@ fun EonaNavHost(modifier: Modifier = Modifier) {
         }
         composable(Routes.ACCOUNT) {
             ProfileRoute(onBack = { navController.popBackStack() })
-        }
-        composable(Routes.STATS) {
-            StatsRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.SETTINGS) {
             SettingsRoute(

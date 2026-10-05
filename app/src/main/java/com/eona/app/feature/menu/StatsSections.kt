@@ -1,21 +1,14 @@
 package com.eona.app.feature.menu
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,53 +17,52 @@ import com.eona.app.core.model.TripRecord
 import com.eona.app.data.account.AccountRepository
 import com.eona.app.data.account.AccountStats
 import com.eona.app.data.stats.TripHistoryRepository
-import androidx.compose.ui.platform.LocalContext
 import com.eona.app.designsystem.component.EonaCard
 import com.eona.app.designsystem.component.EonaDivider
 import com.eona.app.designsystem.component.EonaIcon
 import com.eona.app.designsystem.component.EonaListGroup
 import com.eona.app.designsystem.component.EonaListRow
-import com.eona.app.designsystem.component.EonaLoadingState
-import com.eona.app.designsystem.component.EonaMessageState
-import com.eona.app.designsystem.component.EonaScreenScaffold
 import com.eona.app.designsystem.component.EonaText
 import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.designsystem.theme.EonaTheme
 
 /**
- * Statistiques: time and distance on the road with the app, how good a reporter you
- * are (alerts crossed / reports filed / reports others confirmed), trip history.
- * Everything comes from the server, so it survives a reinstall.
+ * Statistiques, dans « Mon compte & Statistiques » (iOS StatsSections) : temps et distance sur la
+ * route, qualité de signaleur, historique des trajets. Tout vient du serveur : une réinstallation
+ * n'efface rien. Chargement et erreur en ligne ; l'écran parent charge ([loadStats]).
  */
 @Composable
-fun StatsRoute(onBack: () -> Unit) {
-    var stats by remember { mutableStateOf<AccountStats?>(null) }
-    var loaded by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<TripRecord?>(null) }
-    selected?.let { trip ->
-        TripDetailScreen(trip, onBack = { selected = null })
-        return
-    }
-    val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        // The server keeps the trips; a group trip's ranking stays on this phone, joined by id.
-        val groups = TripHistoryRepository(context).groupResults()
-        stats = AccountRepository.stats()?.let { s ->
-            s.copy(trips = s.trips.map { trip -> groups[trip.id]?.let { trip.copy(group = it) } ?: trip })
+fun StatsSections(stats: AccountStats?, loaded: Boolean, onOpenTrip: (TripRecord) -> Unit) {
+    val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
+    when {
+        !loaded -> EonaListGroup(title = "Statistiques") {
+            Row(
+                modifier = Modifier.padding(spacing.lg),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            ) {
+                CircularProgressIndicator(Modifier.size(16.dp), color = colors.textSecondary, strokeWidth = 2.dp)
+                EonaText("Chargement…", style = EonaTheme.typography.footnote, color = colors.textSecondary)
+            }
         }
-        loaded = true
-    }
-    EonaScreenScaffold(title = "Statistiques", onBack = onBack) {
-        val s = stats
-        when {
-            !loaded -> EonaLoadingState(label = "Chargement…")
-            s == null -> EonaMessageState(
-                icon = EonaIcons.Info,
-                title = "Statistiques indisponibles",
-                message = "Impossible de joindre le serveur. Réessaie plus tard.",
+        stats == null -> EonaListGroup(title = "Statistiques") {
+            EonaText(
+                "Serveur injoignable. Réessaie plus tard.",
+                style = EonaTheme.typography.footnote,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(spacing.lg),
             )
-            else -> StatsContent(s, onOpenTrip = { selected = it })
         }
+        else -> StatsContent(stats, onOpenTrip)
+    }
+}
+
+/** Statistiques du serveur ; null : injoignable. Le rang d'un trajet en groupe vient du téléphone. */
+suspend fun loadStats(context: Context): AccountStats? {
+    val groups = TripHistoryRepository(context).groupResults()
+    return AccountRepository.stats()?.let { s ->
+        s.copy(trips = s.trips.map { trip -> groups[trip.id]?.let { trip.copy(group = it) } ?: trip })
     }
 }
 
@@ -78,39 +70,34 @@ fun StatsRoute(onBack: () -> Unit) {
 private fun StatsContent(s: AccountStats, onOpenTrip: (TripRecord) -> Unit) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = spacing.lg, vertical = spacing.md),
-        verticalArrangement = Arrangement.spacedBy(spacing.xl),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+        EonaText("STATISTIQUES", style = EonaTheme.typography.caption, color = colors.textTertiary, modifier = Modifier.padding(horizontal = spacing.md))
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.md)) {
             Tile(hoursLabel(s.driveSeconds), "Sur la route", colors.accent, Modifier.weight(1f))
             Tile(kmLabel(s.distanceMeters), "Parcourus", colors.textPrimary, Modifier.weight(1f))
             Tile(s.tripCount.toString(), "Trajets", colors.textPrimary, Modifier.weight(1f))
         }
+    }
 
-        EonaListGroup(title = "Signaleur") {
-            EonaListRow(title = "Note de confiance", trailing = { TrustStars(s.trust) })
-            EonaDivider(Modifier.padding(start = spacing.lg))
-            Figure("Alertes traversées", s.alertsTraversed)
-            EonaDivider(Modifier.padding(start = spacing.lg))
-            Figure("Signalements déclarés", s.reportsDeclared)
-            EonaDivider(Modifier.padding(start = spacing.lg))
-            Figure("Confirmés par d'autres", s.reportsConfirmed)
-        }
-        EonaListGroup(title = "Historique des trajets") {
-            if (s.trips.isEmpty()) {
-                EonaListRow(title = "Aucun trajet pour l'instant")
-            } else {
-                s.trips.take(MAX_TRIPS).forEachIndexed { i, trip ->
-                    TripRow(trip, onClick = { onOpenTrip(trip) })
-                    if (i < s.trips.take(MAX_TRIPS).lastIndex) EonaDivider(Modifier.padding(start = spacing.lg))
-                }
+    EonaListGroup(title = "Signaleur") {
+        EonaListRow(title = "Note de confiance", trailing = { TrustStars(s.trust) })
+        EonaDivider(Modifier.padding(start = spacing.lg))
+        Figure("Alertes traversées", s.alertsTraversed)
+        EonaDivider(Modifier.padding(start = spacing.lg))
+        Figure("Signalements déclarés", s.reportsDeclared)
+        EonaDivider(Modifier.padding(start = spacing.lg))
+        Figure("Confirmés par d'autres", s.reportsConfirmed)
+    }
+    EonaListGroup(title = "Historique des trajets") {
+        if (s.trips.isEmpty()) {
+            EonaListRow(title = "Aucun trajet pour l'instant")
+        } else {
+            val shown = s.trips.take(MAX_TRIPS)
+            shown.forEachIndexed { i, trip ->
+                TripRow(trip, onClick = { onOpenTrip(trip) })
+                if (i < shown.lastIndex) EonaDivider(Modifier.padding(start = spacing.lg))
             }
         }
-        Spacer(Modifier.height(spacing.xxl))
     }
 }
 
@@ -123,7 +110,7 @@ private fun Tile(value: String, label: String, valueColor: Color, modifier: Modi
             verticalArrangement = Arrangement.spacedBy(EonaTheme.spacing.xs),
         ) {
             EonaText(value, style = EonaTheme.typography.title, color = valueColor, maxLines = 1)
-            EonaText(label.uppercase(), style = EonaTheme.typography.caption, color = EonaTheme.colors.textTertiary)
+            EonaText(label.uppercase(), style = EonaTheme.typography.caption, color = EonaTheme.colors.textTertiary, maxLines = 1)
         }
     }
 }

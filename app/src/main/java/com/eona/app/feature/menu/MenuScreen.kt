@@ -1,6 +1,7 @@
 package com.eona.app.feature.menu
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.semantics.Role as SemanticsRole
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eona.app.R
@@ -41,16 +45,15 @@ import com.eona.app.designsystem.theme.EonaTheme
 import com.eona.app.feature.profile.AsyncAvatar
 
 /**
- * "Menu" — the first page: who you are (avatar, email, trust stars), then the sections, the
- * admin-only referral page, the legal notices, and sign-out at the bottom. Its icons and the
- * access badge glow white on dark tiles.
+ * « Menu » (iOS MenuScreen) : identité, puis trois boîtes. 1 : Réglages, EONA +, Mon compte &
+ * Statistiques, Confidentialité, À propos. 2 : « Contactez-nous ». 3, admins seulement :
+ * Parrainage, Rapports. Déconnexion en bas.
  */
 @Composable
 fun MenuRoute(
     onBack: () -> Unit,
     onOpenAccount: () -> Unit,
     onOpenSubscription: () -> Unit,
-    onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenReferral: () -> Unit,
     onOpenLegal: () -> Unit,
@@ -66,7 +69,6 @@ fun MenuRoute(
         onBack = onBack,
         onOpenAccount = onOpenAccount,
         onOpenSubscription = onOpenSubscription,
-        onOpenStats = onOpenStats,
         onOpenSettings = onOpenSettings,
         onOpenReferral = onOpenReferral,
         onOpenLegal = onOpenLegal,
@@ -83,7 +85,6 @@ fun MenuScreen(
     onBack: () -> Unit,
     onOpenAccount: () -> Unit,
     onOpenSubscription: () -> Unit,
-    onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenReferral: () -> Unit,
     onOpenLegal: () -> Unit,
@@ -105,30 +106,28 @@ fun MenuScreen(
             Identity(account)
 
             EonaListGroup {
-                Section("Mon compte", ImageVector.vectorResource(R.drawable.ic_account), onOpenAccount)
-                EonaDivider(Modifier.padding(start = 58.dp))
-                Section("Abonnement", EonaIcons.Star, onOpenSubscription)
-                EonaDivider(Modifier.padding(start = 58.dp))
-                Section("Statistiques", ImageVector.vectorResource(R.drawable.ic_stats), onOpenStats)
-                EonaDivider(Modifier.padding(start = 58.dp))
                 Section("Réglages", ImageVector.vectorResource(R.drawable.ic_settings), onOpenSettings)
                 EonaDivider(Modifier.padding(start = 58.dp))
+                Section("EONA +", EonaIcons.Crown, onOpenSubscription)
+                EonaDivider(Modifier.padding(start = 58.dp))
+                Section("Mon compte & Statistiques", ImageVector.vectorResource(R.drawable.ic_account), onOpenAccount)
+                EonaDivider(Modifier.padding(start = 58.dp))
                 Section("Confidentialité", EonaIcons.Shield, onOpenPrivacy)
-                if (account?.role == Role.Admin) {
-                    EonaDivider(Modifier.padding(start = 58.dp))
-                    Section("Parrainage", ImageVector.vectorResource(R.drawable.ic_referral), onOpenReferral)
-                    EonaDivider(Modifier.padding(start = 58.dp))
-                    Section("Rapports de bugs", EonaIcons.Warning, onOpenBugs)
-                }
-            }
-
-            EonaListGroup {
-                Section("Signaler un bug", EonaIcons.Warning, onOpenBugReport)
                 EonaDivider(Modifier.padding(start = 58.dp))
                 Section("À propos", EonaIcons.Info, onOpenLegal)
             }
 
-            Spacer(Modifier.height(spacing.xl))
+            ContactCard(onOpenBugReport)
+
+            if (account?.role == Role.Admin) {
+                EonaListGroup(title = "Admin") {
+                    Section("Parrainage", ImageVector.vectorResource(R.drawable.ic_referral), onOpenReferral)
+                    EonaDivider(Modifier.padding(start = 58.dp))
+                    Section("Rapports", EonaIcons.Warning, onOpenBugs)
+                }
+            }
+
+            Spacer(Modifier.height(spacing.md))
 
             Box(
                 modifier = Modifier
@@ -141,7 +140,41 @@ fun MenuScreen(
             ) {
                 EonaText("Se déconnecter", style = EonaTheme.typography.bodyStrong, color = colors.danger)
             }
+            Spacer(Modifier.height(spacing.lg))
         }
+    }
+}
+
+/** « Un problème, une suggestion ? » — « Contactez-nous ! » : bugs et idées, un seul formulaire. */
+@Composable
+private fun ContactCard(onClick: () -> Unit) {
+    val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(EonaTheme.shapes.xl)
+            .background(colors.surfaceElevated)
+            .border(1.5.dp, colors.accent.copy(alpha = 0.55f), EonaTheme.shapes.xl)
+            .clickable(role = SemanticsRole.Button, onClick = onClick)
+            .padding(spacing.lg),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.md),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(colors.accent.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            EonaIcon(EonaIcons.Chat, contentDescription = null, tint = colors.accent, size = 20.dp)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            EonaText("Un problème, une suggestion ?", style = EonaTheme.typography.bodyStrong, color = colors.textPrimary)
+            EonaText("Contactez-nous !", style = EonaTheme.typography.subhead, color = colors.accent)
+        }
+        EonaIcon(EonaIcons.ChevronRight, contentDescription = null, tint = colors.textTertiary, size = 18.dp)
     }
 }
 
@@ -150,8 +183,7 @@ fun MenuScreen(
 private fun Identity(account: Account?) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
-    val role = account?.role ?: Role.Guest
-    val name = account?.displayName?.takeIf { it.isNotBlank() } ?: role.label
+    val name = displayName(account)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(spacing.md),
@@ -213,6 +245,10 @@ private fun Section(title: String, icon: ImageVector, onClick: () -> Unit) {
         },
     )
 }
+
+/** Le nom affiché, sinon le rôle. */
+fun displayName(account: Account?): String =
+    account?.displayName?.takeIf { it.isNotBlank() } ?: (account?.role ?: Role.Guest).label
 
 /** "Essai gratuit · 3 j restants", "Membre · jusqu'au 12/03/2027", "Accès restreint". */
 fun accessLabel(account: Account?): String {

@@ -17,22 +17,25 @@ enum class PaywallReason {
     ReportLimit,
     TripLimit,
     Music,
-    Photo;
+    Photo,
+    Username;
 
     fun title(account: Account?): String = when (this) {
-        Restricted -> if (account?.role == Role.Client) "Ton abonnement est terminé" else "Ton essai gratuit est terminé"
+        Restricted -> if (account?.role == Role.Client) "Ton EONA + est terminé" else "Ton essai gratuit est terminé"
         ReportLimit -> "Signalements du jour utilisés"
         TripLimit -> "Trajets du jour utilisés"
-        Music -> "Musique réservée aux membres"
-        Photo -> "Photo de profil réservée aux membres"
+        Music -> "Musique avec EONA +"
+        Photo -> "Photo avec EONA +"
+        Username -> "Pseudo avec EONA +"
     }
 
     fun message(account: Account?): String = when (this) {
-        Restricted -> "La carte reste disponible. Abonne-toi pour retrouver la navigation, les alertes et les signalements."
-        ReportLimit -> "Un compte invité peut signaler ${account?.limits?.reportsPerDay ?: 5} fois par jour. Les membres signalent sans limite."
-        TripLimit -> "Un compte invité peut lancer ${account?.limits?.tripsPerDay ?: 7} trajets par jour. Les membres naviguent sans limite."
-        Music -> "Le raccourci musique pendant la conduite fait partie de l'abonnement."
-        Photo -> "Ajoute ta photo de profil avec l'abonnement membre."
+        Restricted -> "La carte reste disponible. EONA + rouvre navigation, alertes et signalements."
+        ReportLimit -> "Invité : ${account?.limits?.reportsPerDay ?: 5} signalements par jour. Illimité avec EONA +."
+        TripLimit -> "Invité : ${account?.limits?.tripsPerDay ?: 7} trajets par jour. Illimité avec EONA +."
+        Music -> "Le raccourci musique au volant est inclus dans EONA +."
+        Photo -> "Photo de profil incluse dans EONA +."
+        Username -> "Changer de pseudo : inclus dans EONA +, une fois par semaine."
     }
 
     companion object {

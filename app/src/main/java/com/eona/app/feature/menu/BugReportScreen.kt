@@ -32,7 +32,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -73,9 +75,9 @@ private const val PAGE_SIZE = 50
 private const val STOPPED_MPS = 1.5f
 
 /**
- * "Signaler un bug", like iOS: a category, what happened (required), how to see it again
- * (optional). The account is the author and the app adds its own details: nothing else is asked,
- * and a "Navigation" report joins the trip ([BugTripTrace]). Only when the car is stopped.
+ * « Contactez-nous » (iOS BugReportScreen) : un problème (catégorie, ce qui s'est passé, comment
+ * le revoir) ou une suggestion, même flux. Le compte signe, l'app joint ses détails, et le trajet
+ * pour la navigation ([BugTripTrace]). Formulaire ouvert à l'arrêt seulement ; le brouillon attend.
  */
 @Composable
 fun BugReportRoute(onBack: () -> Unit) {
@@ -85,7 +87,10 @@ fun BugReportRoute(onBack: () -> Unit) {
     val details = remember { BugAppDetails.current() }
     // One client for the screen, not one per request.
     val api = remember { BugApi() }
+    var suggestion by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf(BugCategory.Other) }
+    // Catégorie envoyée : la suggestion, ou celle du problème.
+    val sentCategory = if (suggestion) BugCategory.Suggestion else category
     var description by remember { mutableStateOf("") }
     var steps by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
@@ -111,12 +116,12 @@ fun BugReportRoute(onBack: () -> Unit) {
     // fix, or no speed known: it opens.
     val driving = signal != GpsSignal.Searching && signal != GpsSignal.Lost && (fix?.speedMps ?: 0f) >= STOPPED_MPS
 
-    EonaScreenScaffold(title = "Signaler un bug", onBack = onBack) {
+    EonaScreenScaffold(title = "Contactez-nous", onBack = onBack) {
         if (driving) {
             EonaMessageState(
-                icon = EonaIcons.StopSign,
+                icon = EonaIcons.Chat,
                 title = "Disponible à l'arrêt",
-                message = "Pour ta sécurité, le formulaire ne s'ouvre qu'à l'arrêt. Il s'affiche tout seul dès que la voiture s'arrête.",
+                message = "Le formulaire s'ouvre voiture arrêtée.",
             )
         } else {
             Column(
@@ -128,14 +133,19 @@ fun BugReportRoute(onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(spacing.md),
             ) {
                 Spacer(Modifier.height(spacing.xs))
-                Label("Catégorie")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(spacing.sm), verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                    BugCategory.entries.forEach { c -> EonaChip(label = c.label, selected = c == category, onClick = { category = c }) }
+                KindPicker(suggestion) { suggestion = it }
+                if (!suggestion) {
+                    Label("Catégorie")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(spacing.sm), verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                        BugCategory.problems.forEach { c -> EonaChip(label = c.label, selected = c == category, onClick = { category = c }) }
+                    }
                 }
-                Label("Que s'est-il passé ?")
-                Area(description, "Ce qui ne va pas, en quelques mots") { description = it }
-                Label("Comment le reproduire ?")
-                Area(steps, "Facultatif : ce que tu faisais juste avant") { steps = it }
+                Label(if (suggestion) "Ton idée" else "Que s'est-il passé ?")
+                Area(description, if (suggestion) "Ton idée, en quelques mots" else "Ce qui ne va pas, en quelques mots") { description = it }
+                if (!suggestion) {
+                    Label("Comment le reproduire ?")
+                    Area(steps, "Facultatif : ce que tu faisais juste avant") { steps = it }
+                }
                 Label("Capture (facultative)")
                 preview?.let {
                     Image(bitmap = it, contentDescription = "Capture jointe",
@@ -151,8 +161,8 @@ fun BugReportRoute(onBack: () -> Unit) {
                     onClick = { screenshot = null }, variant = EonaButtonVariant.Ghost,
                     enabled = !sending && !loadingScreenshot, fillWidth = true)
                 EonaText(
-                    "Envoyé avec ton compte et ${details.platform} ${details.os} · EONA ${details.version} · ${details.model}." +
-                        if (category == BugCategory.Navigation) " Le trajet en cours (ou le dernier) et son itinéraire sont joints." else "",
+                    "Envoyé avec ton compte · ${details.platform} ${details.os} · EONA ${details.version} · ${details.model}." +
+                        if (sentCategory == BugCategory.Navigation) " Le trajet en cours (ou le dernier) et son itinéraire sont joints." else "",
                     style = EonaTheme.typography.footnote,
                     color = colors.textTertiary,
                 )
@@ -162,9 +172,9 @@ fun BugReportRoute(onBack: () -> Unit) {
                         sending = true
                         message = null
                         // Read here, where the trip is fed: the trip as it is at the moment of sending.
-                        val context = if (category == BugCategory.Navigation) BugTripTrace.context() else null
+                        val context = if (sentCategory == BugCategory.Navigation) BugTripTrace.context() else null
                         scope.launch {
-                            val outcome = api.send(category, description.trim(), steps.trim(), AccountRepository.token, context, screenshot)
+                            val outcome = api.send(sentCategory, description.trim(), if (suggestion) "" else steps.trim(), AccountRepository.token, context, screenshot)
                             sending = false
                             when (outcome) {
                                 BugSendOutcome.Sent -> onBack()
@@ -179,6 +189,35 @@ fun BugReportRoute(onBack: () -> Unit) {
                 )
                 message?.let { EonaText(it, style = EonaTheme.typography.footnote, color = colors.danger) }
                 Spacer(Modifier.height(spacing.xl))
+            }
+        }
+    }
+}
+
+/** Problème ou Suggestion : deux pastilles, une seule choisie. */
+@Composable
+private fun KindPicker(suggestion: Boolean, onChange: (Boolean) -> Unit) {
+    val colors = EonaTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(EonaTheme.shapes.md)
+            .background(colors.surface)
+            .border(1.dp, colors.border, EonaTheme.shapes.md)
+            .padding(3.dp),
+    ) {
+        listOf(false to "Problème", true to "Suggestion").forEach { (value, label) ->
+            val on = value == suggestion
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(EonaTheme.shapes.sm)
+                    .background(if (on) colors.accent.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent)
+                    .selectable(selected = on, role = androidx.compose.ui.semantics.Role.Tab) { onChange(value) }
+                    .padding(vertical = EonaTheme.spacing.sm),
+                contentAlignment = Alignment.Center,
+            ) {
+                EonaText(label, style = EonaTheme.typography.callout, color = if (on) colors.accent else colors.textSecondary)
             }
         }
     }
@@ -216,7 +255,7 @@ private fun Area(value: String, placeholder: String, onChange: (String) -> Unit)
 }
 
 /**
- * "Rapports de bugs" (admins), like iOS: the most recent first, by status, a page at a time; a
+ * « Rapports » (admins) : bugs et suggestions, like iOS: the most recent first, by status, a page at a time; a
  * report opens on its details and its status.
  */
 @Composable
@@ -244,7 +283,7 @@ fun BugListRoute(onBack: () -> Unit) {
     LaunchedEffect(filter) { load(reset = true) }
 
     val shown = open
-    EonaScreenScaffold(title = shown?.category?.label ?: "Rapports de bugs", onBack = { if (open != null) open = null else onBack() }) {
+    EonaScreenScaffold(title = shown?.category?.label ?: "Rapports", onBack = { if (open != null) open = null else onBack() }) {
         Column(
             modifier = Modifier
                 .fillMaxSize()

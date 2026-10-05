@@ -154,6 +154,36 @@ object EonaIcons {
         moveTo(12f, 8f); lineTo(15.5f, 11.5f); lineTo(18f, 12f)
         moveTo(12f, 8f); lineTo(8.5f, 10.5f); lineTo(7f, 13f)
     }
+    /** EONA + : la couronne. */
+    val Crown = line("Crown", width = 1.9f) {
+        moveTo(4.5f, 17.5f); lineTo(3.5f, 8f); lineTo(8.2f, 11.8f); lineTo(12f, 5f); lineTo(15.8f, 11.8f); lineTo(20.5f, 8f); lineTo(19.5f, 17.5f); close()
+        moveTo(5f, 20.5f); lineTo(19f, 20.5f)
+    }
+    /** « Contactez-nous » : deux bulles. */
+    val Chat = line("Chat", width = 1.8f) {
+        moveTo(5f, 4f); lineTo(14f, 4f); curveTo(15.1f, 4f, 16f, 4.9f, 16f, 6f); lineTo(16f, 11f)
+        curveTo(16f, 12.1f, 15.1f, 13f, 14f, 13f); lineTo(8f, 13f); lineTo(4.5f, 16f); lineTo(4.5f, 12.9f)
+        curveTo(3.6f, 12.6f, 3f, 11.9f, 3f, 11f); lineTo(3f, 6f); curveTo(3f, 4.9f, 3.9f, 4f, 5f, 4f); close()
+        moveTo(6.5f, 7.5f); lineTo(12.5f, 7.5f); moveTo(6.5f, 10f); lineTo(10.5f, 10f)
+        moveTo(18.5f, 8.5f); lineTo(19f, 8.5f); curveTo(20.1f, 8.5f, 21f, 9.4f, 21f, 10.5f); lineTo(21f, 15f)
+        curveTo(21f, 15.9f, 20.4f, 16.6f, 19.5f, 16.9f); lineTo(19.5f, 20f); lineTo(16f, 17f); lineTo(11f, 17f)
+        curveTo(9.9f, 17f, 9f, 16.1f, 9f, 15.2f)
+    }
+    /** Modifier : le crayon. */
+    val Pencil = line("Pencil", width = 1.9f) {
+        moveTo(4f, 20f); lineTo(4.6f, 16f); lineTo(15.5f, 5.1f); curveTo(16.3f, 4.3f, 17.6f, 4.3f, 18.4f, 5.1f); lineTo(18.9f, 5.6f)
+        curveTo(19.7f, 6.4f, 19.7f, 7.7f, 18.9f, 8.5f); lineTo(8f, 19.4f); close()
+        moveTo(13.6f, 7f); lineTo(17f, 10.4f)
+    }
+    /** Compte lié : Apple. */
+    val AppleMark = line("AppleMark", width = 1.8f) {
+        moveTo(12f, 7.5f); curveTo(10.5f, 6.5f, 8.8f, 6.6f, 7.6f, 7.2f); curveTo(5f, 8.6f, 4.3f, 12.5f, 5.8f, 16f)
+        curveTo(6.9f, 18.6f, 8.6f, 20.6f, 10.3f, 20.3f); curveTo(11.1f, 20.1f, 11.4f, 19.8f, 12f, 19.8f)
+        curveTo(12.6f, 19.8f, 12.9f, 20.1f, 13.7f, 20.3f); curveTo(15.4f, 20.6f, 17.1f, 18.6f, 18.2f, 16f)
+        curveTo(16.6f, 15.3f, 15.6f, 13.9f, 15.6f, 12.2f); curveTo(15.6f, 10.7f, 16.4f, 9.4f, 17.6f, 8.7f)
+        curveTo(16.6f, 7.2f, 15.1f, 6.6f, 13.8f, 6.8f); curveTo(13.1f, 6.9f, 12.5f, 7.2f, 12f, 7.5f); close()
+        moveTo(12.2f, 5.6f); curveTo(12.2f, 4.2f, 13.3f, 3f, 14.8f, 2.8f); curveTo(14.8f, 4.3f, 13.7f, 5.5f, 12.2f, 5.6f); close()
+    }
     /** Protection pluie : écran verrouillé. */
     val Lock = line("Lock") {
         moveTo(6.5f, 11f); lineTo(17.5f, 11f); lineTo(17.5f, 20f); lineTo(6.5f, 20f); close()
