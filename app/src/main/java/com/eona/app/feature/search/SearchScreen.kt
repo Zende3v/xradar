@@ -56,6 +56,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
@@ -101,10 +103,10 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 
 /** What the next pick sets: the trip's destination, its start, or a saved place. */
-private enum class PickTarget { Destination, Start, Home, Work }
+private enum class PickTarget { Destination, Stop, Start, Home, Work }
 
 @Composable
-fun SearchRoute(onBack: () -> Unit) {
+fun SearchRoute(onBack: () -> Unit, addingStop: Boolean = false) {
     val context = LocalContext.current
     val searchApi = remember { SearchApi() }
     val placesApi = remember { PlacesApi() }
@@ -122,7 +124,22 @@ fun SearchRoute(onBack: () -> Unit) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Place>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
-    var target by remember { mutableStateOf(PickTarget.Destination) }
+    // Ouverte depuis « Ajouter une étape » : le choix devient une étape du trajet.
+    val baseTarget = if (addingStop) PickTarget.Stop else PickTarget.Destination
+    var target by remember(addingStop) { mutableStateOf(baseTarget) }
+    val proposal by ActiveTripRepository.proposal.collectAsStateWithLifecycle()
+    val destination by ActiveTripRepository.destination.collectAsStateWithLifecycle()
+    val stops by ActiveTripRepository.stops.collectAsStateWithLifecycle()
+    // Destination en cours ou proposée : un résultat peut aussi devenir une étape (« + »).
+    val quickStop: ((Place) -> Unit)? =
+        if (target == PickTarget.Destination && (destination != null || proposal != null) && stops.size < ActiveTripRepository.MAX_STOPS) {
+            { place ->
+                ActiveTripRepository.addStop(place)
+                onBack()
+            }
+        } else {
+            null
+        }
     var category by remember { mutableStateOf<PlaceCategory?>(null) }
     var categoryPlaces by remember { mutableStateOf<List<Place>>(emptyList()) }
     var categoryLoading by remember { mutableStateOf(false) }
@@ -173,20 +190,24 @@ fun SearchRoute(onBack: () -> Unit) {
                 ActiveTripRepository.propose(place)
                 onBack()
             }
+            PickTarget.Stop -> {
+                ActiveTripRepository.addStop(place)
+                onBack()
+            }
             PickTarget.Start -> {
                 ActiveTripRepository.setStart(place)
-                target = PickTarget.Destination
+                target = baseTarget
                 query = ""
                 category = null
             }
             PickTarget.Home -> {
                 savedRepo.setHome(place)
-                target = PickTarget.Destination
+                target = baseTarget
                 query = ""
             }
             PickTarget.Work -> {
                 savedRepo.setWork(place)
-                target = PickTarget.Destination
+                target = baseTarget
                 query = ""
             }
         }
@@ -195,15 +216,17 @@ fun SearchRoute(onBack: () -> Unit) {
     SearchScreen(
         query = query,
         prompt = when (target) {
-            PickTarget.Destination, PickTarget.Start -> "Où allez-vous ?"
+            PickTarget.Destination -> "Où allez-vous ?"
+            PickTarget.Stop -> "Ajouter une étape"
+            PickTarget.Start -> if (addingStop) "Ajouter une étape" else "Où allez-vous ?"
             PickTarget.Home -> "Adresse de la maison"
             PickTarget.Work -> "Adresse du travail"
         },
         editingStart = target == PickTarget.Start,
-        onEditArrival = { target = PickTarget.Destination; query = "" },
+        onEditArrival = { target = baseTarget; query = "" },
         onUseMyPosition = {
             ActiveTripRepository.setStart(null)
-            target = PickTarget.Destination
+            target = baseTarget
             query = ""
         },
         start = start,
@@ -240,10 +263,16 @@ fun SearchRoute(onBack: () -> Unit) {
         onToggleFavorite = { place -> savedRepo.toggleFavorite(FavoriteTrip(place, start)) },
         isFavorite = { id -> favorites.any { it.to.id == id || it.id == id } },
         onStartFavorite = { trip ->
-            ActiveTripRepository.setStart(trip.from)
-            ActiveTripRepository.propose(trip.to)
-            onBack()
+            // Étape demandée : arrivée du favori ajoutée, départ inchangé.
+            if (addingStop) {
+                pick(trip.to)
+            } else {
+                ActiveTripRepository.setStart(trip.from)
+                ActiveTripRepository.propose(trip.to)
+                onBack()
+            }
         },
+        onAddStop = quickStop,
         onBack = onBack,
     )
 }
@@ -288,6 +317,8 @@ fun SearchScreen(
     onToggleFavorite: (Place) -> Unit,
     isFavorite: (String) -> Boolean,
     onStartFavorite: (FavoriteTrip) -> Unit,
+    /** « + » sur un résultat : il devient une étape ; null sans trajet. */
+    onAddStop: ((Place) -> Unit)? = null,
     onBack: () -> Unit,
 ) {
     val colors = EonaTheme.colors
@@ -354,7 +385,7 @@ fun SearchScreen(
             when {
                 query.trim().length >= MIN_QUERY && loading -> EonaLoadingState(label = "Recherche…")
                 query.trim().length >= MIN_QUERY && results.isEmpty() -> EmptyResults(query)
-                query.trim().length >= MIN_QUERY -> ResultList(results, onPick)
+                query.trim().length >= MIN_QUERY -> ResultList(results, onPick, onAddStop)
                 category != null && categoryLoading -> EonaLoadingState(
                     label = if (waitingForPosition) "En attente de ta position…" else "Recherche autour de toi…",
                 )
@@ -796,9 +827,26 @@ private fun RowAction(
     )
 }
 
+/** « + » en bout de résultat : le lieu devient une étape du trajet en cours ou proposé. */
+@Composable
+private fun AddStopButton(onClick: () -> Unit) {
+    val colors = EonaTheme.colors
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(colors.accent.copy(alpha = 0.14f))
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "Ajouter comme étape" },
+        contentAlignment = Alignment.Center,
+    ) {
+        EonaIcon(EonaIcons.Plus, contentDescription = null, tint = colors.accent, size = 16.dp)
+    }
+}
+
 /** Addresses found by the text search, in the order they came. */
 @Composable
-private fun ResultList(results: List<Place>, onPick: (Place) -> Unit) {
+private fun ResultList(results: List<Place>, onPick: (Place) -> Unit, onAddStop: ((Place) -> Unit)? = null) {
     val spacing = EonaTheme.spacing
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -816,6 +864,7 @@ private fun ResultList(results: List<Place>, onPick: (Place) -> Unit) {
                 leadingIcon = place.kind.icon(),
                 leadingTint = EonaTheme.colors.accent,
                 onClick = { onPick(place) },
+                trailing = onAddStop?.let { add -> { AddStopButton { add(place) } } },
             )
             EonaDivider(Modifier.padding(start = 58.dp))
         }

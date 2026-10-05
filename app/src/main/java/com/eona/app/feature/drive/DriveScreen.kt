@@ -92,7 +92,10 @@ import com.eona.app.feature.drive.component.audioMakesWay
 import com.eona.app.feature.drive.component.key
 import com.eona.app.feature.drive.component.DriveDock
 import com.eona.app.feature.drive.component.DriveMap
+import com.eona.app.feature.drive.component.HudNoticeBanner
 import com.eona.app.feature.drive.component.RouteChoiceCard
+import com.eona.app.feature.drive.component.StopsChip
+import com.eona.app.feature.drive.component.StopsSheetContent
 import com.eona.app.feature.drive.component.RoutePreview
 import com.eona.app.feature.drive.component.GuidanceBanner
 import com.eona.app.feature.drive.component.MusicBanner
@@ -103,6 +106,8 @@ fun DriveRoute(
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    /** « + Étape » : la recherche, pour une étape. */
+    onAddStop: () -> Unit = {},
     viewModel: DriveViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -143,6 +148,8 @@ fun DriveRoute(
         onStartRoute = viewModel::startChosenRoute,
         onRetryRoute = viewModel::retryRouteChoice,
         onCloseRouteChoice = viewModel::cancelRouteChoice,
+        onAddStop = onAddStop,
+        onStopNotice = viewModel::acknowledgeStopNotice,
         group = viewModel.group,
         tripUnderway = viewModel.tripUnderway.collectAsStateWithLifecycle().value,
         modifier = modifier,
@@ -193,6 +200,9 @@ fun DriveScreen(
     onStartRoute: () -> Unit = {},
     onRetryRoute: () -> Unit = {},
     onCloseRouteChoice: () -> Unit = {},
+    /** « + Étape » ; « Étape atteinte » refermé. */
+    onAddStop: () -> Unit = {},
+    onStopNotice: () -> Unit = {},
     /** "Partager mon trajet" and "Trajet en groupe"; null in previews. */
     group: GroupSession? = null,
     /** The driver has really been on the route: a link can be opened. */
@@ -214,6 +224,8 @@ fun DriveScreen(
     var card by remember { mutableStateOf<MemberCardTarget?>(null) }
     /** Stopping the navigation during a group trip is leaving the group: asked first. */
     var confirmStop by remember { mutableStateOf(false) }
+    /** La feuille « Étapes ». */
+    var stopsOpen by remember { mutableStateOf(false) }
     // Protection pluie (iOS updateRainLock) : verrou à 15 km/h, levé sous 10. Un feu rouge
     // déverrouille, un ralentissement non. GPS perdu : levé, jamais bloqué sans vitesse connue.
     val settingsNow by AppPreferences.settings.collectAsStateWithLifecycle()
@@ -223,6 +235,14 @@ fun DriveScreen(
     var choiceHeightPx by remember { mutableStateOf(0) }
     val choiceInsetPx = with(LocalDensity.current) { (spacing.lg * 2).roundToPx() }
     LaunchedEffect(choice == null) { following = choice == null }
+    // Étapes : celles du trajet.
+    val stops by ActiveTripRepository.stops.collectAsStateWithLifecycle()
+    val addStop = {
+        dockCloseRequest += 1
+        dockOpen = false
+        stopsOpen = false
+        onAddStop()
+    }
     LaunchedEffect(state.speedKmh, state.isSearchingGps, settingsNow.rainLock) {
         val next = settingsNow.rainLock && !state.isSearchingGps &&
             (state.speedKmh >= RAIN_LOCK_KMH || (rainLocked && state.speedKmh >= RAIN_UNLOCK_KMH))
@@ -233,6 +253,7 @@ fun DriveScreen(
             reportOpen = false
             limitReportOpen = false
             shareOpen = false
+            stopsOpen = false
             card = null
             audioMenu = null
             pendingDelete = null
@@ -274,6 +295,8 @@ fun DriveScreen(
             speedLimitKmh = state.speedLimitKmh,
             group = group?.mapLayer,
             preview = RoutePreview.of(choice, choiceHeightPx + choiceInsetPx),
+            stops = stops,
+            onStopTap = { stopsOpen = true },
             onMemberTap = group?.let { session -> { id: String -> card = session.cardTarget(id) } },
         )
 
@@ -350,6 +373,26 @@ fun DriveScreen(
                 )
             }
 
+            // En route : étapes (« 2 étapes · Boulangerie »), ou « + Étape ».
+            if (state.trip != null && choice == null) {
+                StopsChip(
+                    stops = stops,
+                    onClick = { if (stops.isEmpty()) addStop() else stopsOpen = true },
+                    modifier = Modifier.padding(top = spacing.sm),
+                )
+            }
+            val lastStopNotice = remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(state.stopNotice) { state.stopNotice?.let { lastStopNotice.value = it } }
+            AnimatedVisibility(
+                visible = state.stopNotice != null,
+                enter = slideInVertically { -it / 2 } + fadeIn(),
+                exit = slideOutVertically { -it / 2 } + fadeOut(),
+            ) {
+                lastStopNotice.value?.let {
+                    HudNoticeBanner(EonaIcons.Check, colors.success, it, onDismiss = onStopNotice, modifier = Modifier.padding(top = spacing.sm))
+                }
+            }
+
             // A switch to a faster route, for a few seconds, under the guidance.
             val lastNotice = remember { mutableStateOf<FasterRouteNotice?>(null) }
             LaunchedEffect(state.fasterNotice) { state.fasterNotice?.let { lastNotice.value = it } }
@@ -419,6 +462,10 @@ fun DriveScreen(
                 onStart = onStartRoute,
                 onRetry = onRetryRoute,
                 onClose = onCloseRouteChoice,
+                stops = stops,
+                canAddStop = stops.size < ActiveTripRepository.MAX_STOPS,
+                onAddStop = addStop,
+                onEditStops = { stopsOpen = true },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
@@ -660,6 +707,18 @@ fun DriveScreen(
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),
                     size = MAP_CONTROL_SIZE,
+                )
+            }
+        }
+
+        if (stopsOpen) {
+            DriveSheet(onDismiss = { stopsOpen = false }) {
+                StopsSheetContent(
+                    stops = stops,
+                    arrival = ActiveTripRepository.destination.collectAsStateWithLifecycle().value ?: choice?.destination,
+                    canAdd = stops.size < ActiveTripRepository.MAX_STOPS,
+                    onChange = { ActiveTripRepository.setStops(it) },
+                    onAdd = addStop,
                 )
             }
         }

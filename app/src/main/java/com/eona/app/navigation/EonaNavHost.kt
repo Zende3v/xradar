@@ -56,10 +56,19 @@ fun EonaNavHost(modifier: Modifier = Modifier) {
         composable(Routes.DRIVE) {
             // The search over the HUD, frosted: the map and the HUD show through it (like iOS).
             var searchOpen by rememberSaveable { mutableStateOf(false) }
+            // Ouverte depuis « Ajouter une étape » : le lieu choisi devient une étape.
+            var searchForStop by rememberSaveable { mutableStateOf(false) }
             BackHandler(enabled = searchOpen) { searchOpen = false }
             Box(Modifier.fillMaxSize()) {
                 DriveRoute(
-                    onOpenSearch = { searchOpen = true },
+                    onOpenSearch = {
+                        searchForStop = false
+                        searchOpen = true
+                    },
+                    onAddStop = {
+                        searchForStop = true
+                        searchOpen = true
+                    },
                     onOpenSettings = { navController.navigate(Routes.MENU) },
                     modifier = if (searchOpen) Modifier.clearAndSetSemantics { } else Modifier,
                 )
@@ -68,7 +77,7 @@ fun EonaNavHost(modifier: Modifier = Modifier) {
                     enter = fadeIn(tween(SEARCH_FADE_MS)),
                     exit = fadeOut(tween(SEARCH_FADE_MS)),
                 ) {
-                    SearchRoute(onBack = { searchOpen = false })
+                    SearchRoute(onBack = { searchOpen = false }, addingStop = searchForStop)
                 }
             }
         }

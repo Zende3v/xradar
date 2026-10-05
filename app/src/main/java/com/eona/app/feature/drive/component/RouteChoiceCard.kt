@@ -63,6 +63,10 @@ fun RouteChoiceCard(
     onRetry: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    stops: List<com.eona.app.core.model.Place> = emptyList(),
+    canAddStop: Boolean = false,
+    onAddStop: () -> Unit = {},
+    onEditStops: () -> Unit = {},
 ) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
@@ -79,7 +83,7 @@ fun RouteChoiceCard(
                 .animateContentSize(),
             verticalArrangement = Arrangement.spacedBy(spacing.md),
         ) {
-            Header(choice, onClose)
+            Header(choice, onClose, stops, canAddStop, onAddStop, onEditStops)
             Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
                 OptionRow(
                     kind = RoutePreference.Fastest,
@@ -118,7 +122,14 @@ fun RouteChoiceCard(
 }
 
 @Composable
-private fun Header(choice: RouteChoice, onClose: () -> Unit) {
+private fun Header(
+    choice: RouteChoice,
+    onClose: () -> Unit,
+    stops: List<com.eona.app.core.model.Place>,
+    canAddStop: Boolean,
+    onAddStop: () -> Unit,
+    onEditStops: () -> Unit,
+) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(spacing.md)) {
@@ -140,6 +151,7 @@ private fun Header(choice: RouteChoice, onClose: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            StopsRow(stops, canAddStop, onAddStop, onEditStops)
         }
         Box(
             modifier = Modifier
@@ -151,6 +163,46 @@ private fun Header(choice: RouteChoice, onClose: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             EonaIcon(EonaIcons.Close, contentDescription = null, tint = colors.textSecondary, size = 16.dp)
+        }
+    }
+}
+
+/** « Via Boulangerie +2 » (liste des étapes) et « + Étape ». */
+@Composable
+private fun StopsRow(stops: List<com.eona.app.core.model.Place>, canAdd: Boolean, onAdd: () -> Unit, onEdit: () -> Unit) {
+    val colors = EonaTheme.colors
+    val spacing = EonaTheme.spacing
+    if (stops.isEmpty() && !canAdd) return
+    Row(Modifier.padding(top = spacing.xs), horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+        if (stops.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(colors.surfaceHigh.copy(alpha = 0.6f))
+                    .clickable(onClick = onEdit)
+                    .semantics { contentDescription = "Étapes : " + stops.joinToString(", ") { it.name } }
+                    .padding(horizontal = spacing.sm, vertical = spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+            ) {
+                EonaText(RouteChoiceText.via(stops.map { it.name }), style = EonaTheme.typography.caption, color = colors.textPrimary, maxLines = 1)
+                EonaIcon(EonaIcons.ChevronRight, contentDescription = null, tint = colors.textPrimary, size = 12.dp)
+            }
+        }
+        if (canAdd) {
+            Row(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(colors.accent.copy(alpha = 0.14f))
+                    .clickable(onClick = onAdd)
+                    .semantics { contentDescription = "Ajouter une étape" }
+                    .padding(horizontal = spacing.sm, vertical = spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+            ) {
+                EonaIcon(EonaIcons.Plus, contentDescription = null, tint = colors.accent, size = 12.dp)
+                EonaText("Étape", style = EonaTheme.typography.caption, color = colors.accent)
+            }
         }
     }
 }

@@ -81,6 +81,8 @@ data class DriveUiState(
     val officialLimitKmh: Int? = null,
     /** Choix d'itinéraire montré (Rapide, Éco) ; null hors choix. */
     val routeChoice: com.eona.app.core.model.RouteChoice? = null,
+    /** « Étape atteinte · … », quelques secondes ; null sinon. */
+    val stopNotice: String? = null,
     /** Coût carburant estimé du choix ; null sans prix connu. */
     val fuelEstimate: com.eona.app.core.model.FuelEstimate? = null,
     /** Where [speedLimitKmh] comes from: the road's own limit or a radar's VMA. */

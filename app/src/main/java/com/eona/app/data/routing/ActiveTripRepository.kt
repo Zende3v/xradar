@@ -34,9 +34,36 @@ object ActiveTripRepository {
         _proposal.value = place
     }
 
+    /** Étapes restantes avant la destination, dans l'ordre ; retirées une à une en route. */
+    private val _stops = MutableStateFlow<List<Place>>(emptyList())
+    val stops: StateFlow<List<Place>> = _stops.asStateFlow()
+
+    /** Étapes au plus, comme le backend. */
+    const val MAX_STOPS = 10
+
     fun setDestination(place: Place?) {
         _destination.value = place
-        if (place == null) _route.value = null
+        if (place == null) {
+            _route.value = null
+            _stops.value = emptyList()
+        }
+    }
+
+    /** Une étape de plus, en dernier avant la destination. Liste pleine, déjà prévue ou destination : rien. */
+    fun addStop(place: Place) {
+        val now = _stops.value
+        if (now.size >= MAX_STOPS || now.any { it.id == place.id } || place.id == _destination.value?.id || place.id == _proposal.value?.id) return
+        _stops.value = now + place
+    }
+
+    /** Étapes réordonnées ou retirées par le conducteur. */
+    fun setStops(places: List<Place>) {
+        _stops.value = places.take(MAX_STOPS)
+    }
+
+    /** Première étape atteinte : retirée. */
+    fun stopReached() {
+        if (_stops.value.isNotEmpty()) _stops.value = _stops.value.drop(1)
     }
 
     fun setStart(place: Place?) {
@@ -51,5 +78,6 @@ object ActiveTripRepository {
         _destination.value = null
         _route.value = null
         _start.value = null
+        _stops.value = emptyList()
     }
 }

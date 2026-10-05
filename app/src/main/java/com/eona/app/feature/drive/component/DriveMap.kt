@@ -129,6 +129,9 @@ fun DriveMap(
     onMemberTap: ((String) -> Unit)? = null,
     /** Choix d'itinéraire : routes Rapide et Éco en vue d'ensemble, retenue en accent. */
     preview: RoutePreview? = null,
+    /** Étapes du trajet, numérotées dans l'ordre ; touchées : leur liste. */
+    stops: List<com.eona.app.core.model.Place> = emptyList(),
+    onStopTap: (() -> Unit)? = null,
 ) {
     // Compose previews have no GL context — show a plain backdrop instead.
     if (LocalInspectionMode.current) {
@@ -172,6 +175,7 @@ fun DriveMap(
     var styleReady by remember { mutableStateOf(false) }
     val latestOnGesture by rememberUpdatedState(onUserGesture)
     val latestOnReportTap by rememberUpdatedState(onReportTap)
+    val latestOnStopTap by rememberUpdatedState(onStopTap)
     val locationState = rememberUpdatedState(location)
     val followingState = rememberUpdatedState(following)
     val speedLimitState = rememberUpdatedState(speedLimitKmh)
@@ -205,6 +209,7 @@ fun DriveMap(
     val colors = EonaTheme.colors
     val density = LocalDensity.current
     val markerPx = with(density) { 30.dp.roundToPx() }
+    val stopPinExtraPx = with(density) { 4.dp.roundToPx() }
     val clusterAlertPx = with(density) { 34.dp.roundToPx() }
     val clusterSignPx = with(density) { 30.dp.roundToPx() }
     val cursorPx = with(density) { CURSOR_SIZE.roundToPx() }
@@ -276,6 +281,12 @@ fun DriveMap(
                         CLUSTER_ZOOM_MS,
                     )
                     return@addOnMapClickListener true
+                }
+                latestOnStopTap?.let { open ->
+                    if (ready.queryRenderedFeatures(screen, STOPS_LAYER).isNotEmpty()) {
+                        open()
+                        return@addOnMapClickListener true
+                    }
                 }
                 val handler = latestOnReportTap ?: return@addOnMapClickListener false
                 val hit = ready.queryRenderedFeatures(screen, REPORT_LAYER).firstOrNull()
@@ -410,6 +421,16 @@ fun DriveMap(
                 ).also { it.setFilter(Expression.not(Expression.has(CLUSTER_COUNT))) },
             )
             addBadgeClusterLayer(style, REPORT_SOURCE, REPORT_CLUSTER, CLUSTER_ALERT_IMAGE, alertOffsetEm, darkMap)
+            // Étapes numérotées : disque accent, numéro blanc, au-dessus des signalements.
+            (1..MAX_STOP_PINS).forEach { n -> style.addImage("stop-$n", stopPinBitmap(n, markerPx + stopPinExtraPx, accent)) }
+            style.addSource(GeoJsonSource(STOPS_SOURCE))
+            style.addLayer(
+                SymbolLayer(STOPS_LAYER, STOPS_SOURCE).withProperties(
+                    PropertyFactory.iconImage(Expression.get("icon")),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                ),
+            )
             // User position on top: a soft pulsing halo + the vehicle, turned with the heading.
             style.addImage(ARROW_IMAGE, vehicleCursorBitmap(vehicleState.value, accent, cursorPx, densityDpi))
             style.addSource(GeoJsonSource(POSITION_SOURCE))
@@ -496,6 +517,18 @@ fun DriveMap(
     LaunchedEffect(traffic, styleReady) {
         val style = map?.style ?: return@LaunchedEffect
         if (styleReady) applyTraffic(style, drawnPath, routeFrom[0], traffic, accentState.value)
+    }
+
+    LaunchedEffect(map, styleReady, stops) {
+        val style = map?.style ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        style.getSourceAs<GeoJsonSource>(STOPS_SOURCE)?.setGeoJson(
+            FeatureCollection.fromFeatures(
+                stops.take(MAX_STOP_PINS).mapIndexed { i, stop ->
+                    Feature.fromGeometry(Point.fromLngLat(stop.lon, stop.lat)).apply { addStringProperty("icon", "stop-${i + 1}") }
+                },
+            ),
+        )
     }
 
     // Choix d'itinéraire : routes dessinées ; vue d'ensemble recadrée quand routes ou panneau
@@ -1104,6 +1137,30 @@ private fun markerBitmap(painter: Painter, sizePx: Int, color: ComposeColor, den
     return image.asAndroidBitmap()
 }
 
+/** Étape numérotée : disque accent, numéro blanc, même gabarit que les marqueurs (iOS stopPin). */
+private fun stopPinBitmap(number: Int, sizePx: Int, accentArgb: Int): Bitmap {
+    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val r = sizePx / 2f
+    val hairline = sizePx * 0.025f
+    val rim = sizePx * 0.058f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    paint.color = 0x38000000
+    canvas.drawCircle(r, r, r, paint)
+    paint.color = android.graphics.Color.WHITE
+    canvas.drawCircle(r, r, r - hairline, paint)
+    paint.color = accentArgb or (0xFF shl 24)
+    canvas.drawCircle(r, r, r - hairline - rim, paint)
+    val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (ComposeColor(accentArgb or (0xFF shl 24)).luminance() > 0.5f) 0xFF1C1C1E.toInt() else android.graphics.Color.WHITE
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.DEFAULT_BOLD
+        textSize = sizePx * 0.5f
+    }
+    canvas.drawText("$number", r, r - (text.descent() + text.ascent()) / 2, text)
+    return bitmap
+}
+
 /** The icon on a light marker colour. */
 private val MARKER_DARK_GLYPH = ComposeColor(0xFF1C1C1E)
 
@@ -1262,6 +1319,9 @@ private const val ZONE_FILL = "xr-zones-fill"
 private const val ZONE_LINE = "xr-zones-line"
 private const val ROUTE_SOURCE = "xr-route"
 private const val PREVIEW_SOURCE = "xr-preview"
+private const val STOPS_SOURCE = "xr-stops"
+private const val STOPS_LAYER = "xr-stops-pins"
+private const val MAX_STOP_PINS = 10
 private const val PREVIEW_OTHER = "xr-preview-other"
 private const val PREVIEW_SELECTED = "xr-preview-selected"
 /** Marges de la vue d'ensemble du choix, en pixels : côtés, haut (barre de recherche). */

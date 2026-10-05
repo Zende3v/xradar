@@ -135,6 +135,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private var choiceVersion = 0
     /** Prix médians autour du départ, par carburant : coût estimé du choix. */
     private val fuelPrices = MutableStateFlow<Map<FuelType, Double>>(emptyMap())
+    /** Étapes de la dernière route obtenue : une liste changée recalcule, une étape atteinte non. */
+    @Volatile private var routedStops: List<String> = emptyList()
+    /** « Étape atteinte · … », quelques secondes. */
+    private val stopNotice = MutableStateFlow<String?>(null)
     private var fuelPricesAt = 0L
     // Contrôles trafic et dernier détour, conservés pour une même destination.
     private var checkingFaster = false
@@ -361,6 +365,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         state.copy(media = playback, musicOpen = open)
     }.combine(routeChoice) { state, choice ->
         state.copy(routeChoice = choice)
+    }.combine(stopNotice) { state, notice ->
+        state.copy(stopNotice = notice)
     }.combine(combine(fuelPrices, AppPreferences.settings) { prices, settings -> prices[settings.preferredFuel]?.let { FuelEstimate(settings.consumption, it) } }) { state, fuel ->
         state.copy(fuelEstimate = fuel)
     }.stateIn(
@@ -532,6 +538,30 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     ).routeOrNull?.let { ActiveTripRepository.setRoute(it) }
                 }
         }
+        // Étapes changées par le conducteur (ajout, ordre, retrait) : choix ou route recalculés.
+        // Étape atteinte en route : rien, la route la traversait déjà.
+        viewModelScope.launch {
+            ActiveTripRepository.stops.map { list -> list.map { it.id } }.distinctUntilChanged().collectLatest { ids ->
+                if (ids == routedStops) return@collectLatest
+                // Glisser-déposer, retraits en série : un seul calcul, une fois la liste posée.
+                delay(STOPS_SETTLE_MS)
+                if (ActiveTripRepository.stops.value.map { it.id } == routedStops) return@collectLatest
+                if (routeChoice.value != null) {
+                    retryRouteChoice()
+                    return@collectLatest
+                }
+                val destination = ActiveTripRepository.destination.value ?: return@collectLatest
+                if (ActiveTripRepository.route.value == null) return@collectLatest
+                val fix = LocationRepository.location.value ?: return@collectLatest
+                val start = ActiveTripRepository.start.value
+                val from = start?.let { GeoPoint(it.lat, it.lon) } ?: GeoPoint(fix.latitude, fix.longitude)
+                val route = computeRoute(from, GeoPoint(destination.lat, destination.lon), if (start == null) headingOf(fix) else null).routeOrNull
+                if (route != null && ActiveTripRepository.destination.value == destination) {
+                    ActiveTripRepository.setRoute(route)
+                    trip?.recalculated()
+                }
+            }
+        }
         // Destination choisie : Rapide puis Éco calculés, choix montré. Trajet lancé au choix.
         viewModelScope.launch {
             ActiveTripRepository.proposal.collect { proposal ->
@@ -628,6 +658,16 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 // The arrival the dock announces, kept at 25, 50 and 75 % of the way (D1.1).
                 if (current.awaitsCheckpoint) {
                     ActiveTripRepository.route.value?.let { route -> current.checkpoint(route, remainingShare(route), shownArrival(route), etaPair(route)) }
+                }
+                // Étape atteinte : retirée ; route inchangée, elle la traverse déjà. Lieu en retrait
+                // de la route (cour, parking) : rayon élargi de ce retrait, sinon jamais atteint.
+                ActiveTripRepository.stops.value.firstOrNull()?.let { next ->
+                    val aside = minOf(path?.match(next.lat, next.lon)?.offRouteMeters ?: 0.0, STOP_ASIDE_MAX_M)
+                    if (Geo.haversine(sample.latitude, sample.longitude, next.lat, next.lon) < ARRIVE_M + aside) {
+                        if (routedStops.firstOrNull() == next.id) routedStops = routedStops.drop(1)
+                        ActiveTripRepository.stopReached()
+                        announceStop(next)
+                    }
                 }
                 // Auto-finish when we reach the destination.
                 ActiveTripRepository.destination.value?.let { dest ->
@@ -1116,7 +1156,16 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         heading: Double?,
         preference: RoutePreference? = null,
         timed: Boolean = false,
-    ): RouteAnswer = routingRepository.route(from, to, avoidOptions(), heading, preference ?: routeMode, timed, moped = moped)
+    ): RouteAnswer {
+        // Étapes restantes toujours traversées, dans l'ordre.
+        val stops = ActiveTripRepository.stops.value
+        val answer = routingRepository.route(
+            from, to, avoidOptions(), heading, preference ?: routeMode, timed,
+            via = stops.map { GeoPoint(it.lat, it.lon) }, moped = moped,
+        )
+        if (answer is RouteAnswer.Found) routedStops = stops.map { it.id }
+        return answer
+    }
 
     /** Scooter 50 ou sans permis : itinéraire 45 km/h, sans voie rapide. */
     private val moped: Boolean get() = AppPreferences.settings.value.vehicleType.moped
@@ -1211,8 +1260,27 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Choix refermé sans trajet : trajet en cours inchangé. */
     fun cancelRouteChoice() {
-        if (ActiveTripRepository.destination.value == null) ActiveTripRepository.setStart(null)
+        if (ActiveTripRepository.destination.value == null) {
+            ActiveTripRepository.setStart(null)
+            ActiveTripRepository.setStops(emptyList())
+        }
         ActiveTripRepository.propose(null)
+    }
+
+    fun acknowledgeStopNotice() {
+        stopNotice.value = null
+    }
+
+    /** Étape franchie : dite et montrée un instant. */
+    private fun announceStop(stop: Place) {
+        val text = "Étape atteinte · ${stop.name}"
+        stopNotice.value = text
+        val prefs = AppPreferences.alerts.value
+        if (prefs.voice) speaker.speak("Étape atteinte.", prefs.guidanceVolume)
+        viewModelScope.launch {
+            delay(STOP_NOTICE_MS)
+            if (stopNotice.value == text) stopNotice.value = null
+        }
     }
 
     /** Nouvel essai après échec des deux calculs. */
@@ -1241,7 +1309,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val since = lastTrafficRerouteAt?.let { ((now - it) / 1000).toInt() }
             val etaSeconds = ActiveTripRepository.route.value?.let { secondsLeft(it).roundToInt() }
-            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since, etaSeconds, preference = routeMode, moped = moped) ?: return
+            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since, etaSeconds, preference = routeMode, via = ActiveTripRepository.stops.value.map { GeoPoint(it.lat, it.lon) }, moped = moped) ?: return
             if (version != routeVersion || ActiveTripRepository.destination.value != destination) return
             lastTrafficRerouteAt = System.currentTimeMillis()
             trip?.tookFaster()
@@ -1923,6 +1991,12 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val TRIP_ABANDON_MS = 30 * 60_000L
         /** A trip's first route: asked again after these pauses before giving up. */
         val ROUTE_RETRY_MS = longArrayOf(1_200L, 3_000L, 6_000L)
+        /** « Étape atteinte » : visible ce temps. */
+        const val STOP_NOTICE_MS = 4_000L
+        /** Étape en retrait de la route : rayon d'arrivée élargi, au plus de ceci. */
+        const val STOP_ASIDE_MAX_M = 150.0
+        /** Étapes modifiées : calcul après ce calme. */
+        const val STOPS_SETTLE_MS = 700L
         /** Choix d'itinéraire sans position : attente du premier fix au plus. */
         const val CHOICE_FIX_WAIT_MS = 6_000L
         /** Prix des stations proches du départ : relus au plus toutes les 30 min. */
