@@ -44,7 +44,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 ## Production documentée
 
 - Dernier déploiement backend : **`a85c6bc`**, 05/10 à **22:27 Europe/Paris** ; `/health` local et public OK.
-- Sauvegarde code, comptes et budget HERE : `/opt/eona-backend-src-backup-20261005-222515.tgz`, privée. Registre antérieur absent, aucun ban préexistant.
+- Sauvegarde code, comptes et budget HERE : `/opt/eona-backend-src-backup-20261005-222515.tgz`, privée. Registre indépendant antérieur absent.
 - Ancien code : `/opt/eona-backend-src-before-a85c6bc`. Dépendances inchangées, aucune installation ; un seul redémarrage autorisé.
 - Node **20.20.2** : huit modules modifiés analysés, 69 fichiers vérifiés par empreinte. Onze identifiants comptes inchangés, chargés et persistés.
 - Faux Bearer : endpoints aperçu, trajets et registre refusent 401. Agrégat PostgreSQL réel disponible ; HERE migre sans appel payant.
