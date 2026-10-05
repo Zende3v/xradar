@@ -738,7 +738,7 @@ Source profil : [Valhalla 3.9, TaxiCost](https://github.com/valhalla/valhalla/bl
 
 ## Pilotage EONA : 05/10/2026, iOS 37
 
-Code prêt ; déploiement distinct, soumis accord Arthur.
+Déployé : `a85c6bc`, 05/10 à 22:27 Paris, après accord Arthur. iOS `4e784ac`, build 37, poussé.
 
 - Tous endpoints admin exigent Bearer administrateur valide. `ADMIN_TOKEN` reste disponible pour scripts.
 - Bearer invalide : aucun repli appareil. Compte membre exige connexion explicite ; appareil seul réservé invité.

@@ -1,12 +1,12 @@
 # Valhalla : état du chantier
 
-Mis à jour : **05/10/2026**. Production conservée ; lot Pilotage EONA prêt, accord déploiement attendu.
+Mis à jour : **05/10/2026**. Pilotage EONA déployé après accord Arthur ; santé et conservation comptes vérifiées.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
-- Backend **`d2e505d`** en production. iOS **`4e784ac`**, build **37**, poussé ; Arthur lance Codemagic et tests téléphone.
-- Lot backend Pilotage EONA prêt : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Aucun déploiement effectué.
+- Backend **`a85c6bc`** en production. iOS **`4e784ac`**, build **37**, poussé ; Arthur lance Codemagic et tests téléphone.
+- Pilotage EONA déployé : présence, activité anonyme, gestion comptes, bans persistants, historique HERE.
 - **48 contrôles backend ciblés passent** : sécurité/accès 25, consommation/cache 19, dashboard 4. Revue contrat backend/iOS réalisée.
 - ORS reste secours et comparaison en ombre. OSRM démo retiré.
 - Trafic traité dans le backend : **HERE, EONA, data.gouv**.
@@ -43,9 +43,12 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 
 ## Production documentée
 
-- Dernier déploiement backend : **`d2e505d`**, 05/10 à **16:07 Europe/Paris** ; `/health` local et public OK.
-- Sauvegarde code et comptes : `/opt/eona-backend-src-backup-20261005-160743.tgz`. Ancien code conservé hors dossier actif.
-- Node **20.20.2** : treize contrôles ciblés passent. Sources vérifiées contre commit ; onze comptes antérieurs conservés.
+- Dernier déploiement backend : **`a85c6bc`**, 05/10 à **22:27 Europe/Paris** ; `/health` local et public OK.
+- Sauvegarde code, comptes et budget HERE : `/opt/eona-backend-src-backup-20261005-222515.tgz`, privée. Registre antérieur absent, aucun ban préexistant.
+- Ancien code : `/opt/eona-backend-src-before-a85c6bc`. Dépendances inchangées, aucune installation ; un seul redémarrage autorisé.
+- Node **20.20.2** : huit modules modifiés analysés, 69 fichiers vérifiés par empreinte. Onze identifiants comptes inchangés, chargés et persistés.
+- Faux Bearer : endpoints aperçu, trajets et registre refusent 401. Agrégat PostgreSQL réel disponible ; HERE migre sans appel payant.
+- Collecte détaillée HERE depuis **05/10 à 22:28 Paris** ; semaine initiale partielle. Cumul mensuel antérieur conservé.
 - Contrôle production : aperçu sans débit, quatre départs acceptés, cinquième refusé, recalcul admis au plafond.
 - Taxi et groupes gratuits refusés. Compte temporaire de contrôle supprimé, fichier comptes vérifié.
 - Carte validée le 04/10 à 19:38 : **`20261004T170051Z-a788fcddd0dc`**.
@@ -97,7 +100,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
 - Build iOS 37 : diff vérifié, contrat backend/iOS revu. Compilation, contrôles Swift ciblés et rendu téléphone par Arthur via Codemagic.
-- Déploiement Pilotage EONA attend accord explicite Arthur. Sauvegarder comptes, registre bannissements et budget HERE avant transfert.
+- Déploiement Pilotage EONA autorisé puis réalisé. Validation fonctionnelle admin et thèmes reste sur téléphone, après build Codemagic.
 - Sessions backend restent en mémoire. Membres exigent Bearer valide ; redémarrage impose reconnexion, cache iOS périmé effacé.
 - Identifiant appareil EONA reste dans Keychain ; aucun HWID matériel accessible. Blocage limite appareils connus par ce service.
 - Perso reporté. Feux en direct toujours en préparation, cadenas gratuit ; aucune donnée réelle actuellement.
