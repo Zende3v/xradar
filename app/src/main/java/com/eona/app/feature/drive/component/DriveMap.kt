@@ -37,6 +37,8 @@ import com.eona.app.core.model.LocationSample
 import com.eona.app.core.model.AlertType
 import com.eona.app.core.model.Radar
 import com.eona.app.core.model.ReportType
+import com.eona.app.core.model.RouteChoice
+import com.eona.app.core.model.RoutePreference
 import com.eona.app.core.model.UserReport
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.designsystem.theme.EonaTheme
@@ -125,6 +127,8 @@ fun DriveMap(
     group: GroupMapLayer? = null,
     /** A group member's photo touched: their card. */
     onMemberTap: ((String) -> Unit)? = null,
+    /** Choix d'itinéraire : routes Rapide et Éco en vue d'ensemble, retenue en accent. */
+    preview: RoutePreview? = null,
 ) {
     // Compose previews have no GL context — show a plain backdrop instead.
     if (LocalInspectionMode.current) {
@@ -310,6 +314,25 @@ fun DriveMap(
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                 ),
             )
+            // Choix d'itinéraire : l'autre route en gris, la retenue en accent par-dessus.
+            style.addSource(GeoJsonSource(PREVIEW_SOURCE))
+            style.addLayer(
+                LineLayer(PREVIEW_OTHER, PREVIEW_SOURCE).withProperties(
+                    PropertyFactory.lineColor(if (darkMap) "#8E8E93" else "#A1A1A6"),
+                    PropertyFactory.lineWidth(6f),
+                    PropertyFactory.lineOpacity(0.75f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                ).withFilter(Expression.eq(Expression.get("sel"), false)),
+            )
+            style.addLayer(
+                LineLayer(PREVIEW_SELECTED, PREVIEW_SOURCE).withProperties(
+                    PropertyFactory.lineColor(accentHex),
+                    PropertyFactory.lineWidth(6f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                ).withFilter(Expression.eq(Expression.get("sel"), true)),
+            )
             // Radar-car probable zones (translucent circles), above the route.
             val zoneHex = String.format("#%06X", 0xFFFFFF and colors.radarMobile.toArgb())
             style.addSource(GeoJsonSource(ZONE_SOURCE))
@@ -473,6 +496,48 @@ fun DriveMap(
     LaunchedEffect(traffic, styleReady) {
         val style = map?.style ?: return@LaunchedEffect
         if (styleReady) applyTraffic(style, drawnPath, routeFrom[0], traffic, accentState.value)
+    }
+
+    // Choix d'itinéraire : routes dessinées ; vue d'ensemble recadrée quand routes ou panneau
+    // changent, jamais au simple changement de choix (iOS setPreview).
+    var previewFramed by remember { mutableStateOf<RoutePreview?>(null) }
+    LaunchedEffect(map, styleReady, preview) {
+        val current = map ?: return@LaunchedEffect
+        val style = current.style ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        val source = style.getSourceAs<GeoJsonSource>(PREVIEW_SOURCE) ?: return@LaunchedEffect
+        val next = preview
+        if (next == null) {
+            source.setGeoJson(FeatureCollection.fromFeatures(emptyList<Feature>()))
+            previewFramed = null
+            return@LaunchedEffect
+        }
+        val lines = next.lines.filter { it.second.size >= 2 }
+        source.setGeoJson(
+            FeatureCollection.fromFeatures(
+                lines.map { (preference, points) ->
+                    Feature.fromGeometry(LineString.fromLngLats(points.map { Point.fromLngLat(it.lon, it.lat) })).apply {
+                        addBooleanProperty("sel", preference == next.selected)
+                    }
+                },
+            ),
+        )
+        val framed = previewFramed
+        if (framed != null && framed.lines == next.lines && framed.bottomPaddingPx == next.bottomPaddingPx) return@LaunchedEffect
+        previewFramed = next
+        val all = lines.flatMap { it.second }
+        if (all.size < 2) return@LaunchedEffect
+        val bounds = LatLngBounds.Builder().apply { all.forEach { include(LatLng(it.lat, it.lon)) } }.build()
+        runCatching {
+            // Vue de dessus, nord en haut : trajets lisibles d'un coup d'œil.
+            current.moveCamera(
+                CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(current.cameraPosition).tilt(0.0).bearing(0.0).build()),
+            )
+            current.animateCamera(
+                CameraUpdateFactory.newLatLngBounds(bounds, PREVIEW_SIDE_PX, PREVIEW_TOP_PX, PREVIEW_SIDE_PX, next.bottomPaddingPx),
+                OVERVIEW_MS,
+            )
+        }
     }
 
     LaunchedEffect(location, routePath) {
@@ -1137,6 +1202,22 @@ private class LineMeasure(points: List<GeoPoint>) {
     private fun mercY(lat: Double) = ln(tan(Math.PI / 4 + Math.toRadians(lat) / 2)) / (2 * Math.PI)
 }
 
+/** Routes du choix d'itinéraire à montrer : [lines] (choix, tracé), la retenue, la marge du bas (panneau). */
+data class RoutePreview(
+    val lines: List<Pair<RoutePreference, List<GeoPoint>>>,
+    val selected: RoutePreference,
+    val bottomPaddingPx: Int,
+) {
+    companion object {
+        /** Null sans route prête : rien à montrer. */
+        fun of(choice: RouteChoice?, bottomPaddingPx: Int): RoutePreview? {
+            choice ?: return null
+            val lines = RoutePreference.entries.mapNotNull { p -> choice.option(p).route?.let { p to it.points } }
+            return if (lines.isEmpty()) null else RoutePreview(lines, choice.selected, bottomPaddingPx)
+        }
+    }
+}
+
 private fun setRoute(style: Style, points: List<GeoPoint>) {
     val source = style.getSourceAs<GeoJsonSource>(ROUTE_SOURCE) ?: return
     if (points.size < 2) {
@@ -1180,6 +1261,12 @@ private const val ZONE_SOURCE = "xr-zones"
 private const val ZONE_FILL = "xr-zones-fill"
 private const val ZONE_LINE = "xr-zones-line"
 private const val ROUTE_SOURCE = "xr-route"
+private const val PREVIEW_SOURCE = "xr-preview"
+private const val PREVIEW_OTHER = "xr-preview-other"
+private const val PREVIEW_SELECTED = "xr-preview-selected"
+/** Marges de la vue d'ensemble du choix, en pixels : côtés, haut (barre de recherche). */
+private const val PREVIEW_SIDE_PX = 96
+private const val PREVIEW_TOP_PX = 260
 private const val ROUTE_GLOW = "xr-route-glow"
 private const val ROUTE_CORE = "xr-route-core"
 /** How far the traffic colours blend into the route's own colour. */

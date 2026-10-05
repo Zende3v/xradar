@@ -119,6 +119,16 @@ data class TrafficParts(
 
     companion object {
         /**
+         * Route du choix d'itinéraire : son temps HERE avec trafic, déjà connu, base de l'ETA dès
+         * le départ, avant la première réponse trafic. Aucun appel en plus. Null sans temps HERE.
+         */
+        fun seeded(route: Route, routeMeters: Double): TrafficParts? {
+            val seconds = route.trafficSeconds?.takeIf { it > 0 } ?: return null
+            if (routeMeters <= 0) return null
+            return TrafficParts(routeMeters = routeMeters, travelSeconds = seconds)
+        }
+
+        /**
          * [zones] beyond what [known] already counts where they overlap: only their extra delay;
          * with [keepFree], a closure or a stretch without delay shows anyway.
          */

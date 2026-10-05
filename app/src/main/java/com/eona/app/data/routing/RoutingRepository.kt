@@ -2,6 +2,7 @@ package com.eona.app.data.routing
 
 import com.eona.app.core.model.GeoPoint
 import com.eona.app.core.model.Route
+import com.eona.app.core.model.RoutePreference
 import com.eona.app.data.account.AccessDenial
 import com.eona.app.data.account.AccessDeniedException
 import kotlin.coroutines.cancellation.CancellationException
@@ -16,8 +17,17 @@ sealed interface RouteAnswer {
 }
 
 class RoutingRepository(private val api: RoutingApi = RoutingApi()) {
-    suspend fun route(from: GeoPoint, to: GeoPoint, avoid: List<String> = emptyList(), heading: Double? = null): RouteAnswer = try {
-        api.route(from, to, avoid, heading)?.let { RouteAnswer.Found(it) } ?: RouteAnswer.Failed
+    suspend fun route(
+        from: GeoPoint,
+        to: GeoPoint,
+        avoid: List<String> = emptyList(),
+        heading: Double? = null,
+        preference: RoutePreference? = null,
+        timed: Boolean = false,
+        via: List<GeoPoint> = emptyList(),
+        moped: Boolean = false,
+    ): RouteAnswer = try {
+        api.route(from, to, avoid, heading, preference, timed, via, moped)?.let { RouteAnswer.Found(it) } ?: RouteAnswer.Failed
     } catch (e: AccessDeniedException) {
         RouteAnswer.Denied(e.denial)
     } catch (e: CancellationException) {

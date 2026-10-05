@@ -4,6 +4,8 @@ import com.eona.app.BuildConfig
 import com.eona.app.core.model.FasterRoute
 import com.eona.app.core.model.GeoPoint
 import com.eona.app.core.model.Route
+import com.eona.app.core.model.RoutePreference
+import com.eona.app.core.model.RouteRoads
 import com.eona.app.core.model.RouteStep
 import com.eona.app.data.account.AccessDenial
 import com.eona.app.data.account.AccessDeniedException
@@ -31,17 +33,28 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
     /**
      * [avoid] holds "tolls" and/or "highways"; the backend maps them to ORS features.
      * A restricted account, or a guest past today's trips, is refused: that throws
-     * [AccessDeniedException]; null is a route not obtained.
+     * [AccessDeniedException]; null is a route not obtained. [preference] : Rapide ou Éco (le
+     * backend le répète s'il le connaît) ; [timed] : temps HERE avec trafic de la route ; [via] :
+     * étapes dans l'ordre ; [moped] : scooter 50 ou sans permis, 45 km/h, sans voie rapide.
      */
     suspend fun route(
         from: GeoPoint,
         to: GeoPoint,
         avoid: List<String> = emptyList(),
         heading: Double? = null,
+        preference: RoutePreference? = null,
+        timed: Boolean = false,
+        via: List<GeoPoint> = emptyList(),
+        moped: Boolean = false,
     ): Route? = withContext(Dispatchers.IO) {
         val url = "${baseUrl.trimEnd('/')}/api/route" +
             "?from=${from.lat},${from.lon}&to=${to.lat},${to.lon}" +
             (if (avoid.isEmpty()) "" else "&avoid=${avoid.joinToString(",")}") +
+            (preference?.let { "&preference=${it.wire}" } ?: "") +
+            (if (timed) "&timed=1" else "") +
+            // Étapes dans l'ordre : "lat,lon;lat,lon".
+            (if (via.isEmpty()) "" else "&via=" + via.joinToString(";") { "${it.lat},${it.lon}" }) +
+            (if (moped) "&vehicle=moped" else "") +
             // The car's course while it moves (D4.4): the route starts the way it points, no U-turn.
             (heading?.let { "&heading=${Math.round(it) % 360}" } ?: "")
         // The backend refuses routing to a restricted account — it needs to know who asks.
@@ -63,11 +76,25 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
      * [sinceRerouteSeconds], the time since the last switch for traffic, makes it stricter for
      * a while. Null otherwise, or when the check failed.
      */
-    suspend fun faster(remaining: List<GeoPoint>, avoid: List<String>, sinceRerouteSeconds: Int?, etaSeconds: Int? = null): FasterRoute? = withContext(Dispatchers.IO) {
+    suspend fun faster(
+        remaining: List<GeoPoint>,
+        avoid: List<String>,
+        sinceRerouteSeconds: Int?,
+        etaSeconds: Int? = null,
+        preference: RoutePreference? = null,
+        via: List<GeoPoint> = emptyList(),
+        moped: Boolean = false,
+    ): FasterRoute? = withContext(Dispatchers.IO) {
         if (remaining.size < 2) return@withContext null
         val coords = JSONArray()
         remaining.forEach { coords.put(JSONArray().put(it.lon).put(it.lat)) }
         val body = JSONObject().put("coordinates", coords).put("avoid", JSONArray(avoid))
+        // Éco : détour seulement autour d'une route fermée, variantes les plus courtes.
+        if (preference != null) body.put("preference", preference.wire)
+        // Étapes restantes : détour fini à la première au plus tard.
+        if (via.isNotEmpty()) body.put("via", JSONArray().apply { via.forEach { put(JSONArray().put(it.lon).put(it.lat)) } })
+        // Scooter 50, sans permis : détour seulement autour d'une route fermée.
+        if (moped) body.put("vehicle", "moped")
         if (sinceRerouteSeconds != null) body.put("sinceRerouteS", sinceRerouteSeconds)
         // The app's ETA: the backend weighs the gain against the time left.
         if (etaSeconds != null) body.put("etaS", etaSeconds)
@@ -106,6 +133,12 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             // Absent from a backend older than the measures: null.
             engine = if (obj.isNull("engine")) null else obj.optString("engine").ifBlank { null },
             mapVersion = if (obj.isNull("mapVersion")) null else obj.optString("mapVersion").ifBlank { null },
+            preference = if (obj.isNull("preference")) null else RoutePreference.fromWire(obj.optString("preference")),
+            // Un temps nul n'est pas un temps.
+            trafficSeconds = if (obj.isNull("travelS")) null else obj.optInt("travelS").takeIf { it > 0 },
+            roads = obj.optJSONObject("roads")?.let {
+                RouteRoads(toll = it.optBoolean("toll"), motorway = it.optBoolean("motorway"), ferry = it.optBoolean("ferry"))
+            },
         )
     }
 

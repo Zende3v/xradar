@@ -169,7 +169,8 @@ fun SearchRoute(onBack: () -> Unit) {
             PickTarget.Destination -> {
                 // "Suggestions de trajets" (Confidentialité): only then is the destination kept.
                 if (settings.tripSuggestions) recentsRepo.add(place)
-                ActiveTripRepository.setDestination(place)
+                // Choix d'itinéraire d'abord (Rapide, Éco), trajet ensuite.
+                ActiveTripRepository.propose(place)
                 onBack()
             }
             PickTarget.Start -> {
@@ -240,7 +241,7 @@ fun SearchRoute(onBack: () -> Unit) {
         isFavorite = { id -> favorites.any { it.to.id == id || it.id == id } },
         onStartFavorite = { trip ->
             ActiveTripRepository.setStart(trip.from)
-            ActiveTripRepository.setDestination(trip.to)
+            ActiveTripRepository.propose(trip.to)
             onBack()
         },
         onBack = onBack,

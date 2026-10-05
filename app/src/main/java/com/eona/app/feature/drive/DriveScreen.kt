@@ -36,6 +36,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -90,6 +92,8 @@ import com.eona.app.feature.drive.component.audioMakesWay
 import com.eona.app.feature.drive.component.key
 import com.eona.app.feature.drive.component.DriveDock
 import com.eona.app.feature.drive.component.DriveMap
+import com.eona.app.feature.drive.component.RouteChoiceCard
+import com.eona.app.feature.drive.component.RoutePreview
 import com.eona.app.feature.drive.component.GuidanceBanner
 import com.eona.app.feature.drive.component.MusicBanner
 
@@ -135,6 +139,10 @@ fun DriveRoute(
         onRadarNotMyWay = viewModel::radarNotMyWay,
         onSlowdownAnswer = viewModel::answerSlowdown,
         onDismissArrival = viewModel::dismissArrival,
+        onSelectRoute = viewModel::selectRoute,
+        onStartRoute = viewModel::startChosenRoute,
+        onRetryRoute = viewModel::retryRouteChoice,
+        onCloseRouteChoice = viewModel::cancelRouteChoice,
         group = viewModel.group,
         tripUnderway = viewModel.tripUnderway.collectAsStateWithLifecycle().value,
         modifier = modifier,
@@ -180,6 +188,11 @@ fun DriveScreen(
     onSlowdownAnswer: (Boolean) -> Unit = {},
     /** The driver closed the arrival card. */
     onDismissArrival: () -> Unit = {},
+    /** Choix d'itinéraire : option touchée, « Démarrer », « Réessayer », fermé. */
+    onSelectRoute: (com.eona.app.core.model.RoutePreference) -> Unit = {},
+    onStartRoute: () -> Unit = {},
+    onRetryRoute: () -> Unit = {},
+    onCloseRouteChoice: () -> Unit = {},
     /** "Partager mon trajet" and "Trajet en groupe"; null in previews. */
     group: GroupSession? = null,
     /** The driver has really been on the route: a link can be opened. */
@@ -205,6 +218,11 @@ fun DriveScreen(
     // déverrouille, un ralentissement non. GPS perdu : levé, jamais bloqué sans vitesse connue.
     val settingsNow by AppPreferences.settings.collectAsStateWithLifecycle()
     var rainLocked by remember { mutableStateOf(false) }
+    // Choix d'itinéraire : vue d'ensemble ; choix fini, la carte suit à nouveau le conducteur.
+    val choice = state.routeChoice
+    var choiceHeightPx by remember { mutableStateOf(0) }
+    val choiceInsetPx = with(LocalDensity.current) { (spacing.lg * 2).roundToPx() }
+    LaunchedEffect(choice == null) { following = choice == null }
     LaunchedEffect(state.speedKmh, state.isSearchingGps, settingsNow.rainLock) {
         val next = settingsNow.rainLock && !state.isSearchingGps &&
             (state.speedKmh >= RAIN_LOCK_KMH || (rainLocked && state.speedKmh >= RAIN_UNLOCK_KMH))
@@ -255,6 +273,7 @@ fun DriveScreen(
             modifier = Modifier.fillMaxSize(),
             speedLimitKmh = state.speedLimitKmh,
             group = group?.mapLayer,
+            preview = RoutePreview.of(choice, choiceHeightPx + choiceInsetPx),
             onMemberTap = group?.let { session -> { id: String -> card = session.cardTarget(id) } },
         )
 
@@ -392,7 +411,23 @@ fun DriveScreen(
             }
         }
 
-        Column(
+        if (choice != null) {
+            RouteChoiceCard(
+                choice = choice,
+                fuel = state.fuelEstimate,
+                onSelect = onSelectRoute,
+                onStart = onStartRoute,
+                onRetry = onRetryRoute,
+                onClose = onCloseRouteChoice,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(spacing.lg)
+                    .onSizeChanged { choiceHeightPx = it.height },
+            )
+        }
+
+        if (choice == null) Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
@@ -572,7 +607,7 @@ fun DriveScreen(
 
         // Map controls: they step out of the way while the dock is deployed.
         AnimatedVisibility(
-            visible = !dockOpen && !rainLocked,
+            visible = !dockOpen && !rainLocked && choice == null,
             modifier = Modifier.align(Alignment.CenterEnd),
             enter = fadeIn() + slideInHorizontally { it / 2 },
             exit = fadeOut() + slideOutHorizontally { it / 2 },

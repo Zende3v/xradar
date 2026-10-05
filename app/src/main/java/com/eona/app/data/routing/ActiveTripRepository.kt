@@ -25,6 +25,15 @@ object ActiveTripRepository {
     private val _route = MutableStateFlow<Route?>(null)
     val route: StateFlow<Route?> = _route.asStateFlow()
 
+    /** Destination choisie, en attente du choix d'itinéraire (Rapide, Éco). Null : aucun choix. */
+    private val _proposal = MutableStateFlow<Place?>(null)
+    val proposal: StateFlow<Place?> = _proposal.asStateFlow()
+
+    /** Destination choisie : choix d'itinéraire d'abord, trajet ensuite. Null : choix refermé. */
+    fun propose(place: Place?) {
+        _proposal.value = place
+    }
+
     fun setDestination(place: Place?) {
         _destination.value = place
         if (place == null) _route.value = null

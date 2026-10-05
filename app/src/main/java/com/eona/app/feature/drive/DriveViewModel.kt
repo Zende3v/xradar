@@ -26,7 +26,13 @@ import com.eona.app.core.model.Place
 import com.eona.app.core.model.Radar
 import com.eona.app.core.model.ReportRelevance
 import com.eona.app.core.model.RadarZone
+import com.eona.app.core.model.FuelEstimate
+import com.eona.app.core.model.FuelType
+import com.eona.app.core.model.PlaceCategory
 import com.eona.app.core.model.ProbationaryLimits
+import com.eona.app.core.model.RouteChoice
+import com.eona.app.core.model.RouteOption
+import com.eona.app.core.model.RoutePreference
 import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.RoadAlert
 import com.eona.app.core.model.Route
@@ -34,6 +40,7 @@ import com.eona.app.core.model.RouteStep
 import com.eona.app.core.model.SignType
 import com.eona.app.core.model.SpeedLimitChange
 import com.eona.app.core.model.SpeedLimitSource
+import com.eona.app.core.model.TrafficLevel
 import com.eona.app.core.model.TrafficParts
 import com.eona.app.core.model.TrafficStretch
 import com.eona.app.core.model.TripRecord
@@ -118,6 +125,17 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     /** Shown a few seconds after a switch to a faster route. */
     private val fasterNotice = MutableStateFlow<FasterRouteNotice?>(null)
     private val routingApi = com.eona.app.data.routing.RoutingApi()
+    private val placesApi = com.eona.app.data.places.PlacesApi()
+    /** Choix d'itinéraire en cours (Rapide, Éco) ; null hors choix (iOS 02/10). */
+    private val routeChoice = MutableStateFlow<RouteChoice?>(null)
+    /** Mode du trajet suivi : Éco gardé en recalcul et à l'évitement des bouchons. */
+    @Volatile private var routeMode = RoutePreference.Fastest
+    /** Route déjà choisie pour la destination [Pair.first] : aucun second calcul. */
+    private var chosenRoute: Pair<String, Route>? = null
+    private var choiceVersion = 0
+    /** Prix médians autour du départ, par carburant : coût estimé du choix. */
+    private val fuelPrices = MutableStateFlow<Map<FuelType, Double>>(emptyMap())
+    private var fuelPricesAt = 0L
     // Contrôles trafic et dernier détour, conservés pour une même destination.
     private var checkingFaster = false
     private var lastFasterCheckAt = 0L
@@ -339,6 +357,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
      */
     val uiState: StateFlow<DriveUiState> = combine(driveState, media, musicOpen) { state, playback, open ->
         state.copy(media = playback, musicOpen = open)
+    }.combine(routeChoice) { state, choice ->
+        state.copy(routeChoice = choice)
+    }.combine(combine(fuelPrices, AppPreferences.settings) { prices, settings -> prices[settings.preferredFuel]?.let { FuelEstimate(settings.consumption, it) } }) { state, fuel ->
+        state.copy(fuelEstimate = fuel)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -500,13 +522,25 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 .collect {
                     val destination = ActiveTripRepository.destination.value ?: return@collect
                     val fix = LocationRepository.location.value ?: return@collect
-                    routingRepository.route(
+                    computeRoute(
                         GeoPoint(fix.latitude, fix.longitude),
                         GeoPoint(destination.lat, destination.lon),
-                        avoidOptions(),
                         headingOf(fix),
                     ).routeOrNull?.let { ActiveTripRepository.setRoute(it) }
                 }
+        }
+        // Destination choisie : Rapide puis Éco calculés, choix montré. Trajet lancé au choix.
+        viewModelScope.launch {
+            ActiveTripRepository.proposal.collect { proposal ->
+                choiceVersion += 1
+                if (proposal == null) {
+                    routeChoice.value = null
+                    return@collect
+                }
+                routeChoice.value = RouteChoice(proposal)
+                val version = choiceVersion
+                viewModelScope.launch { computeChoice(proposal, version) }
+            }
         }
         // Compute the route whenever a destination is chosen; track the trip session.
         viewModelScope.launch {
@@ -523,6 +557,18 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     lastTrafficRerouteAt = null
                     lastFasterCheckAt = 0L
                 }
+                // Route déjà choisie (choix d'itinéraire) : aucun second calcul.
+                val chosen = chosenRoute
+                if (chosen != null && chosen.first == destination.id) {
+                    chosenRoute = null
+                    routeError.value = false
+                    ActiveTripRepository.setRoute(chosen.second)
+                    trip?.plan(chosen.second)
+                    if (AccountRepository.account.value?.limits != null) viewModelScope.launch { AccountRepository.reload() }
+                    return@collect
+                }
+                // Destination sans choix (trajet en groupe) : Rapide.
+                routeMode = RoutePreference.Fastest
                 // A simulated departure wins over the GPS: that is the point of it.
                 val simulated = ActiveTripRepository.start.value
                 val fix = LocationRepository.location.value
@@ -530,10 +576,9 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     ?: fix?.let { GeoPoint(it.latitude, it.longitude) }
                     ?: return@collect
                 // Silent retries: a connection dropping for a few seconds should not kill the trip.
-                var answer = routingRepository.route(
+                var answer = computeRoute(
                     from,
                     GeoPoint(destination.lat, destination.lon),
-                    avoidOptions(),
                     if (simulated == null) headingOf(fix) else null,
                 )
                 for (wait in ROUTE_RETRY_MS) {
@@ -544,10 +589,9 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         LocationRepository.location.value
                             ?.let { GeoPoint(it.latitude, it.longitude) } ?: from
                     }
-                    answer = routingRepository.route(
+                    answer = computeRoute(
                         again,
                         GeoPoint(destination.lat, destination.lon),
-                        avoidOptions(),
                         if (simulated == null) headingOf(LocationRepository.location.value) else null,
                     )
                 }
@@ -680,10 +724,9 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 lastRecalcAt = now
                 recalcLat = sample.latitude
                 recalcLon = sample.longitude
-                val fresh = routingRepository.route(
+                val fresh = computeRoute(
                     GeoPoint(sample.latitude, sample.longitude),
                     GeoPoint(destination.lat, destination.lon),
-                    avoidOptions(),
                     headingOf(sample),
                 ).routeOrNull
                 if (fresh != null) {
@@ -719,8 +762,9 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 if (route != null) trip?.follow(route)
                 // Another route, another geometry: its traffic is asked for at once.
                 routeVersion += 1
-                traffic.value = null
-                trafficParts = null
+                // Route du choix : temps HERE déjà connu, ETA juste dès le départ (iOS build 25).
+                trafficParts = route?.let { r -> path?.let { TrafficParts.seeded(r, it.totalMeters) } }
+                traffic.value = trafficParts?.merged()
                 trafficRefresh.newRoute()
                 val version = routeVersion
                 viewModelScope.launch { refreshTraffic(version, tomtom = true) }
@@ -1061,9 +1105,123 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         considerFasterRoute(merged, version)
     }
 
+    /** [preference] : Rapide ou Éco, mode du trajet par défaut ; [timed] : temps HERE (choix). */
+    private suspend fun computeRoute(
+        from: GeoPoint,
+        to: GeoPoint,
+        heading: Double?,
+        preference: RoutePreference? = null,
+        timed: Boolean = false,
+    ): RouteAnswer = routingRepository.route(from, to, avoidOptions(), heading, preference ?: routeMode, timed)
+
+    /**
+     * Rapide d'abord (un invité compte un seul trajet : Éco suit vers même destination), puis Éco.
+     * Chaque réponse s'affiche dès reçue ; réponse d'un choix remplacé ignorée (iOS computeChoice).
+     */
+    private suspend fun computeChoice(place: Place, version: Int) {
+        val simulated = ActiveTripRepository.start.value
+        // Pas encore de position : quelques secondes pour le premier fix.
+        var waited = 0L
+        while (simulated == null && LocationRepository.location.value == null && waited < CHOICE_FIX_WAIT_MS) {
+            delay(500)
+            waited += 500
+            if (version != choiceVersion) return
+        }
+        val fix = LocationRepository.location.value
+        val from = simulated?.let { GeoPoint(it.lat, it.lon) } ?: fix?.let { GeoPoint(it.latitude, it.longitude) }
+        if (from == null) {
+            routeChoice.update { it?.copy(fastest = RouteOption.Unavailable, shortest = RouteOption.Unavailable) }
+            return
+        }
+        val to = GeoPoint(place.lat, place.lon)
+        val heading = if (simulated == null) headingOf(fix) else null
+        viewModelScope.launch { refreshFuelPrices(from) }
+
+        var fast = computeRoute(from, to, heading, RoutePreference.Fastest, timed = true)
+        for (wait in ROUTE_RETRY_MS) {
+            if (fast !is RouteAnswer.Failed) break
+            delay(wait)
+            if (version != choiceVersion) return
+            fast = computeRoute(from, to, heading, RoutePreference.Fastest, timed = true)
+        }
+        if (version != choiceVersion) return
+        if (fast is RouteAnswer.Denied) {
+            // Essai fini, ou trajets du jour épuisés : offres montrées, aucun choix.
+            ActiveTripRepository.propose(null)
+            OffersPrompt.show(PaywallReason.of(fast.denial))
+            viewModelScope.launch { AccountRepository.reload() }
+            return
+        }
+        routeChoice.update { c ->
+            c?.copy(fastest = fast.routeOrNull?.let { RouteOption.Ready(it) } ?: RouteOption.Unavailable)?.keepUsableSelection()
+        }
+
+        val eco = computeRoute(from, to, heading, RoutePreference.Shortest, timed = true)
+        if (version != choiceVersion) return
+        // Backend sans Éco : réponse sans `preference`, route Rapide répétée. Indisponible.
+        val ecoRoute = eco.routeOrNull?.takeIf { it.preference == RoutePreference.Shortest }
+        routeChoice.update { c ->
+            // Trafic réel : Éco plus rapide que Rapide, Rapide prend sa route.
+            c?.copy(shortest = ecoRoute?.let { RouteOption.Ready(it) } ?: RouteOption.Unavailable)
+                ?.keepFastestByTraffic()?.keepUsableSelection()
+        }
+    }
+
+    /** Stations proches du départ, une fois par demi-heure au plus : un appel au backend, sans HERE. */
+    private suspend fun refreshFuelPrices(point: GeoPoint) {
+        val now = System.currentTimeMillis()
+        if (now - fuelPricesAt < FUEL_PRICE_REFRESH_MS) return
+        fuelPricesAt = now
+        val stations = placesApi.near(PlaceCategory.Fuel, point.lat, point.lon)
+        if (stations == null) {
+            fuelPricesAt = 0L
+            return
+        }
+        fuelPrices.value = FuelType.entries.mapNotNull { fuel ->
+            FuelEstimate.medianPrice(fuel, stations, now)?.let { fuel to it }
+        }.toMap()
+    }
+
+    /** Option touchée : retenue si prête. */
+    fun selectRoute(preference: RoutePreference) {
+        routeChoice.update { c -> if (c?.option(preference)?.route != null) c.copy(selected = preference) else c }
+    }
+
+    /** Trajet lancé sur l'option retenue. Même destination déjà suivie : route remplacée. */
+    fun startChosenRoute() {
+        val choice = routeChoice.value ?: return
+        val route = choice.chosenRoute ?: return
+        routeMode = choice.selected
+        if (ActiveTripRepository.destination.value?.id == choice.destination.id) {
+            ActiveTripRepository.setRoute(route)
+            trip?.plan(route)
+        } else {
+            chosenRoute = choice.destination.id to route
+            ActiveTripRepository.setDestination(choice.destination)
+        }
+        ActiveTripRepository.propose(null)
+    }
+
+    /** Choix refermé sans trajet : trajet en cours inchangé. */
+    fun cancelRouteChoice() {
+        if (ActiveTripRepository.destination.value == null) ActiveTripRepository.setStart(null)
+        ActiveTripRepository.propose(null)
+    }
+
+    /** Nouvel essai après échec des deux calculs. */
+    fun retryRouteChoice() {
+        val place = routeChoice.value?.destination ?: return
+        choiceVersion += 1
+        routeChoice.value = RouteChoice(place)
+        val version = choiceVersion
+        viewModelScope.launch { computeChoice(place, version) }
+    }
+
     /** Évitement automatique : gain confirmé, délais anti-oscillation, aucun trajet simulé. */
     private suspend fun considerFasterRoute(known: RouteTraffic, version: Int) {
         if (!known.worthChecking || checkingFaster) return
+        // Éco : aucun km de plus pour un bouchon ; détour seulement autour d'une route fermée.
+        if (routeMode == RoutePreference.Shortest && known.stretches.none { it.level == TrafficLevel.Closed }) return
         val destination = ActiveTripRepository.destination.value ?: return
         val rp = path ?: return
         val now = System.currentTimeMillis()
@@ -1075,7 +1233,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val since = lastTrafficRerouteAt?.let { ((now - it) / 1000).toInt() }
             val etaSeconds = ActiveTripRepository.route.value?.let { secondsLeft(it).roundToInt() }
-            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since, etaSeconds) ?: return
+            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since, etaSeconds, preference = routeMode) ?: return
             if (version != routeVersion || ActiveTripRepository.destination.value != destination) return
             lastTrafficRerouteAt = System.currentTimeMillis()
             trip?.tookFaster()
@@ -1757,6 +1915,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val TRIP_ABANDON_MS = 30 * 60_000L
         /** A trip's first route: asked again after these pauses before giving up. */
         val ROUTE_RETRY_MS = longArrayOf(1_200L, 3_000L, 6_000L)
+        /** Choix d'itinéraire sans position : attente du premier fix au plus. */
+        const val CHOICE_FIX_WAIT_MS = 6_000L
+        /** Prix des stations proches du départ : relus au plus toutes les 30 min. */
+        const val FUEL_PRICE_REFRESH_MS = 30 * 60_000L
         /** Route signs not loaded: asked again after 3 s, then less often, up to every 30 s. */
         const val SIGNS_RETRY_MS = 3_000L
         const val SIGNS_RETRY_MAX_MS = 30_000L

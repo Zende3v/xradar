@@ -79,6 +79,10 @@ data class DriveUiState(
      * vitesses partagées. [speedLimitKmh] est celle affichée au conducteur.
      */
     val officialLimitKmh: Int? = null,
+    /** Choix d'itinéraire montré (Rapide, Éco) ; null hors choix. */
+    val routeChoice: com.eona.app.core.model.RouteChoice? = null,
+    /** Coût carburant estimé du choix ; null sans prix connu. */
+    val fuelEstimate: com.eona.app.core.model.FuelEstimate? = null,
     /** Where [speedLimitKmh] comes from: the road's own limit or a radar's VMA. */
     val speedLimitSource: SpeedLimitSource? = null,
     /** Traffic on the route being followed (TomTom's and the drivers' jams); null until known. */

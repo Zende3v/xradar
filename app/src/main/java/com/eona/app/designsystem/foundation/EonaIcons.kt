@@ -102,6 +102,20 @@ object EonaIcons {
         moveTo(4f, 11f); lineTo(12f, 4f); lineTo(20f, 11f)
         moveTo(6f, 9.5f); lineTo(6f, 20f); lineTo(18f, 20f); lineTo(18f, 9.5f)
     }
+    /** Choix d'itinéraire : Rapide. */
+    val Bolt = line("Bolt", width = 1.9f) {
+        moveTo(13f, 3f); lineTo(5f, 13.5f); lineTo(11f, 13.5f); lineTo(10f, 21f); lineTo(19f, 10f); lineTo(13f, 10f); close()
+    }
+    /** Choix d'itinéraire : Éco. */
+    val Leaf = line("Leaf", width = 1.9f) {
+        moveTo(5f, 19f); curveTo(5f, 10f, 10f, 5f, 19f, 5f); curveTo(19f, 14f, 14f, 19f, 5f, 19f); close()
+        moveTo(5f, 19f); lineTo(13f, 11f)
+    }
+    /** Choix d'itinéraire : Perso. */
+    val Sliders = line("Sliders", width = 1.9f) {
+        moveTo(4f, 7f); lineTo(20f, 7f); moveTo(4f, 12f); lineTo(20f, 12f); moveTo(4f, 17f); lineTo(20f, 17f)
+        moveTo(9f, 5f); lineTo(9f, 9f); moveTo(15f, 10f); lineTo(15f, 14f); moveTo(8f, 15f); lineTo(8f, 19f)
+    }
     /** Protection pluie : écran verrouillé. */
     val Lock = line("Lock") {
         moveTo(6.5f, 11f); lineTo(17.5f, 11f); lineTo(17.5f, 20f); lineTo(6.5f, 20f); close()
