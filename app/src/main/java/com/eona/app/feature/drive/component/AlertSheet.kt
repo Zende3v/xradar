@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.eona.app.core.model.RoadAlert
+import com.eona.app.core.model.showsLimit
 import com.eona.app.designsystem.component.EonaCard
 import com.eona.app.designsystem.component.EonaIcon
 import com.eona.app.designsystem.component.EonaText
@@ -107,13 +108,12 @@ internal fun AlertDetail(alert: RoadAlert) {
 }
 
 /** "Sens opposé · limité à 90 km/h" — empty when there is nothing to add. */
-internal fun alertSubtitle(alert: RoadAlert): String = buildString {
-    alert.roadLabel?.let { append(it) }
-    alert.speedLimitKmh?.let {
-        if (isNotEmpty()) append(" · ")
-        append("limité à $it km/h")
-    }
-}
+/** Sens, côté. La limitation a son panneau à part ([shownLimit]). */
+internal fun alertSubtitle(alert: RoadAlert): String = alert.roadLabel.orEmpty()
+
+/** Limitation montrée en panneau : radar fixe, radar mobile, zone de contrôle seulement. */
+internal val RoadAlert.shownLimit: Int?
+    get() = if (type.showsLimit) speedLimitKmh else null
 
 internal fun formatDistance(meters: Int): String =
     if (meters >= 1000) "%.1f km".format(meters / 1000f).replace('.', ',') else "$meters m"

@@ -230,6 +230,7 @@ private fun FocusLine(alert: RoadAlert) {
                 )
             }
         }
+        alert.shownLimit?.let { SpeedLimitSign(limitKmh = it, size = 40.dp) }
         Column(horizontalAlignment = Alignment.End) {
             EonaText(
                 formatDistance(alert.distanceMeters),
@@ -459,6 +460,7 @@ private fun AlertRow(alert: RoadAlert, onClick: () -> Unit, highlighted: Boolean
                 )
             }
         }
+        alert.shownLimit?.let { SpeedLimitSign(limitKmh = it, size = 30.dp) }
         EonaText(
             formatDistance(alert.distanceMeters),
             style = EonaTheme.typography.callout.copy(fontWeight = FontWeight.SemiBold),

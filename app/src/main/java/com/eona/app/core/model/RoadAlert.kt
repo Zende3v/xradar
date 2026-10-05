@@ -10,6 +10,13 @@ val AlertType.isEnforcement: Boolean
         AlertType.Hazard, AlertType.Accident, AlertType.Roadwork -> false
     }
 
+/** Alerte qui montre sa limitation : radar fixe, radar mobile, zone de contrôle seulement (iOS build 22). */
+val AlertType.showsLimit: Boolean
+    get() = when (this) {
+        AlertType.RadarFixed, AlertType.RadarMobile, AlertType.ControlZone -> true
+        AlertType.Camera, AlertType.RadarCar, AlertType.Hazard, AlertType.Accident, AlertType.Roadwork -> false
+    }
+
 /**
  * A single road event surfaced to the driver. Pure model — no Android/Compose
  * types — so the alert engine (Phase 5) and a future iOS port can reuse it as-is.

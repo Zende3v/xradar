@@ -5,7 +5,7 @@ import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.eona.app.BuildConfig
-import com.eona.app.core.drive.AlertBeeps
+import com.eona.app.core.drive.EnforcementBeeps
 import com.eona.app.core.drive.EtaEstimator
 import com.eona.app.core.drive.EtaPair
 import com.eona.app.core.drive.SpeedSampler
@@ -39,6 +39,7 @@ import com.eona.app.core.model.TrafficStretch
 import com.eona.app.core.model.TripRecord
 import com.eona.app.core.model.UserReport
 import com.eona.app.core.model.isEnforcement
+import com.eona.app.core.model.showsLimit
 import com.eona.app.data.account.AccountRepository
 import com.eona.app.data.bugs.BugTripTrace
 import com.eona.app.data.live.Presence
@@ -73,6 +74,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlin.math.cos
@@ -135,7 +137,9 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val sounds = AlertSoundPlayer(application)
     // Alert sounds: the alerts already announced by a sound, and those past their laser burst.
     private val soundedAlerts = HashSet<String>()
-    private val burstAlerts = HashSet<String>()
+    /** Limitation au point des alertes radar, par clé d'alerte : backend (iOS build 22). */
+    private val alertLimits = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private val alertLimitAsked = HashMap<String, Long>()
     /** Music in the three supported apps. Only [uiState] reads it — see there. */
     private val media = MediaRepository.run {
         init(application)
@@ -306,6 +310,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }.combine(osmLimit) { state, live ->
         // The road's own limit beats the radar VMA: it is true everywhere, all the time.
         if (live != null) state.copy(speedLimitKmh = live, speedLimitSource = SpeedLimitSource.Road) else state
+    }.combine(alertLimits) { state, limits ->
+        withAlertLimits(state, limits)
     }.combine(AppPreferences.settings) { state, settings ->
         // Permis probatoire : limitation affichée, dépassement, panneaux et voix des alertes. La
         // limitation officielle reste à part (signalement de limite, sondes, vitesses partagées).
@@ -600,26 +606,33 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 detectSlowdown(s)
             }
         }
-        // Radarbot's approach: beeps faster and faster toward the nearest speed enforcement
-        // ahead, then the laser burst at it. Quiet while the voice speaks or the car waits.
+        // Bips radar façon Radarbot (iOS build 22) : rien avant 200 m, premier bip pile à 200 m,
+        // plus rapides ensuite, laser au radar. Distance extrapolée depuis l'heure du fix, latence
+        // audio comprise ; sommeil calé sur le seuil suivant. La voix ne retarde jamais le premier
+        // bip ni le laser. Cible : le radar le plus proche, pas seulement la première alerte.
         viewModelScope.launch {
-            var lastBeepAt = 0L
+            val beeps = EnforcementBeeps()
             while (true) {
-                delay(BEEP_TICK_MS)
                 val prefs = AppPreferences.alerts.value
                 val s = driveState.value
-                val nearest = s.alert ?: continue
-                if (!prefs.sound || speaker.isSpeaking || !nearest.type.isEnforcement) continue
-                if (s.speedKmh < AlertBeeps.MIN_SPEED_KMH) continue
-                if (nearest.distanceMeters <= AlertBeeps.BURST_METERS) {
-                    if (burstAlerts.add(nearest.key)) sounds.play(AlertSound.Laser, prefs.vibration, prefs.alertVolume)
-                    continue
+                val target = if (prefs.sound) s.alerts.firstOrNull { it.type.isEnforcement } else null
+                val fix = s.location
+                val step = beeps.step(
+                    key = target?.key,
+                    metersAtFix = (target?.distanceMeters ?: 0).toDouble(),
+                    speedMps = if (s.speedKmh > 0) (fix?.speedMps ?: 0f).toDouble() else 0.0,
+                    fixAgeSeconds = fix?.let { (System.currentTimeMillis() - it.timeMs) / 1000.0 } ?: 0.0,
+                    now = SystemClock.elapsedRealtime() / 1000.0,
+                    latency = sounds.outputLatencySeconds,
+                    speaking = speaker.isSpeaking,
+                )
+                if (step.armed) sounds.arm() else sounds.disarm()
+                when (step.cue) {
+                    EnforcementBeeps.Cue.Beep -> sounds.play(AlertSound.Beep, prefs.vibration, prefs.alertVolume)
+                    EnforcementBeeps.Cue.Burst -> sounds.play(AlertSound.Laser, prefs.vibration, prefs.alertVolume)
+                    null -> Unit
                 }
-                val interval = AlertBeeps.intervalMs(nearest.distanceMeters) ?: continue
-                val now = SystemClock.elapsedRealtime()
-                if (now - lastBeepAt < interval) continue
-                lastBeepAt = now
-                sounds.play(AlertSound.Beep, prefs.vibration, prefs.alertVolume)
+                delay((step.wakeIn * 1000).toLong().coerceAtLeast(5L))
             }
         }
         // Recompute the route if the driver leaves it (off-route detection).
@@ -997,6 +1010,9 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
         routeLimitPath = rp
         if (rp == null) limitFromRoute = false
+        // Nouvelles limitations du trajet : limitations d'alertes relues.
+        alertLimitAsked.clear()
+        alertLimits.value = emptyMap()
     }
 
     /** Reports are few enough to hold the whole country at once. */
@@ -1460,17 +1476,67 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * A sound as each alert shows up: the detector's chirps for speed enforcement, a chime for a
-     * road hazard. One sound for several alerts appearing together.
+     * A chime as each road hazard shows up, one for several together. Radars : aucun son ici,
+     * bips seulement à partir de 200 m (boucle des bips, iOS build 22).
      */
     private fun soundNewAlerts(alerts: List<RoadAlert>, vibrate: Boolean) {
-        if (soundedAlerts.size > 300) {
-            soundedAlerts.clear()
-            burstAlerts.clear()
-        }
-        val fresh = alerts.filter { soundedAlerts.add(it.key) }
+        if (soundedAlerts.size > 300) soundedAlerts.clear()
+        val fresh = alerts.filter { !it.type.isEnforcement && soundedAlerts.add(it.key) }
         if (fresh.isEmpty()) return
-        sounds.play(if (fresh.any { it.type.isEnforcement }) AlertSound.Detector else AlertSound.Hazard, vibrate, AppPreferences.alerts.value.alertVolume)
+        sounds.play(AlertSound.Hazard, vibrate, AppPreferences.alerts.value.alertVolume)
+    }
+
+    /**
+     * Limitation des alertes radar fixe, radar mobile, zone de contrôle (iOS build 22) : VMA
+     * officielle, sinon limitation du trajet au point, sinon demandée une fois au backend (réponse
+     * gardée). Les autres alertes : aucune limitation.
+     */
+    private fun withAlertLimits(state: DriveUiState, limits: Map<String, Int>): DriveUiState {
+        if (state.alerts.isEmpty()) return state
+        val radars = state.radars.associateBy { it.id }
+        val reports = state.reports.associateBy { it.id }
+        val heading = state.location?.bearingDeg?.toDouble()
+        fun limited(alert: RoadAlert): RoadAlert = when {
+            !alert.type.showsLimit -> if (alert.speedLimitKmh == null) alert else alert.copy(speedLimitKmh = null)
+            alert.speedLimitKmh != null -> alert
+            else -> {
+                val key = alert.key
+                val radar = radars[alert.id]
+                val report = reports[alert.id]
+                val kmh = limits[key] ?: when {
+                    radar != null -> alertLimit(key, radar.lat, radar.lon, heading)
+                    report != null -> {
+                        // Sens contrôlé : cap du signaleur, retourné pour l'autre chaussée ; sinon cap du conducteur.
+                        val controlled = report.bearingDeg?.let { if (report.direction == "opposite") (it + 180) % 360 else it }
+                        alertLimit(key, report.lat, report.lon, controlled ?: heading)
+                    }
+                    else -> null
+                }
+                if (kmh == null) alert else alert.copy(speedLimitKmh = kmh)
+            }
+        }
+        return state.copy(alert = state.alert?.let(::limited), alerts = state.alerts.map(::limited))
+    }
+
+    /** Limitation au point : celle du trajet quand l'alerte est dessus, sinon le backend (une fois). */
+    private fun alertLimit(key: String, lat: Double, lon: Double, heading: Double?): Int? {
+        val rp = routeLimitPath
+        val changes = routeLimits
+        if (rp != null && changes.isNotEmpty()) {
+            val match = rp.match(lat, lon)
+            if (match != null && match.offRouteMeters <= ROUTE_LIMIT_MAX_OFF_M) {
+                return (changes.lastOrNull { it.first <= match.alongMeters } ?: changes.first()).second
+            }
+        }
+        val now = SystemClock.elapsedRealtime()
+        alertLimitAsked[key]?.let { if (now - it < ALERT_LIMIT_RETRY_MS) return null }
+        if (alertLimitAsked.size > 300) alertLimitAsked.clear()
+        alertLimitAsked[key] = now
+        viewModelScope.launch {
+            val kmh = signApi.limit(lat, lon, heading)?.kmh ?: return@launch
+            alertLimits.update { known -> (if (known.size > 300) emptyMap() else known) + (key to kmh) }
+        }
+        return null
     }
 
     /** Every report ahead still worth an alert for this driver → [RoadAlert]s, nearest first. */
@@ -1714,6 +1780,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val LIMIT_MOVE_M = 100.0
         /** Farther than this from the route, its limits are not the driver's. */
         const val ROUTE_LIMIT_MAX_OFF_M = 30.0
+        /** Limitation d'une alerte radar sans réponse backend : redemandée après ce délai. */
+        const val ALERT_LIMIT_RETRY_MS = 30_000L
         const val LIMIT_POLL_MS = 2_500L
         const val LIMIT_STALE_MS = 25_000L
         // Alert voice.
@@ -1721,8 +1789,6 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val VOICE_NEAR_M = 200
         const val OVERSPEED_MARGIN = 5
         const val OVERSPEED_COOLDOWN_MS = 60_000L
-        /** How often the proximity beeps check the nearest alert. */
-        const val BEEP_TICK_MS = 100L
         // An alert swiped off the HUD stays hidden this long, then shows again if still live.
         const val ALERT_DISMISS_MS = 2 * 60_000L
     }

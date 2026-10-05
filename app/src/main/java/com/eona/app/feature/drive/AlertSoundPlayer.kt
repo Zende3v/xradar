@@ -48,8 +48,17 @@ class AlertSoundPlayer(context: Context) {
         .setAudioAttributes(attributes)
         .build()
     private var holding = false
+    /** Audio tenu prêt pour un radar proche ([arm]) : le focus reste pris entre les bips. */
+    private var armed = false
+    /**
+     * Délai entre play() et son entendu, lu à chaque [arm] : estimation, Android n'expose pas la
+     * latence de sortie. Bluetooth (A2DP, BLE) ~0,2 s, haut-parleur ou filaire ~0,05 s.
+     */
+    var outputLatencySeconds = 0.0
+        private set
     private val handler = Handler(Looper.getMainLooper())
     private val letGo = Runnable {
+        if (armed) return@Runnable
         holding = false
         audio?.abandonAudioFocusRequest(focus)
     }
@@ -81,8 +90,36 @@ class AlertSoundPlayer(context: Context) {
         }
     }
 
+    /**
+     * Radar proche : focus audio pris (musique baissée) avant le premier bip. La prise coûte du
+     * temps ; faite ici, jamais au moment du bip (iOS build 22).
+     */
+    fun arm() {
+        if (armed) return
+        armed = true
+        handler.removeCallbacks(letGo)
+        if (!holding) {
+            holding = true
+            audio?.requestAudioFocus(focus)
+        }
+        val bluetooth = audio?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)?.any {
+            it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET)
+        } == true
+        outputLatencySeconds = if (bluetooth) 0.2 else 0.05
+    }
+
+    /** Radar passé ou perdu : focus rendu un instant après. */
+    fun disarm() {
+        if (!armed) return
+        armed = false
+        handler.removeCallbacks(letGo)
+        handler.postDelayed(letGo, RELEASE_DELAY_MS)
+    }
+
     fun release() {
         handler.removeCallbacks(letGo)
+        armed = false
         if (holding) letGo.run()
         pool.release()
     }
