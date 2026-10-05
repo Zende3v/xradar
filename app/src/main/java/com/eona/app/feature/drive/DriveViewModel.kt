@@ -334,10 +334,12 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Permis probatoire : limitation affichée, dépassement, panneaux et voix des alertes. La
         // limitation officielle reste à part (signalement de limite, sondes, vitesses partagées).
         val official = state.copy(officialLimitKmh = state.speedLimitKmh)
-        if (!settings.probationary) {
+        val cap = settings.vehicleType.speedCapKmh
+        if (!settings.probationary && cap == null) {
             official
         } else {
-            fun shown(kmh: Int?) = ProbationaryLimits.shown(kmh, probationary = true, capKmh = null)
+            // Puis plafond du véhicule (45 km/h : scooter 50, sans permis).
+            fun shown(kmh: Int?) = ProbationaryLimits.shown(kmh, probationary = settings.probationary, capKmh = cap)
             official.copy(
                 speedLimitKmh = shown(state.speedLimitKmh),
                 alert = state.alert?.let { it.copy(speedLimitKmh = shown(it.speedLimitKmh)) },
@@ -516,7 +518,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         // Toll / motorway preferences: recompute the live route as soon as they change.
         viewModelScope.launch {
             AppPreferences.settings
-                .map { Triple(it.avoidTolls, it.avoidHighways, it.avoidFerries) }
+                // Scooter 50 ou sans permis choisi ou quitté : itinéraire moped, recalculé aussi.
+                .map { listOf(it.avoidTolls, it.avoidHighways, it.avoidFerries, it.vehicleType.moped) }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
@@ -1082,8 +1085,9 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         val parts = TrafficParts(
             routeMeters = rp.totalMeters,
             tomtom = if (answer.tomtom) placed.filter { it.source == TrafficStretch.HERE || it.source == TrafficStretch.TOMTOM } else previous?.tomtom.orEmpty(),
-            travelSeconds = answer.travelSeconds ?: previous?.travelSeconds,
-            tomtomFrom = if (answer.travelSeconds != null) start else previous?.tomtomFrom ?: 0.0,
+            // Scooter 50, sans permis : temps HERE = voiture, jamais base de l'ETA.
+            travelSeconds = if (moped) null else answer.travelSeconds ?: previous?.travelSeconds,
+            tomtomFrom = if (!moped && answer.travelSeconds != null) start else previous?.tomtomFrom ?: 0.0,
             crowd = placed.filter { it.source == TrafficStretch.CROWD },
             datagouv = placed.filter { it.source == TrafficStretch.DATAGOUV },
             datagouvShown = answer.datagouvShown,
@@ -1112,7 +1116,10 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         heading: Double?,
         preference: RoutePreference? = null,
         timed: Boolean = false,
-    ): RouteAnswer = routingRepository.route(from, to, avoidOptions(), heading, preference ?: routeMode, timed)
+    ): RouteAnswer = routingRepository.route(from, to, avoidOptions(), heading, preference ?: routeMode, timed, moped = moped)
+
+    /** Scooter 50 ou sans permis : itinéraire 45 km/h, sans voie rapide. */
+    private val moped: Boolean get() = AppPreferences.settings.value.vehicleType.moped
 
     /**
      * Rapide d'abord (un invité compte un seul trajet : Éco suit vers même destination), puis Éco.
@@ -1221,7 +1228,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun considerFasterRoute(known: RouteTraffic, version: Int) {
         if (!known.worthChecking || checkingFaster) return
         // Éco : aucun km de plus pour un bouchon ; détour seulement autour d'une route fermée.
-        if (routeMode == RoutePreference.Shortest && known.stretches.none { it.level == TrafficLevel.Closed }) return
+        // Scooter 50, sans permis : pareil, le backend ne cherche qu'autour d'une route fermée.
+        if ((routeMode == RoutePreference.Shortest || moped) && known.stretches.none { it.level == TrafficLevel.Closed }) return
         val destination = ActiveTripRepository.destination.value ?: return
         val rp = path ?: return
         val now = System.currentTimeMillis()
@@ -1233,7 +1241,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val since = lastTrafficRerouteAt?.let { ((now - it) / 1000).toInt() }
             val etaSeconds = ActiveTripRepository.route.value?.let { secondsLeft(it).roundToInt() }
-            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since, etaSeconds, preference = routeMode) ?: return
+            val faster = routingApi.faster(rp.trimFrom(match.alongMeters), avoidOptions(), since, etaSeconds, preference = routeMode, moped = moped) ?: return
             if (version != routeVersion || ActiveTripRepository.destination.value != destination) return
             lastTrafficRerouteAt = System.currentTimeMillis()
             trip?.tookFaster()

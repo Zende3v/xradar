@@ -66,6 +66,8 @@ private fun drawVehicle(canvas: Canvas, type: VehicleType, size: Float, bodyColo
         VehicleType.Taxi -> car(size, tones, taxi = true)
         VehicleType.Motorcycle -> motorcycle(size, tones)
         VehicleType.Truck -> truck(size, tones)
+        VehicleType.Scooter50 -> scooter(size, tones)
+        VehicleType.LicenseFree -> microcar(size, tones)
     }
     if (rimmed) {
         // The whole outline, drawn a little larger in white with its shadow, under the parts.
@@ -142,6 +144,39 @@ private fun motorcycle(s: Float, t: Tones): List<Layer> {
         Layer(visor, t.glass),
         Layer(circle(s, 0.485f, 0.492f, 0.018f), t.shine),
     )
+}
+
+/** Un scooter et son pilote : petites roues, tablier devant, plancher, guidon, casque, top case (iOS). */
+private fun scooter(s: Float, t: Tones): List<Layer> {
+    val helmet = circle(s, 0.5f, 0.5175f, 0.078f)
+    val visor = Path(helmet).apply { op(rounded(s, 0.4f, 0.43f, 0.6f, 0.48f, 0f), Path.Op.INTERSECT) }
+    return listOf(
+        Layer(rounded(s, 0.465f, 0.125f, 0.535f, 0.275f, 0.035f), t.tyre),
+        Layer(rounded(s, 0.46f, 0.725f, 0.54f, 0.9f, 0.04f), t.tyre),
+        Layer(rounded(s, 0.4f, 0.35f, 0.6f, 0.8f, 0.1f), t.body),
+        Layer(rounded(s, 0.375f, 0.225f, 0.625f, 0.375f, front = 0.1f, back = 0.0375f), t.body),
+        Layer(rounded(s, 0.466f, 0.24f, 0.534f, 0.255f, 0.008f), t.light),
+        Layer(rounded(s, 0.325f, 0.275f, 0.675f, 0.32f, 0.022f), t.tyre),
+        Layer(bar(s, 0.39f, 0.5f, 0.355f, 0.31f, 0.042f), t.glass),
+        Layer(bar(s, 0.61f, 0.5f, 0.645f, 0.31f, 0.042f), t.glass),
+        Layer(rounded(s, 0.35f, 0.45f, 0.65f, 0.625f, 0.07f), t.glass),
+        Layer(helmet, t.body),
+        Layer(visor, t.glass),
+        Layer(circle(s, 0.485f, 0.53f, 0.018f), t.shine),
+        Layer(rounded(s, 0.4f, 0.7375f, 0.6f, 0.8625f, 0.0375f), t.glass),
+    )
+}
+
+/** La voiturette sans permis : la voiture, plus courte et carrée, presque sans capot (iOS). */
+private fun microcar(s: Float, t: Tones): List<Layer> = buildList {
+    add(Layer(rounded(s, 0.255f, 0.375f, 0.335f, 0.4275f, 0.02f), t.body))
+    add(Layer(rounded(s, 0.665f, 0.375f, 0.745f, 0.4275f, 0.02f), t.body))
+    add(Layer(rounded(s, 0.3125f, 0.225f, 0.6875f, 0.775f, front = 0.1125f, back = 0.0625f), t.body))
+    add(Layer(pane(s, 0.3375f, 0.365f, 0.635f, 0.45f, 0.38f, 0.62f), t.glass, corner = 0.02f))
+    add(Layer(rounded(s, 0.3875f, 0.47f, 0.6125f, 0.62f, 0.05f), t.roof))
+    add(Layer(pane(s, 0.6625f, 0.385f, 0.615f, 0.725f, 0.375f, 0.625f), t.glass, corner = 0.02f))
+    add(Layer(rounded(s, 0.365f, 0.255f, 0.435f, 0.2925f, 0.01f), t.light))
+    add(Layer(rounded(s, 0.565f, 0.255f, 0.635f, 0.2925f, 0.01f), t.light))
 }
 
 /** One filled shape of the drawing; [corner] rounds a pane's corners (fraction of the size). */

@@ -38,7 +38,7 @@ android {
         applicationId = "com.eona.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 26
+        versionCode = 27
         versionName = "1.0.2"
         buildConfigField("String", "STADIA_API_KEY", "\"$stadiaApiKey\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")

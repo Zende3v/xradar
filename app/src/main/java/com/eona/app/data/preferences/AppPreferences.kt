@@ -95,7 +95,12 @@ enum class VehicleType(val wire: String, val label: String, val moped: Boolean =
     Car("car", "Voiture"),
     Motorcycle("motorcycle", "Moto"),
     Taxi("taxi", "Taxi"),
-    Truck("truck", "Camion");
+    Truck("truck", "Camion"),
+    Scooter50("scooter50", "Scooter 50", moped = true),
+    LicenseFree("licenseFree", "Sans permis", moped = true);
+
+    /** Vitesse maximale du véhicule (Code de la route, R311-1) ; null : limites de la route seules. */
+    val speedCapKmh: Int? get() = if (moped) 45 else null
 
     companion object {
         fun fromWire(wire: String?): VehicleType = entries.firstOrNull { it.wire == wire } ?: Arrow
