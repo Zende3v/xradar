@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
@@ -197,10 +197,6 @@ function appInfo(value) {
   return Object.values(info).some(Boolean) ? info : null;
 }
 
-/** A phone is remembered by a hash of its device id, never by the id itself. */
-function deviceKey(deviceId) {
-  return createHash('sha256').update(String(deviceId)).digest('hex');
-}
 /** A referral code may be used while it is active, not revoked, and not past its date. */
 function usableReferral(entry) {
   if (!entry || entry.active === false) return false;
@@ -220,7 +216,7 @@ function noteReferral(entry, line) {
  * deviceId and gets a `guest` account by default. Roles (client/admin) are
  * assigned by an admin (CLI / admin API). Persisted to a JSON file — no DB.
  */
-class AccountStore {
+export class AccountStore {
   constructor() {
     this.byId = new Map();
     this.byDevice = new Map();
@@ -228,28 +224,15 @@ class AccountStore {
     this.byEmail = new Map(); // lowercase -> account
     this.heldUsernames = new Map(); // lowercase -> { accountId, until } (names just left)
     this.sessions = new Map(); // token -> { accountId, expiresAt }
-    this.deviceTrials = new Map(); // hashed deviceId -> end of the first trial on that phone (ISO)
     this.byProvider = new Map(); // "google:123…" -> account
     this.saveTimer = null;
   }
 
   async start() {
     await this.load();
-    await this.purge();
-    // Daily: guests without a password, and guests past their days, go.
-    const timer = setInterval(() => {
-      this.purge().catch((e) => console.error('[accounts] purge failed:', e.message));
-    }, 24 * 60 * 60 * 1000);
-    if (timer.unref) timer.unref();
   }
 
   async load() {
-    try {
-      const trials = JSON.parse(await readFile(config.deviceTrialsFile, 'utf8'));
-      for (const [key, endsAt] of Object.entries(trials ?? {})) this.deviceTrials.set(key, endsAt);
-    } catch (e) {
-      if (e.code !== 'ENOENT') console.error('[accounts] device trials load failed:', e.message);
-    }
     try {
       const raw = await readFile(config.accountsFile, 'utf8');
       const list = JSON.parse(raw);
@@ -277,8 +260,11 @@ class AccountStore {
     // Names left once, held for their owner a while: the lapsed ones go.
     account.heldUsernames = (Array.isArray(account.heldUsernames) ? account.heldUsernames : [])
       .filter((held) => held?.lower && Date.parse(held.until) > Date.now());
-    if (account.role === 'guest' && !account.trialEndsAt) {
-      account.trialEndsAt = trialEndsAt(account.createdAt);
+    // Anciennes inscriptions email/Google : essai conservé, rôle membre, aucune prolongation.
+    if (account.role === 'guest' && (account.emailLower || account.providers.length)) {
+      account.role = 'client';
+      account.trialEndsAt ??= trialEndsAt(account.createdAt);
+      this.scheduleSave();
     }
     return account;
   }
@@ -291,22 +277,6 @@ class AccountStore {
     if (account.emailLower) this.byEmail.set(account.emailLower, account);
     for (const link of account.providers ?? []) this.byProvider.set(`${link.provider}:${link.subject}`, account);
     for (const held of account.heldUsernames) this.heldUsernames.set(held.lower, { accountId: account.id, until: held.until });
-    this.noteDeviceTrial(account);
-  }
-
-  /**
-   * A phone's free week is used once: the end of the first trial of a guest who finished
-   * onboarding on it is kept, even once that account is purged or deleted, and a later guest
-   * on the same phone ends its trial then too (see accessFor).
-   */
-  noteDeviceTrial(account) {
-    if (account.role !== 'guest' || !account.deviceId || !account.passwordHash) return;
-    const endsAt = account.trialEndsAt ?? trialEndsAt(account.createdAt);
-    const key = deviceKey(account.deviceId);
-    const known = this.deviceTrials.get(key);
-    if (known && Date.parse(known) <= Date.parse(endsAt)) return;
-    this.deviceTrials.set(key, endsAt);
-    this.scheduleSave();
   }
 
   unindex(account) {
@@ -332,8 +302,6 @@ class AccountStore {
   async save() {
     await mkdir(dirname(config.accountsFile), { recursive: true });
     await writeFile(config.accountsFile, JSON.stringify([...this.byId.values()], null, 2), 'utf8');
-    await mkdir(dirname(config.deviceTrialsFile), { recursive: true });
-    await writeFile(config.deviceTrialsFile, JSON.stringify(Object.fromEntries(this.deviceTrials)), 'utf8');
   }
 
   /** Auth by device: return the existing account (touch lastSeen) or create a guest. */
@@ -379,15 +347,24 @@ class AccountStore {
     if (account.role === 'admin') return { status: 'active', canNavigate: true, endsAt: null };
     if (account.role === 'client') {
       const endsAt = account.subscriptionEndsAt ?? null;
-      if (!endsAt || Date.parse(endsAt) > Date.now()) return { status: 'active', canNavigate: true, endsAt };
-      return { status: 'restricted', canNavigate: false, endsAt };
+      if (endsAt) return { status: Date.parse(endsAt) > Date.now() ? 'active' : 'free', canNavigate: true, endsAt };
+      if (account.trialEndsAt) {
+        return { status: Date.parse(account.trialEndsAt) > Date.now() ? 'trial' : 'free', canNavigate: true, endsAt: account.trialEndsAt };
+      }
+      // Accès permanents déjà attribués par administrateur : conservés.
+      return { status: 'active', canNavigate: true, endsAt: null };
     }
-    // The trial ends with the first one this phone had, when that one ended earlier.
-    const own = account.trialEndsAt ?? trialEndsAt(account.createdAt);
-    const phone = account.deviceId ? this.deviceTrials.get(deviceKey(account.deviceId)) : null;
-    const endsAt = phone && Date.parse(phone) < Date.parse(own) ? phone : own;
-    if (Date.parse(endsAt) > Date.now()) return { status: 'trial', canNavigate: true, endsAt };
-    return { status: 'restricted', canNavigate: false, endsAt };
+    return { status: 'free', canNavigate: true, endsAt: null };
+  }
+
+  hasPlus(account) {
+    const access = this.accessFor(account);
+    return access.status === 'active' || access.status === 'trial';
+  }
+
+  tierFor(account) {
+    if (this.hasPlus(account)) return 'plus';
+    return account?.role === 'guest' ? 'guest' : 'free';
   }
 
   // ---- Daily limits (guests) ------------------------------------------------
@@ -399,13 +376,13 @@ class AccountStore {
     return account.usage;
   }
 
-  /** What a guest has used of today's limits; null for clients and admins, who have none. */
+  /** Quotas gratuits ; null pendant EONA+, essai compris. */
   limitsFor(account) {
-    if (account.role !== 'guest') return null;
+    if (this.hasPlus(account)) return null;
     const usage = this.usageOf(account);
     return {
       day: usage.day, // counts are for this Paris day; a cached copy from another day is zero
-      reportsPerDay: config.guestReportsPerDay,
+      reportsPerDay: null,
       reportsToday: usage.reports,
       tripsPerDay: config.guestTripsPerDay,
       tripsToday: usage.trips,
@@ -413,11 +390,11 @@ class AccountStore {
   }
 
   canReport(account) {
-    return account.role !== 'guest' || this.usageOf(account).reports < config.guestReportsPerDay;
+    return !account.banned;
   }
 
   countReport(account) {
-    if (account.role !== 'guest') return;
+    if (this.hasPlus(account)) return;
     this.usageOf(account).reports += 1;
     this.scheduleSave();
   }
@@ -428,7 +405,7 @@ class AccountStore {
    * all of today's trips.
    */
   tripCheck(account, to) {
-    if (account.role !== 'guest') return { allowed: true, isNew: false };
+    if (this.hasPlus(account)) return { allowed: true, isNew: false };
     const usage = this.usageOf(account);
     const last = usage.lastTo;
     if (last && haversine(last.lat, last.lon, to.lat, to.lon) <= config.tripSameDestinationM) {
@@ -438,11 +415,34 @@ class AccountStore {
   }
 
   countTrip(account, to) {
-    if (account.role !== 'guest') return;
+    if (this.hasPlus(account)) return true;
     const usage = this.usageOf(account);
+    // Plusieurs calculs simultanés : admission vérifiée après réponse du moteur.
+    const check = this.tripCheck(account, to);
+    if (!check.allowed) return false;
+    if (!check.isNew) return true;
     usage.trips += 1;
     usage.lastTo = { lat: to.lat, lon: to.lon };
     this.scheduleSave();
+    return true;
+  }
+
+  /** Départ iOS : compte une fois, même destination répétée = nouveau trajet. */
+  startNavigation(account, to, tripId) {
+    if (this.navigationMatches(account, to, tripId)) return { allowed: true };
+    const usage = this.usageOf(account);
+    if (!this.hasPlus(account) && usage.trips >= config.guestTripsPerDay) return { allowed: false };
+    if (!this.hasPlus(account)) usage.trips += 1;
+    account.navigation = { id: tripId, to: { lat: to.lat, lon: to.lon }, startedAt: Date.now() };
+    this.scheduleSave();
+    return { allowed: true };
+  }
+
+  /** Recalculs gratuits pendant trajet admis, y compris après minuit. */
+  navigationMatches(account, to, tripId) {
+    const current = account.navigation;
+    return Boolean(tripId && current?.id === tripId && Date.now() - current.startedAt < 7 * 86_400_000
+      && haversine(current.to.lat, current.to.lon, to.lat, to.lon) <= config.tripSameDestinationM);
   }
 
   statsFor(id) {
@@ -805,21 +805,22 @@ class AccountStore {
     return { account };
   }
 
-  /**
-   * Guest identity ("Continuer en invité"): the device, a unique username and a password —
-   * the password is what brings the guest back after reinstalling the app. The account is
-   * deleted guestLifetimeMs after it became a guest (see purge).
-   */
+  /** Invité permanent : pseudo aléatoire sans mot de passe. Anciennes identités acceptées. */
   claimGuest(deviceId, username, password, meta = {}) {
-    if (!deviceId) return { error: 'deviceId required' };
-    if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
+    if (!deviceId || deviceId.length > 128) return { error: 'deviceId required' };
+    // Anciennes apps : pseudo/mot de passe acceptés. iOS : identité aléatoire sans mot de passe.
+    const legacy = Boolean(username || password);
+    if (legacy && String(password || '').length < 8) return { error: 'password too short (min 8)' };
     let existing = this.byDevice.get(deviceId);
+    if (existing?.banned) return { error: 'banned' };
     // A phone signed in to a member account starts a separate guest.
-    if (existing?.emailLower) {
+    if (existing && (existing.role !== 'guest' || existing.emailLower)) {
       this.byDevice.delete(deviceId);
       existing.deviceId = null;
       existing = null;
     }
+    if (!legacy && existing?.username) return { account: existing };
+    if (!legacy) username = this.freeUsername(`Invite_${randomBytes(4).toString('hex')}`);
     const check = this.usernameAvailable(username);
     // Allow keeping one's own username on re-auth.
     if (!check.ok && !(existing && existing.usernameLower === String(username).toLowerCase())) {
@@ -830,11 +831,11 @@ class AccountStore {
       this.unindex(existing);
       existing.username = username;
       existing.usernameLower = String(username).toLowerCase();
-      existing.passwordHash = hashPassword(password);
-      // Becoming a guest starts its days: the bare device account only waited for onboarding.
+      existing.displayName = username;
+      existing.passwordHash = legacy ? hashPassword(password) : null;
+      // Date d'entrée invité conservée, sans expiration.
       if (!existing.guestSince) {
         existing.guestSince = now;
-        existing.trialEndsAt = trialEndsAt(now);
       }
       existing.lastSeenAt = now;
       if (meta.platform) existing.platform = meta.platform;
@@ -851,7 +852,7 @@ class AccountStore {
       displayName: username,
       email: null,
       emailLower: null,
-      passwordHash: hashPassword(password),
+      passwordHash: legacy ? hashPassword(password) : null,
       guestSince: now,
       avatarUrl: null,
       platform: meta.platform ?? null,
@@ -864,19 +865,23 @@ class AccountStore {
     return { account };
   }
 
-  register({ email, password, username, referralCode = null, app = null, method = 'email' }) {
+  register({ email, password, username, referralCode = null, app = null, method = 'email', guest = null, deviceId = null }) {
     const e = String(email || '').trim().toLowerCase();
     if (!e.includes('@') || e.length > 190) return { error: 'invalid email' };
     if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
-    const check = this.usernameAvailable(username);
+    if (guest && (guest.banned || guest.role !== 'guest' || guest.emailLower || guest.providers?.length)) {
+      return { error: 'guest account required' };
+    }
+    const check = this.usernameAvailable(username, { accountId: guest?.id });
     if (!check.ok) return { error: `username ${check.error}` };
     if (this.byEmail.has(e)) return { error: 'email already registered' };
     const now = new Date().toISOString();
     if (referralCode && !this.findReferral(referralCode)) return { error: 'invalid referral code' };
     const account = {
-      id: randomUUID(),
-      deviceId: null,
-      role: 'guest',
+      ...guest,
+      id: guest?.id ?? randomUUID(),
+      deviceId: guest?.deviceId ?? null,
+      role: 'client',
       username,
       usernameLower: String(username).toLowerCase(),
       displayName: username,
@@ -890,16 +895,25 @@ class AccountStore {
       // How this account came to be: by email, or through a provider.
       signupMethod: method,
       banned: false,
-      createdAt: now,
+      createdAt: guest?.createdAt ?? now,
+      trialStartedAt: now,
+      trialEndsAt: trialEndsAt(now),
       lastSeenAt: now,
     };
     if (referralCode) {
       const applied = this.claimReferral(referralCode, account);
       if (applied.error) return applied;
     }
-    this.index(account);
+    // Conversion sur même objet : compte, trajets, statistiques et sessions conservés.
+    if (guest) {
+      this.unindex(guest);
+      Object.assign(guest, account);
+    }
+    const registered = guest ?? account;
+    this.index(registered);
+    if (deviceId) this.bindDevice(registered, deviceId);
     this.scheduleSave();
-    return { account };
+    return { account: registered };
   }
 
   // ---- Providers (Google) ---------------------------------------------------
@@ -949,7 +963,7 @@ class AccountStore {
     const account = {
       id: randomUUID(),
       deviceId: deviceId ?? null,
-      role: 'guest',
+      role: 'client',
       username,
       usernameLower: username.toLowerCase(),
       displayName: name ?? username,
@@ -962,6 +976,8 @@ class AccountStore {
       platform: app?.platform ?? null,
       app: appInfo(app),
       signupMethod: provider,
+      trialStartedAt: now,
+      trialEndsAt: trialEndsAt(now),
       providers: [{ provider, subject, email: email ?? null, linkedAt: now }],
       banned: false,
       createdAt: now,
@@ -980,6 +996,12 @@ class AccountStore {
     const taken = this.byProviderIdentity(provider, subject);
     if (taken && taken.id !== account.id) return { error: 'already linked to another account' };
     if (!account.providers.some((link) => link.provider === provider && link.subject === subject)) {
+      if (account.role === 'guest') {
+        const now = new Date().toISOString();
+        account.role = 'client';
+        account.trialStartedAt = now;
+        account.trialEndsAt = trialEndsAt(now);
+      }
       account.providers.push({ provider, subject, email: email ?? null, linkedAt: new Date().toISOString() });
       this.byProvider.set(`${provider}:${subject}`, account);
       this.scheduleSave();
@@ -1106,7 +1128,6 @@ class AccountStore {
     if (account.deviceId) this.byDevice.delete(account.deviceId);
     account.deviceId = id;
     this.byDevice.set(id, account);
-    this.noteDeviceTrial(account);
   }
 
   /** Photo and display name; the username changes through changeUsername only. */
@@ -1180,13 +1201,7 @@ class AccountStore {
     this.sessions.delete(token);
   }
 
-  /**
-   * Delete the guest accounts with no way back: every guest without a password (a phone
-   * that never finished onboarding, a guest from before passwords were asked) and every
-   * "Continuer en invité" account (no email) guestLifetimeMs after it became a guest.
-   * Members (email), clients and admins are never touched. Before the first deletion of
-   * the day, a copy of all accounts is written next to the accounts file.
-   */
+  /** Compatibilité CLI : invités permanents, purge automatique sans suppression. */
   async purge(now = Date.now()) {
     const doomed = [...this.byId.values()].filter((account) => this.isExpiredGuest(account, now));
     if (doomed.length === 0) return 0;
@@ -1198,11 +1213,8 @@ class AccountStore {
   }
 
   isExpiredGuest(account, now) {
-    if (account.role !== 'guest') return false;
-    if (!account.passwordHash) return true;
-    if (account.emailLower) return false;
-    const since = Date.parse(account.guestSince || account.createdAt || 0);
-    return Number.isFinite(since) && now - since > config.guestLifetimeMs;
+    // Invités permanents. Suppression seulement sur demande explicite du propriétaire.
+    return false;
   }
 
   async backup(now) {

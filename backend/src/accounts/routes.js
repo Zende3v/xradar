@@ -15,7 +15,7 @@ export const accountRouter = Router();
 
 /**
  * Self view: the public view plus what only the owner sees — email, verification,
- * access status (trial / active / restricted) and the trust summary.
+ * accès gratuit, essai, EONA+ actif ou compte banni.
  */
 function selfView(a) {
   const access = accountStore.accessFor(a);
@@ -24,7 +24,7 @@ function selfView(a) {
     ...publicView(a),
     email: a.email ?? null,
     emailVerified: Boolean(a.emailVerified),
-    access: access.status, // 'trial' | 'active' | 'restricted'
+    access: access.status, // 'free' | 'trial' | 'active' | 'restricted'
     canNavigate: access.canNavigate,
     accessEndsAt: access.endsAt,
     referredByCode: a.referredByCode ?? null,
@@ -32,7 +32,7 @@ function selfView(a) {
     // "Changer de pseudo": who may, and when again (ISO, null = now).
     canChangeUsername: accountStore.canChangeUsername(a),
     usernameChangeableAt: accountStore.usernameChangeableAt(a),
-    // A guest's daily limits and today's use; null for clients and admins.
+    // Quotas gratuits ; null pour EONA+ actif, essai compris.
     limits: accountStore.limitsFor(a),
     // How this account was opened, and which providers it can sign in with.
     signupMethod: a.signupMethod ?? null,
@@ -69,9 +69,8 @@ accountRouter.get('/username-available', (req, res) => {
 });
 
 /**
- * POST /api/accounts/guest  { deviceId, username, password, platform? }
- * Guest identity: a unique username and a password (8 min.) tied to the device. The guest
- * signs back in with them after a reinstall; the account is deleted after its 7 days.
+ * POST /api/accounts/guest { deviceId, platform? } : pseudo aléatoire, aucun mot de passe, aucune expiration.
+ * Anciennes apps : username/password facultatifs conservés.
  */
 accountRouter.post('/guest', (req, res) => {
   const deviceId = String(req.body?.deviceId || '').trim();
@@ -85,8 +84,7 @@ accountRouter.post('/guest', (req, res) => {
 
 /**
  * POST /api/accounts/register  { email, password, username, referralCode? }
- * A new account starts as a guest on a 7-day trial; a valid referral code — only
- * accepted here, at creation — turns it into a client for 6 months.
+ * Sept jours EONA+ offerts sans code. Parrainage existant : six mois offerts.
  */
 accountRouter.post('/register', (req, res) => {
   const referral = String(req.body?.referralCode || '').trim();
@@ -97,12 +95,32 @@ accountRouter.post('/register', (req, res) => {
     referralCode: referral || null,
     // What the app knows of itself, for the admin card.
     app: req.body?.app ?? null,
+    deviceId: req.body?.deviceId ? String(req.body.deviceId).trim() : null,
   });
   if (result.error) return res.status(400).json({ error: result.error });
   const token = accountStore.issueToken(result.account.id);
   const code = accountStore.setVerifyCode(result.account.id);
   if (code) mailer.sendVerify(result.account.email, code);
   res.status(201).json({ account: selfView(result.account), token });
+});
+
+/** Conversion invité authentifiée : conserve identité et statistiques, ouvre sept jours EONA+. */
+accountRouter.post('/me/register', (req, res) => {
+  const token = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '')?.[1];
+  const guest = token ? accountStore.resolveToken(token) : null;
+  if (!guest) return res.status(401).json({ error: 'unauthorized' });
+  const result = accountStore.register({
+    guest,
+    email: req.body?.email,
+    password: req.body?.password,
+    username: String(req.body?.username || '').trim(),
+    referralCode: String(req.body?.referralCode || '').trim() || null,
+    app: req.body?.app ?? null,
+  });
+  if (result.error) return res.status(400).json({ error: result.error });
+  const code = accountStore.setVerifyCode(result.account.id);
+  if (code) mailer.sendVerify(result.account.email, code);
+  res.json({ account: selfView(result.account), token });
 });
 
 /** POST /api/accounts/verify  { email, code } — confirm the email. */

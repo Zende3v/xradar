@@ -199,7 +199,7 @@ export function createRoutingEngine({
    * Valhalla's route within [ms], the jams avoided first then not ([polygons], D4.3):
    * { ok, route, latencyMs } or { ok: false, error, latencyMs, skipped? }.
    */
-  async function valhallaRoute(from, to, exclusions, polygons, ms, bearings = null, shortest = false, via = [], moped = false) {
+  async function valhallaRoute(from, to, exclusions, polygons, ms, bearings = null, shortest = false, via = [], moped = false, vehicle = 'car') {
     const blocked = valhallaBlocked();
     if (blocked) return { ok: false, error: blocked, skipped: true, latencyMs: null };
     // No time left for it (the jams took it): not asked, and not Valhalla's fault.
@@ -213,6 +213,7 @@ export function createRoutingEngine({
       ...(shortest ? { shortest: true } : {}),
       ...(via.length ? { via } : {}),
       ...(moped ? { moped: true } : {}),
+      ...(vehicle === 'taxi' ? { vehicle } : {}),
       signal,
     })));
     let result = await ask(polygons);
@@ -289,7 +290,7 @@ export function createRoutingEngine({
    * ou sans permis (Valhalla motor_scooter ; ORS en voiture sans autoroute). Never throws: { route, engine, primary, fallback, cause,
    * attempts, polygons } — route null with { status, error, detail, thrown } when nobody could.
    */
-  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null, preference = 'fastest', via = [], moped = false } = {}) {
+  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null, preference = 'fastest', via = [], moped = false, vehicle = 'car' } = {}) {
     const until = Date.now() + s.deadlineMs;
     const wanted = [...new Set(moped ? [...avoid, 'highways'] : avoid)];
     const bearings = headingBearings(heading);
@@ -301,7 +302,7 @@ export function createRoutingEngine({
     let cause = null;
     if (chosen.primary === 'valhalla') {
       const exclusions = wanted.filter((a) => EXCLUSIONS.has(a));
-      const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()), bearings, shortest, via, moped);
+      const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()), bearings, shortest, via, moped, vehicle);
       attempts.valhalla = tried;
       if (tried.ok) {
         return { route: tried.route, engine: 'valhalla', primary: 'valhalla', fallback: false, cause: null, attempts, polygons };
@@ -365,6 +366,7 @@ export function createRoutingEngine({
           ...(ask.preference === 'shortest' ? { shortest: true } : {}),
           ...(ask.via?.length ? { via: ask.via } : {}),
           ...(ask.moped ? { moped: true } : {}),
+          ...(ask.vehicle === 'taxi' ? { vehicle: 'taxi' } : {}),
         }));
         const latencyMs = Date.now() - startedAt;
         if (result.ok) return { engine, routes: result.value, error: null, outage: false, latencyMs };

@@ -317,7 +317,7 @@ export function decodePolyline6(encoded) {
 export const MAX_STOPS = 10;
 
 /** Valhalla's /route request for [from] → [to] with the caller's options, checked. */
-function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, alternates = 0, shortest = false, via = [], moped = false }, searchCutoffM) {
+function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, alternates = 0, shortest = false, via = [], moped = false, vehicle = 'car' }, searchCutoffM) {
   const start = checkedPoint(from, 'from');
   const end = checkedPoint(to, 'to');
   const stops = checkedStops(via);
@@ -331,7 +331,10 @@ function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, 
   if (rings && count > 0) throw refused('polygons and alternates are asked separately');
   if (typeof shortest !== 'boolean') throw refused('shortest must be true or false');
   if (typeof moped !== 'boolean') throw refused('moped must be true or false');
-  const costing = moped ? 'motor_scooter' : 'auto';
+  if (!['car', 'moped', 'taxi'].includes(vehicle)) throw refused('unknown vehicle');
+  moped = moped || vehicle === 'moped';
+  // Profil natif : accès taxi OSM, voies réservées autorisées, restrictions conservées.
+  const costing = moped ? 'motor_scooter' : vehicle === 'taxi' ? 'taxi' : 'auto';
   if (stops.length && count > 0) throw refused('stops and alternates are asked separately');
   const body = {
     // Étapes : type `via`, route sans coupure ni manœuvre d'arrivée, demi-tour permis après l'arrêt.
@@ -357,6 +360,7 @@ function routeRequest(from, to, { avoid = [], polygons = null, bearings = null, 
   };
   if (rings) body.exclude_polygons = rings;
   if (count > 0) body.alternates = count;
+  if (vehicle === 'taxi') body.date_time = { type: 0 };
   return body;
 }
 

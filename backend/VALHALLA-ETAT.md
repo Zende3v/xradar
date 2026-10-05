@@ -60,6 +60,9 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - 04/10 : recherche enseigne + commune, catégorie `suggestion`, lieux manuels `search/extra.sql`.
 - 05/10 : champ additif `roads`, X1 E.Leclerc Orly et X2 Fitness Park Orly en service selon bilan.
 - 05/10 : branches cloud intégrées. iOS `main` poussé à `252fb9d`, build 30 ; x_radar fusionné localement.
+- 05/10 : iOS 31 préparé, Taxi natif Valhalla, accès invité permanent, essai EONA+ et quotas au départ.
+- Profil Taxi accepté sur VPS : trajet Paris de 6 070 m, péages/autoroutes/ferries exclus, aucune alerte d'exclusion ignorée.
+- Accès réservés dépend de cartographie OSM. Validation sur voies Taxi par Arthur reste à réaliser.
 
 ## Points ouverts
 

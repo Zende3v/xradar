@@ -44,7 +44,7 @@ const THROUGH_CLOSURE_SHARE = 0.5;
  * retenue, sans chronométrage HERE (temps voiture faux à 45 km/h) ; tracés motor_scooter.
  * { answer, compare } conserve contrat API et comparaison des moteurs en mode ombre.
  */
-export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest', via = [], moped = false } = {}) {
+export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest', via = [], moped = false, vehicle = 'car' } = {}) {
   if (sinceRerouteS != null && sinceRerouteS < config.rerouteCooldownS) {
     return { answer: { better: null, reason: 'cooldown' }, compare: null };
   }
@@ -100,6 +100,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   const base = {
     from: { lat: start[0], lon: start[1] }, to: { lat: end[0], lon: end[1] }, bearings, avoid,
     ...(shortest ? { preference } : {}), ...(moped ? { moped: true } : {}),
+    ...(vehicle === 'taxi' ? { vehicle } : {}),
   };
   const worst = jams.reduce((a, b) => (weight(b) > weight(a) ? b : a));
   const asks = [{ ...base, label: 'around', polygons: polygonsAround(path, jams), alternatives: false }];
@@ -155,7 +156,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   const compare = { plan, drawn, detour: switching ? best.candidate : null };
   if (!switching) return { answer: { ...result, better: null, reason: best ? 'not enough gain' : 'no variant' }, compare };
   const restStops = via.filter((_, i) => stopsM[i] > rejoinM + 1);
-  const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw, shortest ? preference : null, restStops, moped) : best.route;
+  const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw, shortest ? preference : null, restStops, moped, vehicle) : best.route;
   if (!route) return { answer: { ...result, better: null, reason: 'rest of the route unavailable' }, compare };
   // Durée moteur conservée dans route ; prochain rafraîchissement fournit son ETA HERE.
   return { answer: { ...result, better: { gainS: Math.max(0, gainS), closed, route } }, compare };
@@ -264,7 +265,7 @@ function delayWithin(sections, fromM, toM) {
  * The winning detour, then the engine's route from the rejoin point to the destination (the
  * same road as the route's rest): one route to follow, with its steps, its engine and its map.
  */
-async function withRest(detour, rest, heading, avoid, draw, preference = null, via = [], moped = false) {
+async function withRest(detour, rest, heading, avoid, draw, preference = null, via = [], moped = false, vehicle = 'car') {
   const [from, to] = [rest[0], rest[rest.length - 1]];
   const { routes: [route] = [] } = await draw({
     label: 'rest',
@@ -277,6 +278,7 @@ async function withRest(detour, rest, heading, avoid, draw, preference = null, v
     ...(preference ? { preference } : {}),
     ...(via.length ? { via } : {}),
     ...(moped ? { moped: true } : {}),
+    ...(vehicle === 'taxi' ? { vehicle } : {}),
   });
   if (!route) return null;
   const returned = route.coordinates.map(([lon, lat])=>[lat, lon]);

@@ -187,16 +187,14 @@ systemctl daemon-reload && systemctl restart eona-backend
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `SMTP_FROM` | vérif email, mot de passe oublié | absent = pas de mail |
 | `PUBLIC_BASE_URL` | base des URLs d'avatars (les anciennes en `ts.net` sont réécrites au chargement) | `https://api.lrda-mercuriale.uk` |
 | `ACCOUNTS_FILE` / `AVATARS_DIR` | comptes / photos | `./data/accounts.json` / `./data/avatars` |
-| `ACCOUNTS_BACKUP_KEEP_DAYS` | copies `accounts.backup-<jour>.json` (avant purge des invités) gardées | 14 j |
-| `GUEST_TRIAL_MS` | essai compte email | 7 j |
-| `GUEST_LIFETIME_MS` | durée de vie compte invité | 7 j |
+| `ACCOUNTS_BACKUP_KEEP_DAYS` | anciennes copies `accounts.backup-<jour>.json` ; aucune purge automatique | 14 j |
+| Essai EONA+ | inscription ou conversion ; durée fixe, sans variable d'environnement | 7 j |
 | `HERE_API_KEY` | trafic HERE Traffic v7 sur le trajet (drop-in `here.conf`, jamais versionnée) | absent = pas de trafic live |
 | `HERE_DEEP_COVERAGE` / `HERE_DAILY_CAP` / `HERE_ACCOUNT_DAILY_MAX` | Deep Coverage (tarif Advanced Traffic) ; plafond du jour (aucun par défaut) ; rafraîchissements HERE par compte et par jour | coupé / aucun / 150 |
 | `DATAGOUV_ENABLED` | collecte des flux DIR (data.gouv, Bison Futé) : vitesses QTV et événements toutes les 6 min, stations par jour | actif ; `0` = coupé |
 | `DATAGOUV_SPEEDS_URL` / `DATAGOUV_EVENTS_URL` / `DATAGOUV_STATIONS_URL` | adresses des flux DIR | tipi.bison-fute.gouv.fr |
 | `HERE_TRAFFIC_URL` | adresse de HERE Traffic v7 | `https://data.traffic.hereapi.com/v7` |
-| `DEVICE_TRIALS_FILE` | fin du premier essai par téléphone | `./data/device-trials.json` |
-| `GUEST_REPORTS_PER_DAY` / `GUEST_TRIPS_PER_DAY` | limites invité par jour | 5 / 7 |
+| Trajets gratuits | invités et membres gratuits ; plafond fixe, minuit Paris | 4 / jour |
 | `REFERRAL_SUBSCRIPTION_MONTHS` | mois offerts par parrainage | 6 |
 | `ACCOUNT_TRIP_HISTORY_MAX` | trajets gardés par compte | 200 |
 | `RADAR_DATASET_API_URL` / `REFRESH_INTERVAL_MS` | dataset radars / refresh | data.gouv / 24 h |
@@ -388,7 +386,7 @@ runuser -u eona -- psql -d eona -c "BEGIN; ALTER SCHEMA search RENAME TO search_
 | Compteurs ORS (jour) / HERE (jour, mois) | `data/ors-usage.json`, `data/here-usage.json` | non (repartent à zéro chaque jour, HERE chaque mois aussi) |
 | Routes + panneaux | PostGIS schémas `signs`, `signs_prev` | non (rebuild) |
 | Extrait OSM | `/var/lib/eona-signs/france-latest.osm.pbf` | non (retéléchargé) |
-| Copies auto des comptes avant purge | `data/accounts.backup-<date>.json` | oui |
+| Anciennes copies des comptes avant purge | `data/accounts.backup-<date>.json` | oui |
 | Ancien système (NDJSON, JSON d'avant PostGIS) | `data/archive/` | non (supprimable) |
 | Sauvegardes du code | `/opt/eona-backend-src-backup-*.tgz` | garder les 2-3 dernières |
 
@@ -620,16 +618,17 @@ Lien : `http://45.80.23.8:8087/` (HTTP clair, sans auth ; seuls des `.apk` dans 
 
 | Rôle | Accès |
 |---|---|
-| `guest` invité | pseudo + mot de passe ; reconnexion par « Se connecter » (pseudo ou email) ; **supprimé 7 jours** après création |
-| `guest` email | 7 jours d'essai puis restreint (carte seule) ; jamais supprimé |
-| `client` | abonnement jusqu'à `subscriptionEndsAt` (parrainage = 6 mois) |
+| `guest` invité | pseudo aléatoire, aucun mot de passe, gratuit permanent ; anciennes identités acceptées |
+| `client` | sept jours EONA+ après inscription ; puis gratuit, compte conservé ; abonnement ou parrainage selon échéance |
 | `admin` | tout : caméras, codes de parrainage, modération, correction de limite validée seule |
 
-Purge auto (démarrage + chaque jour) : tout `guest` sans mot de passe + invités sans email > 7 jours. Copie `data/accounts.backup-<date>.json` avant la première suppression du jour. Restreint = pas de navigation, alertes, signalements (`403 subscription required`).
+Aucune purge automatique des invités. Suppression explicite seulement. Compte banni : accès bloqué.
 
-Essai : **un par téléphone**. La fin du premier essai d'un invité inscrit sur un téléphone est gardée (`data/device-trials.json`, id d'appareil haché) : un invité purgé, supprimé ou recréé sur ce téléphone finit son essai à la même date.
+Essai : sept jours par compte créé ou converti. Ancien fichier `device-trials.json` conservé, désormais inutilisé.
 
-Limites `guest` (essai compris, jour à l'heure de Paris) : **5 signalements** (`429 daily report limit`) et **7 trajets** (`429 daily trip limit` ; nouveau trajet = destination à plus de 300 m de la précédente, recalcul gratuit). `client` / `admin` : aucune limite.
+Gratuit : quatre départs quotidiens, minuit Paris ; aucun plafond quotidien de signalements. Musique incluse.
+EONA+ : essai actif, abonnement actif ou administrateur ; trajets illimités, Taxi, curseur Camion, groupes, couleurs.
+Feux en préparation. Perso reporté par Arthur. Contrat et compteurs : `backend/API-WEBAPP.md`, section « Accès et Taxi ».
 
 ### CLI (sur le VPS, jeton lu dans le service)
 

@@ -31,6 +31,28 @@ export function createRouteRouter({
   /** When each account last had a faster-route check (rerouteCheckGapS). */
   const lastCheckAt = new Map();
 
+  const hasPlus = (account) => accounts.hasPlus ? accounts.hasPlus(account)
+    : ['active', 'trial'].includes(accounts.accessFor(account).status);
+
+  /** Départ explicite : aperçu gratuit, départ compté une fois par identifiant. */
+  router.post('/start', (req, res) => {
+    const account = auth(req);
+    if (!account) return res.status(401).json({ error: 'account required' });
+    if (account.banned) return res.status(403).json({ error: 'banned' });
+    const to = parseCoord(`${req.body?.to?.lat},${req.body?.to?.lon}`);
+    const tripId = req.body?.tripId;
+    const vehicle = parseVehicle(req.body?.vehicle);
+    if (!to || Math.abs(to.lat) > 90 || Math.abs(to.lon) > 180
+      || typeof tripId !== 'string' || !/^[a-zA-Z0-9_-]{8,128}$/.test(tripId) || vehicle === undefined) {
+      return res.status(400).json({ error: 'to, tripId and valid vehicle required' });
+    }
+    if (vehicle === 'taxi' && !hasPlus(account)) return res.status(403).json({ error: 'subscription required', feature: 'taxi' });
+    if (!accounts.startNavigation(account, to, tripId).allowed) {
+      return res.status(429).json({ error: 'daily trip limit', limit: config.guestTripsPerDay });
+    }
+    res.json({ ok: true, limits: accounts.limitsFor(account) });
+  });
+
   /**
    * Temps HERE avec trafic de [route] entière (Route Import), borné à routeTimingMs ; null si HERE
    * muet, budget atteint ou route non reconnue. Même tracé que premier rafraîchissement trafic de
@@ -93,7 +115,8 @@ export function createRouteRouter({
     if (!via) return answer(400, { error: `via takes ${MAX_STOPS} stops "lat,lon;lat,lon" at most` });
     facts.stops = via.length;
     const vehicle = parseVehicle(req.query.vehicle);
-    if (vehicle === undefined) return answer(400, { error: 'vehicle must be car or moped' });
+    if (vehicle === undefined) return answer(400, { error: 'vehicle must be car, moped or taxi' });
+    if (vehicle === 'taxi' && !hasPlus(account)) return answer(403, { error: 'subscription required', feature: 'taxi' });
     const moped = vehicle === 'moped';
     const timed = req.query.timed === '1';
     /** La route, plus ce que l'app récente a demandé : preference, travelS. */
@@ -103,7 +126,10 @@ export function createRouteRouter({
       ...(timed ? { travelS: moped ? null : await timeRoute(route) } : {}),
     });
     // A guest starts a limited number of trips a day; recalculations to the same place are free.
-    const trip = accounts.tripCheck(account, to);
+    const preview = req.query.preview === '1';
+    const tripId = req.query.tripId;
+    if (tripId && !accounts.navigationMatches(account, to, tripId)) return answer(409, { error: 'trip not started' });
+    const trip = preview || tripId ? { allowed: true, isNew: false } : accounts.tripCheck(account, to);
     facts.isNew = trip.isNew;
     if (!trip.allowed) {
       return answer(429, { error: 'daily trip limit', limit: config.guestTripsPerDay });
@@ -115,6 +141,7 @@ export function createRouteRouter({
       plan.primary,
       ...(shortest ? ['shortest'] : []),
       ...(moped ? ['moped'] : []),
+      ...(vehicle === 'taxi' ? ['taxi'] : []),
       ...(via.length ? [`via:${via.map((p) => `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`).join(';')}`] : []),
     ].join(':');
     // The same trip asked again within the minute costs nothing: an app looping on a recalculation
@@ -124,7 +151,7 @@ export function createRouteRouter({
     const heading = parseHeading(req.query.heading);
     const known = heading == null ? guard.cachedRoute(from, to, avoid, partition) : null;
     if (known) {
-      if (trip.isNew) accounts.countTrip(account, to);
+      if (trip.isNew && accounts.countTrip(account, to) === false) return answer(429, { error: 'daily trip limit', limit: config.guestTripsPerDay });
       routing.noteServed(account.id, known.served);
       return answer(200, await reply(known.route), { cached: true, ...routeFacts(known.route) });
     }
@@ -136,14 +163,14 @@ export function createRouteRouter({
 
     let outcome;
     try {
-      outcome = await routing.route(from, to, avoid, { plan, heading, preference: preference ?? 'fastest', via, moped });
+      outcome = await routing.route(from, to, avoid, { plan, heading, preference: preference ?? 'fastest', via, moped, vehicle });
     } catch (e) {
       // The façade answers its failures; this is a bug, still answered like one.
       console.warn('[route] unavailable —', String(e.message || e));
       return answer(502, { error: 'routing unavailable', detail: String(e.message || e) }, { error: String(e.message || e) });
     }
     if (outcome.route) {
-      if (trip.isNew) accounts.countTrip(account, to);
+      if (trip.isNew && accounts.countTrip(account, to) === false) return answer(429, { error: 'daily trip limit', limit: config.guestTripsPerDay });
       const served = { engine: outcome.engine, fallback: outcome.fallback };
       guard.keepRoute(from, to, avoid, outcome.route, { partition, served });
       routing.noteServed(account.id, served);
@@ -158,7 +185,7 @@ export function createRouteRouter({
     }
     // Only once the answer is sent (shadow.js queues it on the response's end). Éco, étapes ou
     // 45 km/h : pas d'ombre, comparaison des moteurs faite sur Rapide voiture direct seulement.
-    if (!shortest && !via.length && !moped) shadow.afterRoute(res, { plan, outcome, from, to, avoid, heading, admin: account.role === 'admin' });
+    if (!shortest && !via.length && !moped && vehicle !== 'taxi') shadow.afterRoute(res, { plan, outcome, from, to, avoid, heading, admin: account.role === 'admin' });
   });
 
   /**
@@ -207,7 +234,8 @@ export function createRouteRouter({
       points.push([lat, lon]);
     }
     const vehicle = parseVehicle(req.body.vehicle);
-    if (vehicle === undefined) return answer(400, { error: 'vehicle must be car or moped' });
+    if (vehicle === undefined) return answer(400, { error: 'vehicle must be car, moped or taxi' });
+    if (vehicle === 'taxi' && !hasPlus(account)) return answer(403, { error: 'subscription required', feature: 'taxi' });
     const moped = vehicle === 'moped';
     const asked = Array.isArray(req.body.avoid) ? req.body.avoid.map(String) : [];
     const avoid = moped && !asked.includes('highways') ? [...asked, 'highways'] : asked;
@@ -234,10 +262,11 @@ export function createRouteRouter({
         preference: preference ?? 'fastest',
         via,
         moped,
+        vehicle,
       });
       answer(200, result, result.better ? routeFacts(result.better.route) : { error: result.reason ?? null });
       if (result.better) routing.noteServed(account.id, { engine: result.better.route.engine, fallback: false });
-      if (!moped) shadow.afterFaster(res, { plan, compare, avoid, admin: account.role === 'admin' });
+      if (!moped && vehicle !== 'taxi') shadow.afterFaster(res, { plan, compare, avoid, admin: account.role === 'admin' });
     } catch (e) {
       console.warn('[faster] unavailable —', String(e.message || e));
       answer(502, { error: 'rerouting unavailable' }, { error: String(e.message || e) });
@@ -291,7 +320,7 @@ function parseViaList(value) {
 /** Véhicule : 'car' (absent : anciennes apps) | 'moped' (scooter 50, sans permis) ; undefined illisible. */
 function parseVehicle(value) {
   if (value == null || value === '' || value === 'car') return 'car';
-  return value === 'moped' ? 'moped' : undefined;
+  return value === 'moped' || value === 'taxi' ? value : undefined;
 }
 
 /** Choix d'itinéraire : 'fastest' | 'shortest' ; null absent (anciennes apps) ; undefined illisible. */

@@ -51,5 +51,7 @@ export function publicView(account) {
     access: access.status,
     canNavigate: access.canNavigate,
     accessEndsAt: access.endsAt,
+    tier: accountStore.tierFor(account),
+    hasPlus: accountStore.hasPlus(account),
   };
 }

@@ -245,7 +245,7 @@ sortie texte), même si une autre raison d'exclusion s'applique aussi.
 
 Aucune coordonnée dans un trajet. Seuls les conducteurs avec « Statistiques de conduite » envoient
 des trajets (D1.10).
-- **Quotas du jour** (invités) : `usage.reports`, `usage.trips`.
+- **Quotas du jour** (invités et inscrits gratuits) : `usage.trips`, quatre départs ; EONA+ sans plafond quotidien.
 - **Parrainage** : `referralCodes[]`.
 
 ### Qui est en ligne, et où
@@ -679,7 +679,7 @@ Cyclomoteurs 50 cm³ et voiturettes : 45 km/h, ni autoroute ni voie rapide. Anci
   - `moped` : Valhalla `motor_scooter`, `top_speed` 45, `exclude_highways`. ORS en secours : `avoid_features` highways.
   - `timed=1` : `travelS` toujours `null` (temps HERE = voiture).
   - Cache séparé. Pas d'ombre. Combinable avec `preference`, `via`, `avoid`.
-  - Autre valeur : 400 `vehicle must be car or moped`.
+  - `taxi` ajouté le 05/10 ; autre valeur : 400 `vehicle must be car, moped or taxi`.
 - `POST /api/route/faster` ajoute `vehicle`. `moped` : détour seulement autour d'une route fermée, comme Éco.
 - À vérifier sur VPS : voies rapides (`motorroad=yes`) exclues par `motor_scooter`.
 
@@ -704,3 +704,34 @@ Cyclomoteurs 50 cm³ et voiturettes : 45 km/h, ni autoroute ni voie rapide. Anci
 
 - `search/extra.sql`, réappliqué à chaque rebuild de la recherche. Résultats `id: "osm:X<n>"`.
 - X1 E.Leclerc Orly (8 place Gaston Viens), X2 Fitness Park Orly (av. des Martyrs de Châteaubriant, position approchée).
+
+## Accès et Taxi : 05/10/2026, iOS 31
+
+- `role` reste `guest|client|admin`. Droits EONA+ ne dépendent plus du rôle seul.
+- `access` : `free|trial|active|restricted`. `restricted` réservé aux comptes bloqués.
+- Champs additifs : `tier` (`guest|free|plus`), `hasPlus` ; `canNavigate` reste vrai après expiration.
+- `POST /api/accounts/guest` : `deviceId`, pseudo aléatoire sans mot de passe, aucune expiration ni purge automatique.
+- Anciennes apps : pseudo/mot de passe encore acceptés ; accès invité désormais gratuit permanent.
+- `POST /api/accounts/register` : pseudo, email, mot de passe ; sept jours EONA+ offerts sans parrainage.
+- `POST /api/accounts/me/register` : mêmes champs, Bearer obligatoire ; conserve identifiant, historique, statistiques et session invité.
+- Sept jours écoulés : gratuit automatique, compte conservé. Parrainages et accès permanents administratifs conservés.
+- `limits` : `null` pendant EONA+ ; sinon quatre trajets quotidiens, compteurs à minuit Paris.
+- `reportsPerDay: null` : aucun plafond quotidien de signalements. Protections anti-abus inchangées.
+- `GET /api/route?preview=1` : aperçu, aucun trajet débité.
+- `POST /api/route/start` : `{to:{lat,lon},tripId,vehicle?}` ; confirme départ, compte une fois par identifiant.
+- Réponse : `{ok:true,limits}`. Cinquième départ gratuit : 429 `daily trip limit`.
+- Réutiliser identifiant après réponse réseau perdue. Même destination avec nouvel identifiant : nouveau trajet.
+- `GET /api/route?tripId=...` : recalcul du trajet admis, gratuit au plafond quotidien et après minuit.
+- Identifiant inconnu ou destination différente : 409 `trip not started`.
+- Anciennes apps sans `preview`/`tripId` : compteur au calcul, recalcul même destination gratuit selon règle historique.
+- `vehicle=taxi` : Valhalla `taxi`, accès taxi cartographiés, départ courant pour restrictions horaires, exclusions strictes conservées.
+- Profil propagé vers `/faster`, variantes et reste du trajet. Cache voiture séparé ; aucune comparaison en ombre Taxi.
+- Secours ORS conserve profil voiture, sans accès réservé Taxi. Aucun contournement global des restrictions.
+- Taxi gratuit : 403 `subscription required`, `feature: "taxi"`.
+- Groupe gratuit : 403 `subscription required`, `feature: "groups"` ; sortie et fermeture restent autorisées.
+- Expiration ferme flux groupe déjà ouvert, immédiatement sur événement ou au prochain battement de quinze secondes.
+- iOS : options affichées, clic réservé ouvre offres. Musique gratuite. Camion reste curseur esthétique réservé EONA+.
+- Feux : cadenas gratuit, fonction en préparation. Aucun compte à rebours réel disponible actuellement.
+- Perso reporté par Arthur. Aucune implémentation ni consommation quotidienne ajoutée.
+
+Source profil : [Valhalla 3.9, TaxiCost](https://github.com/valhalla/valhalla/blob/3.9.0/src/sif/autocost.cc#L797).

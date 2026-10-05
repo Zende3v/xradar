@@ -6,6 +6,15 @@ import { groupStore, groupView, memberDetail, memberLive, observerView, position
 
 export const tripRouter = Router();
 
+// Groupe réservé EONA+. Quitter, fermer partage et retirer observateur restent possibles après expiration.
+tripRouter.use('/group', (req, res, next) => {
+  if (req.method === 'DELETE' || (req.method === 'POST' && req.path === '/leave')) return next();
+  const account = caller(req, res);
+  if (!account) return;
+  if (!accountStore.hasPlus(account)) return res.status(403).json({ error: 'subscription required', feature: 'groups' });
+  next();
+});
+
 /** The signed-in account, or the refusal already sent. */
 function caller(req, res) {
   const account = authAccount(req);
@@ -223,6 +232,7 @@ tripRouter.get('/group/stream', (req, res) => {
   });
   res.flushHeaders();
   const send = (event, data) => {
+    if (!accountStore.hasPlus(account)) { res.end(); return; }
     res.write(`event: ${event}\ndata: ${JSON.stringify({ ...data, now: Date.now() })}\n\n`);
   };
   send('group', groupView(group, account.id));
@@ -230,7 +240,10 @@ tripRouter.get('/group/stream', (req, res) => {
     if (m.accountId !== account.id && m.sharing && m.position && m.state !== 'left') send('pos', positionView(m));
   }
   const stop = groupStore.listen(group, account.id, send, () => res.end());
-  const beat = setInterval(() => res.write(`: ${Date.now()}\n\n`), 15_000);
+  const beat = setInterval(() => {
+    if (!accountStore.hasPlus(account)) { res.end(); return; }
+    res.write(`: ${Date.now()}\n\n`);
+  }, 15_000);
   req.on('close', () => {
     clearInterval(beat);
     stop();
