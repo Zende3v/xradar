@@ -141,7 +141,7 @@ export const config = {
   hereDeepCoverage: /^(1|true)$/i.test(process.env.HERE_DEEP_COVERAGE || ''),
   hereDailyCap: count(process.env.HERE_DAILY_CAP, null),
   // Plafond estimé : tarifs configurables, aucune franchise supposée, marge de 20 %.
-  hereMonthlyBudgetEUR: Number(process.env.HERE_MONTHLY_BUDGET_EUR ?? 5),
+  hereMonthlyBudgetEUR: Number(process.env.HERE_MONTHLY_BUDGET_EUR ?? 10),
   hereTrafficEURPer1000: Number(process.env.HERE_TRAFFIC_EUR_PER_1000 ?? 2.33),
   hereImportEURPer1000: Number(process.env.HERE_IMPORT_EUR_PER_1000 ?? 4.66),
   herePriceMargin: Number(process.env.HERE_PRICE_MARGIN ?? 1.2),

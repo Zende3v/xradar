@@ -263,14 +263,32 @@ function slowdownOf(part, length) {
   return { level, delayS, speedKmh: Math.round(speed * 3.6) };
 }
 
-/** Instantané partiel accepté pour l'ETA ; jamais suffisant pour imposer un détour. */
-export async function hereSnapshot(points, { along = hereAlong, travel = hereTravel } = {}) {
-  const [flow, timing] = await Promise.allSettled([along(points, { use: 'eta' }), travel(points, { use: 'eta' })]);
-  const sections = flow.status === 'fulfilled' ? flow.value : null;
-  const duration = timing.status === 'fulfilled' ? timing.value : null;
-  return {
-    live: Boolean(sections || duration),
-    traffic: { totalM: Math.round(measure(points).total), delayS: null, sections: [], updatedAt: new Date().toISOString(),
-      ...sections, travelS: duration?.travelS ?? null },
-  };
+/** Durée valide prioritaire ; trafic lent poursuit travail et cache sans bloquer l'ETA. */
+export async function hereSnapshot(points, { along = hereAlong, travel = hereTravel, flowWaitMs = config.routeTimingMs } = {}) {
+  // Rejets tardifs consommés même après réponse partielle. Délai commence avec les deux appels.
+  const settle = (load) => Promise.resolve().then(load).then(
+    value => ({ status: 'fulfilled', value }),
+    reason => ({ status: 'rejected', reason }),
+  );
+  const pending = Symbol('flow pending');
+  let timer;
+  const deadline = new Promise(resolve => { timer = setTimeout(() => resolve(pending), flowWaitMs); });
+  const flow = settle(() => along(points, { use: 'eta' }));
+  const timing = settle(() => travel(points, { use: 'eta' }));
+  try {
+    const durationResult = await timing;
+    const duration = durationResult.status === 'fulfilled' ? durationResult.value : null;
+    // Sans durée fiable, conserver attente complète du trafic utilisable.
+    const flowResult = duration?.travelS > 0 ? await Promise.race([flow, deadline]) : await flow;
+    const flowPending = flowResult === pending;
+    const sections = !flowPending && flowResult.status === 'fulfilled' ? flowResult.value : null;
+    return {
+      live: Boolean(sections || duration),
+      traffic: { totalM: Math.round(measure(points).total), delayS: null, sections: [], updatedAt: new Date().toISOString(),
+        flowPending, flowAvailable: false, incidentsAvailable: false,
+        ...sections, travelS: duration?.travelS ?? null },
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }

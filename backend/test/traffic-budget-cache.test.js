@@ -90,11 +90,96 @@ test('HERE : cache avant budget, trace complète, durée nulle et notice critiqu
 test('HERE : import seul garde ETA ; incidents indisponibles restent signalés', async ()=>{
   const result=await hereSnapshot(points,{along:async()=>{throw Error('flow failed');},travel:async()=>({travelS:600})});
   assert.equal(result.live,true);assert.equal(result.traffic.travelS,600);
+  assert.equal(result.traffic.flowPending,false);
+  assert.equal(result.traffic.flowAvailable,false);assert.equal(result.traffic.incidentsAvailable,false);
   const partial=await hereAlong(points,{cache:null,reserve:()=>true,fetchImpl:async url=>{
     if(url.includes('/incidents?'))throw Error('incidents failed');
     return {ok:true,json:async()=>({results:[]})};
   }});
   assert.equal(partial.flowAvailable,true);assert.equal(partial.incidentsAvailable,false);
+});
+
+function deferred() {
+  let resolve, reject;
+  const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});
+  return { promise, resolve, reject };
+}
+const completeFlow={totalM:Math.round(path.total),delayS:90,sections:[{fromM:0,toM:400,delayS:90,source:'here'}],
+  flowAvailable:true,incidentsAvailable:true,coverageM:path.total};
+const nextTurn=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('HERE : durée prête sans attendre flow lent ; travail continue dans cache partagé', async ()=>{
+  const waiting=deferred(), cache=createHereCache();let flowCalls=0,importCalls=0;
+  const result=await hereSnapshot(points,{flowWaitMs:0,
+    along:()=>cache.get('snapshot-flow',()=>{flowCalls++;return waiting.promise;}),
+    travel:async()=>{importCalls++;return {travelS:600};},
+  });
+  assert.equal(result.live,true);assert.equal(result.traffic.travelS,600);
+  assert.equal(result.traffic.flowPending,true);
+  assert.equal(result.traffic.flowAvailable,false);assert.equal(result.traffic.incidentsAvailable,false);
+  assert.equal(result.traffic.delayS,null);assert.deepEqual(result.traffic.sections,[]);
+  assert.equal('coverageM' in result.traffic,false);
+  assert.equal(cache.status().pending,1);
+  const shared=cache.get('snapshot-flow',()=>{flowCalls++;return {};} );
+  waiting.resolve(completeFlow);
+  assert.deepEqual(await shared,completeFlow);
+  assert.deepEqual(await cache.get('snapshot-flow',()=>{flowCalls++;return {};}),completeFlow);
+  assert.equal(flowCalls,1);assert.equal(importCalls,1);
+  assert.equal(result.traffic.delayS,null);assert.equal(result.traffic.flowPending,true);
+});
+
+test('HERE : flow déjà prêt conservé lorsque Import termine après délai', async ()=>{
+  const waiting=deferred();
+  const resultPromise=hereSnapshot(points,{flowWaitMs:0,along:async()=>completeFlow,travel:()=>waiting.promise});
+  await new Promise(resolve=>setTimeout(resolve,5));
+  waiting.resolve({travelS:600});
+  const result=await resultPromise;
+  assert.equal(result.traffic.travelS,600);assert.equal(result.traffic.flowPending,false);
+  assert.equal(result.traffic.flowAvailable,true);assert.equal(result.traffic.incidentsAvailable,true);
+  assert.equal(result.traffic.delayS,90);assert.deepEqual(result.traffic.sections,completeFlow.sections);
+  assert.equal(result.traffic.coverageM,path.total);
+});
+
+test('HERE : délai flow commence avant réponse Import', async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const duration=deferred(),flow=deferred();
+  let ready=false;
+  const resultPromise=hereSnapshot(points,{flowWaitMs:2500,along:()=>flow.promise,travel:()=>duration.promise})
+    .then(result=>{ready=true;return result;});
+  await nextTurn();
+  t.mock.timers.tick(2500);
+  duration.resolve({travelS:600});
+  await nextTurn();
+  assert.equal(ready,true);
+  const result=await resultPromise;
+  assert.equal(result.traffic.travelS,600);assert.equal(result.traffic.flowPending,true);
+  flow.resolve(completeFlow);
+  await nextTurn();
+});
+
+test('HERE : Import nul ou rejeté attend flow utilisable malgré délai dépassé', async ()=>{
+  for(const fails of [false,true]){
+    const flow=deferred();let done=false;
+    const resultPromise=hereSnapshot(points,{flowWaitMs:0,along:()=>flow.promise,
+      travel:async()=>{if(fails)throw Error('import unavailable');return null;},
+    }).then(result=>{done=true;return result;});
+    await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal(done,false);
+    flow.resolve(completeFlow);
+    const result=await resultPromise;
+    assert.equal(result.live,true);assert.equal(result.traffic.travelS,null);
+    assert.equal(result.traffic.flowPending,false);assert.equal(result.traffic.flowAvailable,true);
+    assert.equal(result.traffic.delayS,90);assert.deepEqual(result.traffic.sections,completeFlow.sections);
+  }
+});
+
+test('HERE : rejet flow tardif consommé après instantané partiel', async ()=>{
+  const flow=deferred();
+  const result=await hereSnapshot(points,{flowWaitMs:0,along:()=>flow.promise,travel:async()=>({travelS:600})});
+  assert.equal(result.traffic.flowPending,true);
+  flow.reject(Error('late flow failure'));
+  await nextTurn();
+  assert.equal(result.live,true);assert.equal(result.traffic.travelS,600);
 });
 
 
