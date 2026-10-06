@@ -48,7 +48,9 @@ irréversibles.
 - Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
 - Carte iOS : inclinaison native à deux doigts ; recentrage conserve angle choisi. Quinze recherches récentes conservées.
 - Mini-player : Lecteur système expérimental dans IPA non signée, API privée Apple. Lecture/pause Video Lite confirmée sur iPhone.
-- Skip/Back Video Lite confirmés avec playlist. Conserver transport ; synchronisation icône iOS 45 attend validation téléphone.
+- Skip/Back Video Lite confirmés avec playlist. Synchronisation icône iOS 45 attend validation téléphone.
+- iOS 46 (Claude, 06/10) : toutes commandes par MRMediaRemoteSendCommand ; boutons jamais grisés, avance seule 15 s par défaut.
+- Diagnostic iOS 46 : relevé brut MediaRemote et essais par transport. Titre autre app attendu bloqué (mediaremoted, entitlement Apple).
 - Navigation lecteur : piste prioritaire si annoncée ; sinon intervalle natif annoncé, affiché explicitement. Aucun faux changement piste.
 - Métadonnées facultatives sans avertissement. État observé, notifications visibles uniquement ; aucune bascule optimiste ni second envoi automatique.
 - Lecture/Pause demandée signalée séparément de l'état observé ; aucune confirmation simulée. Événements directs prioritaires sur getters.
@@ -91,7 +93,7 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 45. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 46. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
