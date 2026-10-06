@@ -65,7 +65,7 @@ fun ThemeSwatch(colour: AccentColor, size: Dp, modifier: Modifier = Modifier) {
     )
 }
 
-/** « Thème » : une ligne compacte ; les treize choix dans la feuille dédiée (iOS accentPicker). */
+/** « Thème » : une ligne compacte ; les quinze choix dans la feuille dédiée (iOS accentPicker). */
 @Composable
 fun ThemeRow(selection: AccentColor, hasPlus: Boolean, onOpen: () -> Unit) {
     val colors = EonaTheme.colors
@@ -89,7 +89,7 @@ fun ThemeRow(selection: AccentColor, hasPlus: Boolean, onOpen: () -> Unit) {
 }
 
 /**
- * Feuille « Thème » (iOS ThemePickerSheet) : onze couleurs, deux palettes. Fond OLED. Choix
+ * Feuille « Thème » (iOS ThemePickerSheet) : onze couleurs, quatre palettes. Fond OLED. Choix
  * appliqué tout de suite ; gratuit : [onPick] ouvre les offres. À placer en dernier.
  */
 @OptIn(ExperimentalLayoutApi::class)

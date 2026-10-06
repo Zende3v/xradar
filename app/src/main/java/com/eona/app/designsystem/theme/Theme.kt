@@ -40,6 +40,7 @@ fun EonaTheme(
 ) {
     val colors = remember(darkTheme, accent, palette) {
         (if (darkTheme) EonaDarkColors else EonaLightColors).withAccent(accent)
+            .let { base -> if (palette.size > 1) base.copy(onAccent = Color.Black) else base }
             .copy(accentPalette = palette.map { Color(0xFF000000.toInt() or it) })
     }
 

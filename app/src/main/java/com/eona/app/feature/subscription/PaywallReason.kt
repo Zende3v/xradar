@@ -46,7 +46,7 @@ enum class PaywallReason {
         Taxi -> "Voies autorisées aux taxis, selon cartographie."
         Truck -> "Itinéraires adaptés au gabarit et aux restrictions de votre véhicule."
         Groups -> "Jusqu'à 5 conducteurs. Position et arrivée partagées."
-        Colours -> "13 thèmes pour tracé, curseur et commandes."
+        Colours -> "15 thèmes pour tracé, curseur et commandes."
         Lights -> "Temps restant avant le changement des feux sur votre trajet."
         Photo -> "Photo de profil, historique conservé. 7 jours EONA+ offerts."
         Username -> "Pseudo, email, mot de passe. 7 jours EONA+ offerts."

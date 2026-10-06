@@ -61,7 +61,7 @@ enum class AppTheme {
 }
 
 /**
- * Thème accent (iOS AccentColor) : onze teintes historiques et deux palettes. Stocké par [hex] :
+ * Thème accent (iOS AccentColor) : onze teintes historiques et quatre palettes. Stocké par [hex] :
  * clés existantes conservées, les palettes ont leur nom.
  */
 enum class AccentColor(val hex: String, val label: String) {
@@ -77,23 +77,29 @@ enum class AccentColor(val hex: String, val label: String) {
     Violet("8500FF", "Violet"),
     Magenta("E100FF", "Magenta"),
     Pastels("eona-pastels", "Pastels EONA+"),
-    Mineral("eona-mineral", "Minéral");
+    Mineral("eona-mineral", "Minéral"),
+    Opal("eona-opal", "Opale"),
+    Dusk("eona-dusk", "Crépuscule");
 
     /** Accent principal pour texte courant et guidage, 0xRRGGBB. */
     val rgb: Int
         get() = when (this) {
             Pastels -> 0x9FCAF1
             Mineral -> 0x9CC0AC
+            Opal -> 0x91D7CB
+            Dusk -> 0xE8B087
             else -> hex.toInt(16)
         }
 
-    val isMulticolour: Boolean get() = this == Pastels || this == Mineral
+    val isMulticolour: Boolean get() = this in palettes
 
-    /** Pastels validés EONA+ ; Minéral : sauge, ambre, acier. */
+    /** Pastels EONA+, Minéral, Opale et Crépuscule : mélanges sobres, trois teintes distinctes par ajout. */
     val paletteValues: List<Int>
         get() = when (this) {
             Pastels -> listOf(0x9FCAF1, 0xBDB2EE, 0xE6AED3, 0xF1C0A7, 0xACD9C9)
             Mineral -> listOf(0x9CC0AC, 0xE2B56E, 0xB0B5BB)
+            Opal -> listOf(0x91D7CB, 0x9BBBE6, 0xE7E1D4)
+            Dusk -> listOf(0xE8B087, 0xD19CAC, 0xAEA3D7)
             else -> listOf(rgb)
         }
 
@@ -101,7 +107,7 @@ enum class AccentColor(val hex: String, val label: String) {
     val controlPaletteValues: List<Int>
         get() = when (this) {
             Pastels -> listOf(0x9FCAF1, 0xE6AED3, 0xF1C0A7)
-            Mineral -> listOf(0x9CC0AC, 0xE2B56E, 0xB0B5BB)
+            Mineral, Opal, Dusk -> paletteValues
             else -> listOf(rgb)
         }
 
@@ -110,6 +116,8 @@ enum class AccentColor(val hex: String, val label: String) {
         get() = when (this) {
             Pastels -> 0x5A8FB8
             Mineral -> 0x71957E
+            Opal -> 0x4A968E
+            Dusk -> 0xA56D4D
             else -> rgb
         }
 
@@ -117,7 +125,7 @@ enum class AccentColor(val hex: String, val label: String) {
         fun fromHex(hex: String?): AccentColor = entries.firstOrNull { it.hex == hex } ?: Cyan
 
         val unicolours: List<AccentColor> get() = entries.filterNot { it.isMulticolour }
-        val palettes: List<AccentColor> get() = listOf(Pastels, Mineral)
+        val palettes: List<AccentColor> get() = listOf(Pastels, Mineral, Opal, Dusk)
     }
 }
 
