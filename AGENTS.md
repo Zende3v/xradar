@@ -52,7 +52,8 @@ irréversibles.
 - iOS 46 (Claude, 06/10) : toutes commandes par MRMediaRemoteSendCommand ; boutons jamais grisés, avance seule 15 s par défaut.
 - Relevé iOS 46 (iPhone 26.5.2) : lectures MediaRemote toutes vides (infos nil, PID 0, commandes vides). Titre autre app impossible en logiciel.
 - Commandes acceptées : ±15 s legacy marchent ; piste par envoi ciblé marche avec playlist. iOS 47 : Back/Skip envoient avance puis piste.
-- Piste pour titre : Apple Media Service (BLE, spécification Apple) via boîtier ESP32, à valider avec Arthur.
+- Piste pour titre : Apple Media Service (BLE, spécification Apple) via boîtier ESP32, refusée par Arthur (pas de matériel).
+- Sondes publiques iOS 48 : systemMusicPlayer ne voit que Musique (morceau générique, pause 0 s) pendant lecture autre app. Titre tiers abandonné le 07/10.
 - Navigation lecteur : piste prioritaire si annoncée ; sinon intervalle natif annoncé, affiché explicitement. Aucun faux changement piste.
 - Métadonnées facultatives sans avertissement. État observé, notifications visibles uniquement ; aucune bascule optimiste ni second envoi automatique.
 - Lecture/Pause demandée signalée séparément de l'état observé ; aucune confirmation simulée. Événements directs prioritaires sur getters.
