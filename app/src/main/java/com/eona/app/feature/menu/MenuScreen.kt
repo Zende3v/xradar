@@ -60,6 +60,7 @@ fun MenuRoute(
     onOpenPrivacy: () -> Unit,
     onOpenBugReport: () -> Unit,
     onOpenBugs: () -> Unit,
+    onOpenAdmin: () -> Unit,
 ) {
     val account by AccountRepository.account.collectAsStateWithLifecycle()
     // The access status moves on its own (trial ending, referral applied): refresh.
@@ -75,6 +76,7 @@ fun MenuRoute(
         onOpenPrivacy = onOpenPrivacy,
         onOpenBugReport = onOpenBugReport,
         onOpenBugs = onOpenBugs,
+        onOpenAdmin = onOpenAdmin,
         onLogout = { AccountRepository.logout() },
     )
 }
@@ -91,6 +93,7 @@ fun MenuScreen(
     onOpenPrivacy: () -> Unit,
     onOpenBugReport: () -> Unit,
     onOpenBugs: () -> Unit,
+    onOpenAdmin: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val colors = EonaTheme.colors
@@ -121,6 +124,8 @@ fun MenuScreen(
 
             if (account?.role == Role.Admin) {
                 EonaListGroup(title = "Admin") {
+                    Section("Gestion EONA", ImageVector.vectorResource(R.drawable.ic_stats), onOpenAdmin)
+                    EonaDivider(Modifier.padding(start = 58.dp))
                     Section("Parrainage", ImageVector.vectorResource(R.drawable.ic_referral), onOpenReferral)
                     EonaDivider(Modifier.padding(start = 58.dp))
                     Section("Rapports", EonaIcons.Warning, onOpenBugs)

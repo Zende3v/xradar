@@ -213,6 +213,19 @@ object EonaIcons {
         curveTo(19f, 15.5f, 21f, 13.5f, 21f, 11f); curveTo(21f, 6.6f, 17f, 3f, 12f, 3f); close()
         circle(7.5f, 11f, 1.2f); circle(10f, 7f, 1.2f); circle(14.5f, 7f, 1.2f); circle(17.5f, 10.5f, 1.2f)
     }
+    /** Gestion : suspendre, réactiver, fermer les sessions. */
+    val Pause = line("Pause", width = 1.9f) {
+        circle(12f, 12f, 9f)
+        moveTo(10f, 9f); lineTo(10f, 15f); moveTo(14f, 9f); lineTo(14f, 15f)
+    }
+    val Play = line("Play", width = 1.9f) {
+        circle(12f, 12f, 9f)
+        moveTo(10f, 8.8f); lineTo(15.5f, 12f); lineTo(10f, 15.2f); close()
+    }
+    val Logout = line("Logout", width = 1.9f) {
+        moveTo(10f, 4f); lineTo(5f, 4f); lineTo(5f, 20f); lineTo(10f, 20f)
+        moveTo(10f, 12f); lineTo(20f, 12f); moveTo(16.5f, 8.5f); lineTo(20f, 12f); lineTo(16.5f, 15.5f)
+    }
     /** Protection pluie : écran verrouillé. */
     val Lock = line("Lock") {
         moveTo(6.5f, 11f); lineTo(17.5f, 11f); lineTo(17.5f, 20f); lineTo(6.5f, 20f); close()

@@ -15,4 +15,7 @@ object Routes {
     const val BUG_REPORT = "bug-report"
     const val BUGS = "bugs"
     const val SUBSCRIPTION = "subscription"
+
+    /** « Gestion EONA », admins seulement. */
+    const val ADMIN = "admin"
 }

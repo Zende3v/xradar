@@ -91,6 +91,7 @@ fun EonaNavHost(modifier: Modifier = Modifier) {
                 onOpenPrivacy = { navController.navigate(Routes.PRIVACY) },
                 onOpenBugReport = { navController.navigate(Routes.BUG_REPORT) },
                 onOpenBugs = { navController.navigate(Routes.BUGS) },
+                onOpenAdmin = { navController.navigate(Routes.ADMIN) },
             )
         }
         composable(Routes.ACCOUNT) {
@@ -116,6 +117,9 @@ fun EonaNavHost(modifier: Modifier = Modifier) {
         }
         composable(Routes.BUG_REPORT) {
             BugReportRoute(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.ADMIN) {
+            com.eona.app.feature.admin.EonaAdminRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.BUGS) {
             BugListRoute(onBack = { navController.popBackStack() })
