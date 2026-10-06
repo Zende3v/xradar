@@ -61,8 +61,8 @@ enum class AppTheme {
 }
 
 /**
- * The colour the driver picked for everything interactive: buttons, the route, the arrow.
- * Stored as its hex, so a colour added later needs no migration.
+ * Thème accent (iOS AccentColor) : onze teintes historiques et deux palettes. Stocké par [hex] :
+ * clés existantes conservées, les palettes ont leur nom.
  */
 enum class AccentColor(val hex: String, val label: String) {
     Cyan("2CD5E0", "Cyan"),
@@ -75,13 +75,49 @@ enum class AccentColor(val hex: String, val label: String) {
     Lavender("856EFF", "Lavande"),
     Indigo("4E21FF", "Indigo"),
     Violet("8500FF", "Violet"),
-    Magenta("E100FF", "Magenta");
+    Magenta("E100FF", "Magenta"),
+    Pastels("eona-pastels", "Pastels EONA+"),
+    Mineral("eona-mineral", "Minéral");
 
-    /** The colour itself, 0xRRGGBB. */
-    val rgb: Int get() = hex.toInt(16)
+    /** Accent principal pour texte courant et guidage, 0xRRGGBB. */
+    val rgb: Int
+        get() = when (this) {
+            Pastels -> 0x9FCAF1
+            Mineral -> 0x9CC0AC
+            else -> hex.toInt(16)
+        }
+
+    val isMulticolour: Boolean get() = this == Pastels || this == Mineral
+
+    /** Pastels validés EONA+ ; Minéral : sauge, ambre, acier. */
+    val paletteValues: List<Int>
+        get() = when (this) {
+            Pastels -> listOf(0x9FCAF1, 0xBDB2EE, 0xE6AED3, 0xF1C0A7, 0xACD9C9)
+            Mineral -> listOf(0x9CC0AC, 0xE2B56E, 0xB0B5BB)
+            else -> listOf(rgb)
+        }
+
+    /** Trois teintes distinctes sur petits contrôles et curseur. */
+    val controlPaletteValues: List<Int>
+        get() = when (this) {
+            Pastels -> listOf(0x9FCAF1, 0xE6AED3, 0xF1C0A7)
+            Mineral -> listOf(0x9CC0AC, 0xE2B56E, 0xB0B5BB)
+            else -> listOf(rgb)
+        }
+
+    /** Tracé et curseur : contraste gardé sur carte claire pour les palettes douces. */
+    val routeRgb: Int
+        get() = when (this) {
+            Pastels -> 0x5A8FB8
+            Mineral -> 0x71957E
+            else -> rgb
+        }
 
     companion object {
         fun fromHex(hex: String?): AccentColor = entries.firstOrNull { it.hex == hex } ?: Cyan
+
+        val unicolours: List<AccentColor> get() = entries.filterNot { it.isMulticolour }
+        val palettes: List<AccentColor> get() = listOf(Pastels, Mineral)
     }
 }
 

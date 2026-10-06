@@ -1,5 +1,6 @@
 package com.eona.app.designsystem.theme
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
@@ -33,10 +34,13 @@ fun EonaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     /** "Couleur de l'app", 0xRRGGBB: cyan unless the driver picked another. */
     accent: Int = DEFAULT_ACCENT,
+    /** Thème multicolore : ses teintes, 0xRRGGBB ; vide : unicolore. */
+    palette: List<Int> = emptyList(),
     content: @Composable () -> Unit,
 ) {
-    val colors = remember(darkTheme, accent) {
+    val colors = remember(darkTheme, accent, palette) {
         (if (darkTheme) EonaDarkColors else EonaLightColors).withAccent(accent)
+            .copy(accentPalette = palette.map { Color(0xFF000000.toInt() or it) })
     }
 
     CompositionLocalProvider(

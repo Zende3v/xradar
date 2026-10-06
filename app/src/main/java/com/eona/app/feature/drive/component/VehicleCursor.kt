@@ -26,11 +26,11 @@ import kotlin.math.roundToInt
  * ([bodyColor], ARGB), the windows a deep shade of it; a white rim and a soft shadow keep it
  * readable on any basemap, like the arrow it replaces. [sizePx] square, sized for this screen.
  */
-internal fun vehicleCursorBitmap(type: VehicleType, bodyColor: Int, sizePx: Int, densityDpi: Int): Bitmap {
+internal fun vehicleCursorBitmap(type: VehicleType, bodyColor: Int, sizePx: Int, densityDpi: Int, palette: IntArray? = null): Bitmap {
     val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
     // MapLibre sizes an image by its density: exactly [sizePx] pixels of this screen.
     bitmap.density = densityDpi
-    drawVehicle(Canvas(bitmap), type, sizePx.toFloat(), bodyColor, rimmed = true)
+    drawVehicle(Canvas(bitmap), type, sizePx.toFloat(), bodyColor, rimmed = true, palette = palette)
     return bitmap
 }
 
@@ -52,7 +52,7 @@ fun VehicleGlyph(type: VehicleType, color: Color, modifier: Modifier = Modifier)
 }
 
 /** [type] in a [size] square, centred, nose up. Every shape is laid out in fractions of it. */
-private fun drawVehicle(canvas: Canvas, type: VehicleType, size: Float, bodyColor: Int, rimmed: Boolean) {
+private fun drawVehicle(canvas: Canvas, type: VehicleType, size: Float, bodyColor: Int, rimmed: Boolean, palette: IntArray? = null) {
     val tones = Tones(bodyColor)
     val layers = when (type) {
         VehicleType.Arrow -> listOf(Layer(Path().apply {
@@ -85,9 +85,17 @@ private fun drawVehicle(canvas: Canvas, type: VehicleType, size: Float, bodyColo
         )
     }
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val bounds = RectF()
     layers.forEach { layer ->
         paint.color = layer.color
         paint.pathEffect = if (layer.corner > 0f) CornerPathEffect(layer.corner * size) else null
+        // Thème multicolore : dégradé limité à la carrosserie ; vitres, roues et feux gardent leur contraste.
+        paint.shader = if (palette != null && palette.size > 1 && layer.color == tones.body) {
+            layer.path.computeBounds(bounds, true)
+            android.graphics.LinearGradient(bounds.left, bounds.centerY(), bounds.right, bounds.centerY(), palette, null, android.graphics.Shader.TileMode.CLAMP)
+        } else {
+            null
+        }
         canvas.drawPath(layer.path, paint)
     }
 }

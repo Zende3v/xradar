@@ -201,8 +201,12 @@ fun DriveMap(
     val trafficState = rememberUpdatedState(traffic)
     // "Couleur de l'app": the route, the arrow and its halo take it; the style is redrawn with it.
     val settings by AppPreferences.settings.collectAsStateWithLifecycle()
-    val accent = 0xFF000000.toInt() or settings.accent.rgb
+    val accent = 0xFF000000.toInt() or settings.accent.routeRgb
     val accentState = rememberUpdatedState(accent)
+    // Thème multicolore : curseur et halo en dégradé ; tracé en accent seul.
+    val palette = if (settings.accent.isMulticolour) settings.accent.controlPaletteValues.map { 0xFF000000.toInt() or it }.toIntArray() else null
+    val paletteState = rememberUpdatedState(palette)
+    val haloPx = with(LocalDensity.current) { 36.dp.roundToPx() }
     // "Véhicule" (Mon compte): the drawing of the driver's position, in the same colour.
     val vehicle = settings.vehicleType
     val vehicleState = rememberUpdatedState(vehicle)
@@ -313,9 +317,10 @@ fun DriveMap(
     // Day or night as the app's theme says ("Thème général"): the map and the HUD over it
     // switch together. The style reloads when it changes.
     val darkMap = EonaTheme.colors.isDark
-    LaunchedEffect(map, darkMap, accent) {
+    LaunchedEffect(map, darkMap) {
         val current = map ?: return@LaunchedEffect
         styleReady = false
+        val accent = accentState.value
         val accentHex = String.format("#%06X", 0xFFFFFF and accent)
         current.setStyle(baseStyle(context, darkMap)) { style ->
             // Route (drawn at the bottom, under radars and the user marker).
@@ -457,13 +462,16 @@ fun DriveMap(
                 ),
             )
             // User position on top: a soft pulsing halo + the vehicle, turned with the heading.
-            style.addImage(ARROW_IMAGE, vehicleCursorBitmap(vehicleState.value, accent, cursorPx, densityDpi))
+            style.addImage(ARROW_IMAGE, vehicleCursorBitmap(vehicleState.value, accent, cursorPx, densityDpi, paletteState.value))
+            style.addImage(HALO_IMAGE, haloBitmap(haloPx, densityDpi, paletteState.value ?: intArrayOf(accent)))
             style.addSource(GeoJsonSource(POSITION_SOURCE))
             style.addLayer(
-                CircleLayer(POSITION_HALO, POSITION_SOURCE).withProperties(
-                    PropertyFactory.circleRadius(18f),
-                    PropertyFactory.circleColor(accentHex),
-                    PropertyFactory.circleOpacity(0.18f),
+                SymbolLayer(POSITION_HALO, POSITION_SOURCE).withProperties(
+                    PropertyFactory.iconImage(HALO_IMAGE),
+                    PropertyFactory.iconOpacity(0.18f),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
                 ),
             )
             style.addLayer(
@@ -494,7 +502,21 @@ fun DriveMap(
     LaunchedEffect(map, styleReady, vehicle) {
         val current = map ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
-        current.style?.addImage(ARROW_IMAGE, vehicleCursorBitmap(vehicle, accentState.value, cursorPx, densityDpi))
+        current.style?.addImage(ARROW_IMAGE, vehicleCursorBitmap(vehicle, accentState.value, cursorPx, densityDpi, paletteState.value))
+    }
+
+    // Autre thème : tracé, curseur, halo et étapes repeints sur place. Ni style rechargé, ni caméra touchée.
+    LaunchedEffect(map, styleReady, settings.accent) {
+        val style = map?.style ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        val hex = String.format("#%06X", 0xFFFFFF and accent)
+        listOf(ROUTE_GLOW, ROUTE_CORE, PREVIEW_SELECTED).forEach { id ->
+            (style.getLayer(id) as? LineLayer)?.setProperties(PropertyFactory.lineColor(hex))
+        }
+        style.addImage(ARROW_IMAGE, vehicleCursorBitmap(vehicleState.value, accent, cursorPx, densityDpi, palette))
+        style.addImage(HALO_IMAGE, haloBitmap(haloPx, densityDpi, palette ?: intArrayOf(accent)))
+        (1..MAX_STOP_PINS).forEach { n -> style.addImage("stop-$n", stopPinBitmap(n, markerPx + stopPinExtraPx, accent)) }
+        applyTraffic(style, drawnPathState.value, routeFrom[0], trafficState.value, accent)
     }
 
     // Update radar markers when the list changes.
@@ -1177,6 +1199,20 @@ private fun markerBitmap(painter: Painter, sizePx: Int, color: ComposeColor, den
     return image.asAndroidBitmap()
 }
 
+/** Halo du conducteur : disque plein, couleur ou dégradé horizontal du thème (iOS DriverView). */
+private fun haloBitmap(sizePx: Int, densityDpi: Int, colours: IntArray): Bitmap {
+    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    bitmap.density = densityDpi
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    if (colours.size > 1) {
+        paint.shader = android.graphics.LinearGradient(0f, 0f, sizePx.toFloat(), 0f, colours, null, android.graphics.Shader.TileMode.CLAMP)
+    } else {
+        paint.color = colours[0]
+    }
+    android.graphics.Canvas(bitmap).drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
+    return bitmap
+}
+
 /** Étape numérotée : disque accent, numéro blanc, même gabarit que les marqueurs (iOS stopPin). */
 private fun stopPinBitmap(number: Int, sizePx: Int, accentArgb: Int): Bitmap {
     val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
@@ -1360,6 +1396,7 @@ private const val ZONE_LINE = "xr-zones-line"
 private const val ROUTE_SOURCE = "xr-route"
 private const val PREVIEW_SOURCE = "xr-preview"
 private const val STOPS_SOURCE = "xr-stops"
+private const val HALO_IMAGE = "xr-halo"
 private const val PARKING_SOURCE = "xr-parking"
 private const val PARKING_LAYER = "xr-parking-pins"
 private const val STOPS_LAYER = "xr-stops-pins"

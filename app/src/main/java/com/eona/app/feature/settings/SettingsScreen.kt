@@ -88,6 +88,8 @@ fun SettingsScreen(
     val account by com.eona.app.data.account.AccountRepository.account.collectAsStateWithLifecycle()
     val hasPlus by com.eona.app.data.account.AccountRepository.hasPlus.collectAsStateWithLifecycle()
     var offers by remember { mutableStateOf<com.eona.app.feature.subscription.PaywallReason?>(null) }
+    var themeOpen by remember { mutableStateOf(false) }
+    val current by AppPreferences.settings.collectAsStateWithLifecycle()
 
     // Offres et fenêtres en plein écran, par-dessus la barre.
     Box(Modifier.fillMaxSize()) {
@@ -103,7 +105,7 @@ fun SettingsScreen(
 
             EonaListGroup(title = "Apparence") {
                 ThemeSetting()
-                AccentSetting(hasPlus) { offers = com.eona.app.feature.subscription.PaywallReason.Colours }
+                ThemeRow(current.accent, hasPlus) { themeOpen = true }
             }
 
             val settings by AppPreferences.settings.collectAsStateWithLifecycle()
@@ -154,6 +156,21 @@ fun SettingsScreen(
 
     }
 
+        // Choix appliqué tout de suite ; gratuit : feuille fermée, offres ouvertes.
+        ThemePickerSheet(
+            open = themeOpen,
+            selection = current.accent,
+            hasPlus = hasPlus,
+            onPick = { colour ->
+                if (hasPlus) {
+                    AppPreferences.updateSettings { it.copy(accent = colour) }
+                } else {
+                    themeOpen = false
+                    offers = com.eona.app.feature.subscription.PaywallReason.Colours
+                }
+            },
+            onClose = { themeOpen = false },
+        )
         offers?.let { reason -> com.eona.app.feature.subscription.OffersSheet(reason, account, onClose = { offers = null }) }
     }
 }
@@ -200,74 +217,6 @@ private fun ThemeSetting() {
     )
 }
 
-/** « Couleur de l'app » : boutons, tracé du trajet, détails. La palette en piste, un cran par teinte. */
-@Composable
-private fun AccentSetting(hasPlus: Boolean, onLocked: () -> Unit) {
-    val settings by AppPreferences.settings.collectAsStateWithLifecycle()
-    val colors = EonaTheme.colors
-    val spacing = EonaTheme.spacing
-    Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            EonaText("Couleur de l'app", style = EonaTheme.typography.body, color = colors.textPrimary, modifier = Modifier.weight(1f))
-            EonaText(settings.accent.label, style = EonaTheme.typography.callout, color = colors.textSecondary)
-        }
-        Spacer(Modifier.height(spacing.sm))
-        AccentSlider(settings.accent) { colour -> if (hasPlus) AppPreferences.updateSettings { it.copy(accent = colour) } else onLocked() }
-    }
-}
-
-/** Glisser ou toucher choisit la teinte sous le doigt ; pastille blanche cerclée sur la piste. */
-@Composable
-private fun AccentSlider(selection: AccentColor, onPick: (AccentColor) -> Unit) {
-    val palette = AccentColor.entries
-    val haptic = LocalHapticFeedback.current
-    val pick = rememberUpdatedState { x: Float, width: Int ->
-        if (width > 0) {
-            val picked = palette[(x / width * palette.size).toInt().coerceIn(0, palette.size - 1)]
-            if (picked != selection) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onPick(picked)
-            }
-        }
-    }
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(ACCENT_THUMB + 4.dp)
-            .pointerInput(Unit) {
-                detectTapGestures { pick.value(it.x, size.width) }
-            }
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures { change, _ -> pick.value(change.position.x, size.width) }
-            }
-            .semantics { contentDescription = "Couleur de l'app, ${selection.label}" },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(12.dp)
-                .clip(CircleShape),
-        ) {
-            palette.forEach { colour ->
-                Box(Modifier.weight(1f).fillMaxHeight().background(Color(0xFF000000.toInt() or colour.rgb)))
-            }
-        }
-        val step = maxWidth / palette.size
-        val offset by animateDpAsState(step * (palette.indexOf(selection) + 0.5f) - ACCENT_THUMB / 2, label = "accent")
-        Box(
-            Modifier
-                .offset(x = offset)
-                .size(ACCENT_THUMB)
-                .shadow(3.dp, CircleShape)
-                .clip(CircleShape)
-                .background(Color(0xFF000000.toInt() or selection.rgb))
-                .border(3.dp, Color.White, CircleShape),
-        )
-    }
-}
-
-private val ACCENT_THUMB = 30.dp
 
 /** « Consommation » : 1,0 à 30,0 L/100 km, cran de 0,1, enregistrée au lâcher. */
 @Composable

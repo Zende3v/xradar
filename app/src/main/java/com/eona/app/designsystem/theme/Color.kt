@@ -1,7 +1,9 @@
 package com.eona.app.designsystem.theme
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 
 /**
  * Raw palette. Never referenced directly from UI code — always go through the
@@ -117,7 +119,22 @@ data class EonaColors(
     /** The ring of a speed-limit sign: a deep blood red, vivid on the white disc, the same in
      *  light and dark — the system red reads pale there. */
     val limitRing: Color = Color(0xFFD4001C),
+    /** Palette du thème multicolore (trois teintes, brutes) ; vide : thème unicolore. */
+    val accentPalette: List<Color> = emptyList(),
 )
+
+/** Palette sur fond actif : teintes brutes, texte noir lisible de jour comme de nuit. */
+val EonaColors.accentFill: Brush? get() = if (accentPalette.size > 1) Brush.horizontalGradient(accentPalette) else null
+
+/** Palette en texte ou icône : de jour, un cran plus dense pour rester lisible. */
+val EonaColors.accentInk: Brush?
+    get() = if (accentPalette.size > 1) {
+        Brush.horizontalGradient(
+            if (isDark) accentPalette else accentPalette.map { Color(0xFF000000.toInt() or AccentShade.shade(it.toArgb() and 0xFFFFFF, 0.72)) },
+        )
+    } else {
+        null
+    }
 
 /**
  * The same colours with the driver's accent ([rgb], 0xRRGGBB): as it is at night; by day a notch

@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.eona.app.designsystem.theme.EonaTheme
+import com.eona.app.designsystem.theme.accentFill
+import com.eona.app.designsystem.theme.accentInk
 
 enum class EonaButtonVariant { Primary, Secondary, Ghost, Destructive }
 
@@ -93,13 +95,16 @@ fun EonaButton(
     val contentColor = if (enabled) enabledContent else colors.textDisabled
     val effectiveBorder = if (enabled) baseBorder else null
     val container by animateColorAsState(targetContainer, label = "buttonContainer")
+    // Thème multicolore : fond dégradé sur l'action, texte dégradé sur le lien.
+    val fill = if (variant == EonaButtonVariant.Primary && enabled) colors.accentFill else null
+    val ink = if (variant == EonaButtonVariant.Ghost && enabled) colors.accentInk else null
 
     Row(
         modifier = modifier
             .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
-            .background(container)
+            .then(if (fill != null) Modifier.background(fill).background(if (pressed) Color.Black.copy(alpha = 0.12f) else Color.Transparent) else Modifier.background(container))
             .then(if (effectiveBorder != null) Modifier.border(effectiveBorder, shape) else Modifier)
             .clickable(interactionSource = interaction, indication = null, enabled = active, onClick = onClick)
             .height(52.dp)
@@ -117,7 +122,11 @@ fun EonaButton(
             if (leadingIcon != null) {
                 EonaIcon(leadingIcon, contentDescription = null, tint = contentColor, size = 20.dp)
             }
-            EonaText(text, style = EonaTheme.typography.label, color = contentColor)
+            if (ink != null) {
+                androidx.compose.foundation.text.BasicText(text, style = EonaTheme.typography.label.copy(brush = ink))
+            } else {
+                EonaText(text, style = EonaTheme.typography.label, color = contentColor)
+            }
         }
     }
 }

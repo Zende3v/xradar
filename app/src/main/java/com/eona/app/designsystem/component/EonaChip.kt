@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.eona.app.designsystem.theme.EonaTheme
+import com.eona.app.designsystem.theme.accentFill
 
 /**
  * Pill chip: optional leading status [dotColor], a label, and optional [trailing]
@@ -39,6 +40,8 @@ fun EonaChip(
 
     val background = if (selected) colors.accent.copy(alpha = 0.16f) else colors.surfaceElevated
     val borderColor = if (selected) colors.accent.copy(alpha = 0.5f) else colors.border
+    // Thème multicolore : pastille choisie pleine, dégradé, texte foncé.
+    val fill = if (selected) colors.accentFill else null
 
     val interaction = remember { MutableInteractionSource() }
     val clickable = if (onClick != null) {
@@ -50,8 +53,8 @@ fun EonaChip(
     Row(
         modifier = modifier
             .clip(shape)
-            .background(background)
-            .border(BorderStroke(1.dp, borderColor), shape)
+            .then(if (fill != null) Modifier.background(fill) else Modifier.background(background))
+            .border(BorderStroke(1.dp, if (fill != null) Color.White.copy(alpha = 0.25f) else borderColor), shape)
             .then(clickable)
             .padding(horizontal = spacing.md, vertical = spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
@@ -68,10 +71,10 @@ fun EonaChip(
         EonaText(
             label,
             style = EonaTheme.typography.subhead,
-            color = if (selected) colors.accent else colors.textPrimary,
+            color = if (fill != null) colors.onAccent else if (selected) colors.accent else colors.textPrimary,
         )
         if (trailing != null) {
-            EonaText(trailing, style = EonaTheme.typography.caption, color = colors.textTertiary)
+            EonaText(trailing, style = EonaTheme.typography.caption, color = if (fill != null) colors.onAccent.copy(alpha = 0.65f) else colors.textTertiary)
         }
     }
 }
