@@ -89,6 +89,8 @@ fun SettingsScreen(
     val hasPlus by com.eona.app.data.account.AccountRepository.hasPlus.collectAsStateWithLifecycle()
     var offers by remember { mutableStateOf<com.eona.app.feature.subscription.PaywallReason?>(null) }
 
+    // Offres et fenêtres en plein écran, par-dessus la barre.
+    Box(Modifier.fillMaxSize()) {
     EonaScreenScaffold(title = "Réglages", onBack = onBack) {
         Column(
             modifier = Modifier
@@ -149,6 +151,8 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(spacing.xxl))
         }
+
+    }
 
         offers?.let { reason -> com.eona.app.feature.subscription.OffersSheet(reason, account, onClose = { offers = null }) }
     }

@@ -184,6 +184,35 @@ object EonaIcons {
         curveTo(16.6f, 7.2f, 15.1f, 6.6f, 13.8f, 6.8f); curveTo(13.1f, 6.9f, 12.5f, 7.2f, 12f, 7.5f); close()
         moveTo(12.2f, 5.6f); curveTo(12.2f, 4.2f, 13.3f, 3f, 14.8f, 2.8f); curveTo(14.8f, 4.3f, 13.7f, 5.5f, 12.2f, 5.6f); close()
     }
+    /** EONA+ : trajets illimités. */
+    val TurnRight = line("TurnRight", width = 1.9f) {
+        moveTo(6f, 20f); lineTo(6f, 13f); curveTo(6f, 10.8f, 7.8f, 9f, 10f, 9f); lineTo(18f, 9f)
+        moveTo(14f, 5f); lineTo(18f, 9f); lineTo(14f, 13f)
+    }
+    /** EONA+ : trajets intelligents. */
+    val Sparkles = line("Sparkles", width = 1.7f) {
+        moveTo(10f, 6f); quadTo(10.8f, 11.2f, 16f, 12f); quadTo(10.8f, 12.8f, 10f, 18f); quadTo(9.2f, 12.8f, 4f, 12f); quadTo(9.2f, 11.2f, 10f, 6f); close()
+        moveTo(17.5f, 3f); quadTo(17.8f, 5.2f, 20f, 5.5f); quadTo(17.8f, 5.8f, 17.5f, 8f); quadTo(17.2f, 5.8f, 15f, 5.5f); quadTo(17.2f, 5.2f, 17.5f, 3f); close()
+    }
+    /** EONA Taxi : voiture de profil. */
+    val CarSide = line("CarSide", width = 1.9f) {
+        moveTo(3f, 15.5f); lineTo(3f, 12.5f); lineTo(5.2f, 11.8f); lineTo(7.6f, 8f); lineTo(15.4f, 8f); lineTo(18.4f, 11.8f); lineTo(21f, 12.5f); lineTo(21f, 15.5f); close()
+        moveTo(5.2f, 11.8f); lineTo(18.4f, 11.8f)
+        circle(7.5f, 16.5f, 1.8f); circle(16.5f, 16.5f, 1.8f)
+    }
+    /** EONA Poids lourd : camion de profil. */
+    val Truck = line("Truck", width = 1.9f) {
+        moveTo(2.5f, 6.5f); lineTo(14f, 6.5f); lineTo(14f, 16.5f); lineTo(2.5f, 16.5f); close()
+        moveTo(14f, 9.5f); lineTo(18.2f, 9.5f); lineTo(21f, 12.8f); lineTo(21f, 16.5f); lineTo(14f, 16.5f)
+        circle(6.5f, 17.5f, 1.8f); circle(17f, 17.5f, 1.8f)
+    }
+    /** Thème : palette de peintre. */
+    val Palette = line("Palette", width = 1.8f) {
+        moveTo(12f, 3f); curveTo(7f, 3f, 3f, 6.8f, 3f, 11.5f); curveTo(3f, 16.2f, 6.8f, 20f, 11.5f, 20f)
+        curveTo(13f, 20f, 13.5f, 19f, 13f, 18f); curveTo(12.4f, 16.8f, 13.2f, 15.5f, 14.6f, 15.5f); lineTo(16.5f, 15.5f)
+        curveTo(19f, 15.5f, 21f, 13.5f, 21f, 11f); curveTo(21f, 6.6f, 17f, 3f, 12f, 3f); close()
+        circle(7.5f, 11f, 1.2f); circle(10f, 7f, 1.2f); circle(14.5f, 7f, 1.2f); circle(17.5f, 10.5f, 1.2f)
+    }
     /** Protection pluie : écran verrouillé. */
     val Lock = line("Lock") {
         moveTo(6.5f, 11f); lineTo(17.5f, 11f); lineTo(17.5f, 20f); lineTo(6.5f, 20f); close()

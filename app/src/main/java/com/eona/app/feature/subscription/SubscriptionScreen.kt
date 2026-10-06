@@ -1,136 +1,231 @@
 package com.eona.app.feature.subscription
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.eona.app.designsystem.component.EonaGlowTile
-import com.eona.app.designsystem.foundation.EonaIcons
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eona.app.core.model.Account
-import com.eona.app.core.model.Role
+import com.eona.app.core.model.SubscriptionPlan
 import com.eona.app.data.account.AccountRepository
-import com.eona.app.designsystem.component.EonaBadge
-import com.eona.app.designsystem.component.EonaCard
-import com.eona.app.designsystem.component.EonaDivider
-import com.eona.app.designsystem.component.EonaListGroup
-import com.eona.app.designsystem.component.EonaListRow
-import com.eona.app.designsystem.component.EonaScreenScaffold
+import com.eona.app.designsystem.component.EonaConfirmDialog
+import com.eona.app.designsystem.component.EonaIcon
 import com.eona.app.designsystem.component.EonaText
+import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.designsystem.theme.EonaTheme
 import com.eona.app.feature.menu.accessLabel
-import com.eona.app.feature.menu.shortDate
+import com.eona.app.feature.onboarding.ConvertingOverlay
 
-/**
- * « EONA + » (iOS SubscriptionScreen) : l'offre membre. Statut du compte ; EONA + actif : son
- * détail ; sinon les limites du jour et les formules. Pas encore de paiement.
- */
 @Composable
-fun SubscriptionRoute(onBack: () -> Unit) {
+fun SubscriptionRoute(onBack: () -> Unit, onOpenAccount: () -> Unit) {
     val account by AccountRepository.account.collectAsStateWithLifecycle()
+    val hasPlus by AccountRepository.hasPlus.collectAsStateWithLifecycle()
     // Days and counts move on their own: read them fresh.
     LaunchedEffect(Unit) { AccountRepository.reload() }
-    SubscriptionScreen(account = account, onBack = onBack)
+    SubscriptionScreen(account = account, hasPlus = hasPlus, onBack = onBack, onOpenAccount = onOpenAccount)
 }
 
+/** Présentation EONA+ (iOS SubscriptionScreen) : radar animé, offres compactes, fonctions illustrées. */
 @Composable
-fun SubscriptionScreen(account: Account?, onBack: () -> Unit) {
-    val colors = EonaTheme.colors
-    val spacing = EonaTheme.spacing
-    EonaScreenScaffold(title = "EONA +", onBack = onBack) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = spacing.lg, vertical = spacing.md),
-            verticalArrangement = Arrangement.spacedBy(spacing.xl),
-        ) {
-            Hero(account)
+fun SubscriptionScreen(account: Account?, hasPlus: Boolean, onBack: () -> Unit, onOpenAccount: () -> Unit) {
+    var plan by remember { mutableStateOf(SubscriptionPlan.YEARLY) }
+    var benefit by remember { mutableStateOf<MembershipBenefit?>(null) }
+    var registering by remember { mutableStateOf(false) }
+    var paymentUnavailable by remember { mutableStateOf(false) }
+    val canTry = account?.isGuest == true && !account.isRestricted
+    LaunchedEffect(account?.isGuest) { if (account?.isGuest == false) registering = false }
 
-            if (account?.isSubscriber == true) {
-                EonaListGroup(title = "Ton EONA +") {
-                    Info("Formule", if (account.role == Role.Admin) "Administrateur" else "Membre")
-                    Divider()
-                    Info("État", "Actif")
-                    Divider()
-                    Info("Échéance", account.accessEndsAt?.let { shortDate(it) } ?: "Sans échéance")
-                }
-                EonaListGroup(title = "Inclus") {
-                    MembershipBenefits(Modifier.padding(spacing.lg))
-                }
-            } else {
-                val limits = account?.limits
-                if (limits != null && account.isRestricted.not()) {
-                    EonaListGroup(title = "Aujourd'hui") {
-                        Info("Trajets", "${limits.tripsUsed()} / ${limits.tripsPerDay}")
-                    }
-                }
-                EonaListGroup(title = "Inclus") {
-                    MembershipBenefits(Modifier.padding(spacing.lg))
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                    EonaText("FORMULES", style = EonaTheme.typography.caption, color = colors.textTertiary, modifier = Modifier.padding(start = spacing.md))
-                    SubscriptionPlans()
-                    EonaText("Paiement dans l'app bientôt disponible.", style = EonaTheme.typography.footnote, color = colors.textTertiary, modifier = Modifier.padding(horizontal = spacing.md))
+    EonaPlusPage(
+        onBack = onBack,
+        onClose = null,
+        footer = if (account != null && !account.isRestricted) {
+            {
+                when {
+                    canTry -> EonaPlusAction("Essayer 7 jours gratuits", { registering = true })
+                    hasPlus -> EonaPlusAction("Mon compte EONA+", onOpenAccount, icon = EonaIcons.Check)
+                    else -> PayAction(plan) { paymentUnavailable = true }
                 }
             }
-
-            Spacer(Modifier.height(spacing.xxl))
-        }
-    }
-}
-
-/** Couronne, nom, promesse, statut du compte. */
-@Composable
-private fun Hero(account: Account?) {
-    val colors = EonaTheme.colors
-    val spacing = EonaTheme.spacing
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = spacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(spacing.md),
+        } else {
+            null
+        },
     ) {
-        EonaGlowTile(EonaIcons.Crown, size = 72.dp, iconSize = 32.dp, shape = EonaTheme.shapes.xxl)
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
-            EonaText("EONA +", style = EonaTheme.typography.titleLarge, color = colors.textPrimary)
-            EonaText("Toute la route, sans limite.", style = EonaTheme.typography.callout, color = colors.textSecondary)
+        EonaPlusContent(
+            title = "EONA+",
+            subtitle = "Allez au-delà des limites et débloquez davantage d'exclusivités.",
+            compact = false,
+            animationsEnabled = !registering && !paymentUnavailable && benefit == null,
+            accessLine = account?.let { accessLabel(it) },
+            plan = plan,
+            onPlan = { plan = it },
+            onBenefit = { benefit = it },
+        )
+    }
+
+    MembershipBenefitSheet(benefit, onClose = { benefit = null })
+    if (paymentUnavailable) PaymentUnavailable { paymentUnavailable = false }
+    if (registering) ConvertingOverlay(onClose = { registering = false })
+}
+
+/**
+ * Page EONA+ : fond OLED, barre transparente, contenu défilant, action flottante sans bandeau.
+ * [onBack] : chevron à gauche ; [onClose] : croix à droite.
+ */
+@Composable
+fun EonaPlusPage(
+    onBack: (() -> Unit)?,
+    onClose: (() -> Unit)?,
+    footer: (@Composable ColumnScope.() -> Unit)?,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val spacing = EonaTheme.spacing
+    var footerHeight by remember { mutableIntStateOf(0) }
+    val footerDp = with(LocalDensity.current) { footerHeight.toDp() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(EonaPlusStyle.canvas),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .height(52.dp)
+                    .padding(horizontal = spacing.sm),
+            ) {
+                if (onBack != null) {
+                    TopIcon(EonaIcons.ChevronLeft, "Retour", Modifier.align(Alignment.CenterStart), onBack)
+                }
+                EonaText("EONA+", style = EonaTheme.typography.headline, color = EonaPlusStyle.primary, modifier = Modifier.align(Alignment.Center))
+                if (onClose != null) {
+                    TopIcon(EonaIcons.Close, "Fermer", Modifier.align(Alignment.CenterEnd), onClose)
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = spacing.lg)
+                    .padding(bottom = footerDp + spacing.xxl),
+            ) {
+                Column(Modifier.widthIn(max = 600.dp), verticalArrangement = Arrangement.spacedBy(spacing.xxxl), content = content)
+            }
         }
-        EonaBadge(accessLabel(account), glow = true)
-        EonaText(status(account), style = EonaTheme.typography.footnote, color = colors.textTertiary, textAlign = TextAlign.Center)
+        if (footer != null) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .onSizeChanged { footerHeight = it.height }
+                    .padding(horizontal = spacing.lg)
+                    .padding(top = spacing.md, bottom = spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(spacing.sm),
+                content = footer,
+            )
+        }
     }
 }
 
 @Composable
-private fun Info(title: String, value: String) {
-    EonaListRow(
-        title = title,
-        trailing = { EonaText(value, style = EonaTheme.typography.callout, color = EonaTheme.colors.textSecondary) },
-    )
+private fun TopIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        EonaIcon(icon, contentDescription = null, tint = EonaPlusStyle.mineral, size = 22.dp)
+    }
+}
+
+/** Contenu commun de la page et de la fenêtre d'offre. */
+@Composable
+fun EonaPlusContent(
+    title: String,
+    subtitle: String,
+    compact: Boolean,
+    animationsEnabled: Boolean,
+    accessLine: String?,
+    plan: SubscriptionPlan,
+    onPlan: (SubscriptionPlan) -> Unit,
+    onBenefit: (MembershipBenefit) -> Unit,
+) {
+    val spacing = EonaTheme.spacing
+    Column(verticalArrangement = Arrangement.spacedBy(spacing.xxxl)) {
+        EonaPlusHero(subtitle = subtitle, title = title, compact = compact, animationsEnabled = animationsEnabled)
+        accessLine?.let { EonaText(it, style = EonaTheme.typography.footnote, color = EonaPlusStyle.secondary) }
+        SubscriptionPlans(plan, onPlan)
+        Column(verticalArrangement = Arrangement.spacedBy(spacing.md)) {
+            EonaPlusLabel("Vos avantages EONA+", Modifier.padding(start = spacing.lg))
+            MembershipSummary(onBenefit)
+        }
+        MembershipComparison()
+        EonaText(
+            "Apple Music / autres reste inclus en gratuit.",
+            style = EonaTheme.typography.footnote,
+            color = EonaPlusStyle.secondary,
+            modifier = Modifier.padding(horizontal = spacing.lg),
+        )
+        Spacer(Modifier.height(0.dp))
+    }
+}
+
+/** Formule choisie, sans paiement possible : la vente reste fermée. */
+@Composable
+fun ColumnScope.PayAction(plan: SubscriptionPlan, onClick: () -> Unit) {
+    EonaText("Paiement indisponible actuellement.", style = EonaTheme.typography.caption, color = EonaPlusStyle.secondary)
+    EonaPlusAction("S'abonner pour ${plan.priceLabel} ${plan.periodLabel}", onClick)
 }
 
 @Composable
-private fun Divider() = EonaDivider(Modifier.padding(start = EonaTheme.spacing.lg))
-
-private fun status(account: Account?): String {
-    if (account == null) return "Connecte-toi pour voir ton statut."
-    if (account.role == Role.Admin) return "Accès complet."
-    if (account.isRestricted) {
-        val ended = if (account.role == Role.Client) "EONA + terminé" else "Essai terminé"
-        return "$ended. La carte reste disponible."
+fun PaymentUnavailable(onClose: () -> Unit) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        EonaConfirmDialog(
+            title = "Abonnement EONA+",
+            message = "Paiement indisponible actuellement. Aucun achat effectué.",
+            confirmLabel = "Fermer",
+            onCancel = onClose,
+            onConfirm = onClose,
+            destructive = false,
+            cancelLabel = null,
+        )
     }
-    if (account.role == Role.Client) return "Tout est inclus, sans limite."
-    val perDay = account.limits?.let { " · ${it.tripsPerDay} trajets par jour" } ?: ""
-    return "Essai jusqu'au ${shortDate(account.accessEndsAt)}$perDay."
 }

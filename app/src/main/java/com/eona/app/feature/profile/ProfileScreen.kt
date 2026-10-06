@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -124,6 +123,8 @@ fun ProfileScreen(
     ) { uri ->
         if (uri != null) scope.launch { encodeAvatar(context, uri)?.let { AccountRepository.uploadAvatar(it) } }
     }
+    // Offres et fenêtres en plein écran, par-dessus la barre.
+    Box(Modifier.fillMaxSize()) {
     EonaScreenScaffold(title = "Mon compte & Statistiques", onBack = onBack) {
         Column(
             modifier = Modifier
@@ -241,6 +242,8 @@ fun ProfileScreen(
             Spacer(Modifier.height(spacing.xl))
         }
 
+    }
+
         offers?.let { reason -> OffersSheet(reason, account, onClose = { offers = null }) }
 
         if (renaming) {
@@ -248,21 +251,7 @@ fun ProfileScreen(
         }
 
         // Invité : création de compte ou connexion, par-dessus Mon compte.
-        if (signingIn) {
-            androidx.activity.compose.BackHandler { signingIn = false }
-            Box(Modifier.fillMaxSize()) {
-                com.eona.app.feature.onboarding.OnboardingScreen(converting = true)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        .padding(spacing.lg)
-                        .clip(EonaTheme.shapes.pill)
-                        .clickable { signingIn = false }
-                        .padding(horizontal = spacing.md, vertical = spacing.sm),
-                ) { EonaText("Fermer", style = EonaTheme.typography.bodyStrong, color = colors.textSecondary) }
-            }
-        }
+        if (signingIn) com.eona.app.feature.onboarding.ConvertingOverlay(onClose = { signingIn = false })
 
         if (confirmDelete) {
             EonaConfirmDialog(

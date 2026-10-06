@@ -106,7 +106,7 @@ fun EonaNavHost(modifier: Modifier = Modifier) {
             ReferralRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.SUBSCRIPTION) {
-            SubscriptionRoute(onBack = { navController.popBackStack() })
+            SubscriptionRoute(onBack = { navController.popBackStack() }, onOpenAccount = { navController.navigate(Routes.ACCOUNT) })
         }
         composable(Routes.LEGAL) {
             LegalRoute(onBack = { navController.popBackStack() })

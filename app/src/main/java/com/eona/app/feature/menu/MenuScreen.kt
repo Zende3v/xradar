@@ -108,7 +108,7 @@ fun MenuScreen(
             EonaListGroup {
                 Section("Réglages", ImageVector.vectorResource(R.drawable.ic_settings), onOpenSettings)
                 EonaDivider(Modifier.padding(start = 58.dp))
-                Section("EONA +", EonaIcons.Crown, onOpenSubscription)
+                Section("EONA +", ImageVector.vectorResource(R.drawable.ic_eona_premium), onOpenSubscription)
                 EonaDivider(Modifier.padding(start = 58.dp))
                 Section("Mon compte & Statistiques", ImageVector.vectorResource(R.drawable.ic_account), onOpenAccount)
                 EonaDivider(Modifier.padding(start = 58.dp))
