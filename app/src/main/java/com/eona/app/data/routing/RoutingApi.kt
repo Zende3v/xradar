@@ -35,7 +35,9 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
      * A restricted account, or a guest past today's trips, is refused: that throws
      * [AccessDeniedException]; null is a route not obtained. [preference] : Rapide ou Éco (le
      * backend le répète s'il le connaît) ; [timed] : temps HERE avec trafic de la route ; [via] :
-     * étapes dans l'ordre ; [moped] : scooter 50 ou sans permis, 45 km/h, sans voie rapide.
+     * étapes dans l'ordre ; [vehicle] : `car`, `moped` (45 km/h, sans voie rapide) ou `taxi`
+     * (voies taxi) ; [preview] : aperçu du choix, aucun trajet débité ; [tripId] : recalcul d'un
+     * départ admis ([start]).
      */
     suspend fun route(
         from: GeoPoint,
@@ -45,7 +47,9 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         preference: RoutePreference? = null,
         timed: Boolean = false,
         via: List<GeoPoint> = emptyList(),
-        moped: Boolean = false,
+        vehicle: String = "car",
+        preview: Boolean = false,
+        tripId: String? = null,
     ): Route? = withContext(Dispatchers.IO) {
         val url = "${baseUrl.trimEnd('/')}/api/route" +
             "?from=${from.lat},${from.lon}&to=${to.lat},${to.lon}" +
@@ -54,7 +58,9 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             (if (timed) "&timed=1" else "") +
             // Étapes dans l'ordre : "lat,lon;lat,lon".
             (if (via.isEmpty()) "" else "&via=" + via.joinToString(";") { "${it.lat},${it.lon}" }) +
-            (if (moped) "&vehicle=moped" else "") +
+            (if (vehicle != "car") "&vehicle=$vehicle" else "") +
+            (if (preview) "&preview=1" else "") +
+            (tripId?.let { "&tripId=$it" } ?: "") +
             // The car's course while it moves (D4.4): the route starts the way it points, no U-turn.
             (heading?.let { "&heading=${Math.round(it) % 360}" } ?: "")
         // The backend refuses routing to a restricted account — it needs to know who asks.
@@ -83,7 +89,7 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         etaSeconds: Int? = null,
         preference: RoutePreference? = null,
         via: List<GeoPoint> = emptyList(),
-        moped: Boolean = false,
+        vehicle: String = "car",
     ): FasterRoute? = withContext(Dispatchers.IO) {
         if (remaining.size < 2) return@withContext null
         val coords = JSONArray()
@@ -93,8 +99,8 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         if (preference != null) body.put("preference", preference.wire)
         // Étapes restantes : détour fini à la première au plus tard.
         if (via.isNotEmpty()) body.put("via", JSONArray().apply { via.forEach { put(JSONArray().put(it.lon).put(it.lat)) } })
-        // Scooter 50, sans permis : détour seulement autour d'une route fermée.
-        if (moped) body.put("vehicle", "moped")
+        // Scooter 50, sans permis : détour seulement autour d'une route fermée. Taxi : voies taxi.
+        if (vehicle != "car") body.put("vehicle", vehicle)
         if (sinceRerouteSeconds != null) body.put("sinceRerouteS", sinceRerouteSeconds)
         // The app's ETA: the backend weighs the gain against the time left.
         if (etaSeconds != null) body.put("etaS", etaSeconds)
@@ -113,6 +119,28 @@ class RoutingApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 if (gain > 0 || closed) FasterRoute(route, gain, closed) else null
             }
         }.getOrNull()
+    }
+
+    /**
+     * Admission avant guidage : quatre départs gratuits par jour, un seul compté par [tripId], gardé
+     * pendant les recalculs. Refus d'accès : [AccessDeniedException] ; autre échec : IOException.
+     */
+    suspend fun start(to: GeoPoint, tripId: String, vehicle: String = "car") = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("to", JSONObject().put("lat", to.lat).put("lon", to.lon))
+            .put("tripId", tripId)
+            .put("vehicle", vehicle)
+        val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/api/route/start")
+            .post(body.toString().toRequestBody(JSON))
+            .apply { com.eona.app.data.account.AccountRepository.token?.let { header("Authorization", "Bearer $it") } }
+            .build()
+        client.newCall(request).execute().use { response ->
+            val text = response.body?.string()
+            AccessDenial.of(response.code, text)?.let { throw AccessDeniedException(it) }
+            val ok = response.isSuccessful && runCatching { JSONObject(text ?: "").optBoolean("ok") }.getOrDefault(false)
+            if (!ok) throw java.io.IOException("start refused: ${response.code}")
+        }
     }
 
     private fun parse(json: String): Route? = parse(JSONObject(json))

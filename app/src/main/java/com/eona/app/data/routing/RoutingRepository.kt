@@ -25,9 +25,11 @@ class RoutingRepository(private val api: RoutingApi = RoutingApi()) {
         preference: RoutePreference? = null,
         timed: Boolean = false,
         via: List<GeoPoint> = emptyList(),
-        moped: Boolean = false,
+        vehicle: String = "car",
+        preview: Boolean = false,
+        tripId: String? = null,
     ): RouteAnswer = try {
-        api.route(from, to, avoid, heading, preference, timed, via, moped)?.let { RouteAnswer.Found(it) } ?: RouteAnswer.Failed
+        api.route(from, to, avoid, heading, preference, timed, via, vehicle, preview, tripId)?.let { RouteAnswer.Found(it) } ?: RouteAnswer.Failed
     } catch (e: AccessDeniedException) {
         RouteAnswer.Denied(e.denial)
     } catch (e: CancellationException) {

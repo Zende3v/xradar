@@ -9,33 +9,47 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Why the offers show: the account is blocked, a guest reached a limit of the day, or the
- * action is a members' feature.
+ * Pourquoi les offres s'ouvrent (iOS PaywallReason) : compte bloqué, plafond du jour, ou fonction
+ * EONA+. Règle d'or : une fonction réservée reste visible, son tap ouvre les offres.
  */
 enum class PaywallReason {
     Restricted,
     ReportLimit,
     TripLimit,
-    Music,
+    Taxi,
+    Truck,
+    Groups,
+    Colours,
+    Lights,
     Photo,
     Username;
 
+    @Suppress("UNUSED_PARAMETER")
     fun title(account: Account?): String = when (this) {
-        Restricted -> if (account?.role == Role.Client) "Ton EONA + est terminé" else "Ton essai gratuit est terminé"
+        Restricted -> "EONA+"
         ReportLimit -> "Signalements du jour utilisés"
         TripLimit -> "Trajets du jour utilisés"
-        Music -> "Musique avec EONA +"
-        Photo -> "Photo avec EONA +"
-        Username -> "Pseudo avec EONA +"
+        Taxi -> "EONA Taxi"
+        Truck -> "EONA Poids lourd"
+        Groups -> "Trajet en groupe"
+        Colours -> "Thème"
+        Lights -> "Feux en direct"
+        Photo -> "Photo de profil"
+        Username -> "Pseudo"
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun message(account: Account?): String = when (this) {
-        Restricted -> "La carte reste disponible. EONA + rouvre navigation, alertes et signalements."
-        ReportLimit -> "Invité : ${account?.limits?.reportsPerDay ?: 5} signalements par jour. Illimité avec EONA +."
-        TripLimit -> "Invité : ${account?.limits?.tripsPerDay ?: 7} trajets par jour. Illimité avec EONA +."
-        Music -> "Le raccourci musique au volant est inclus dans EONA +."
-        Photo -> "Photo de profil incluse dans EONA +."
-        Username -> "Changer de pseudo : inclus dans EONA +, une fois par semaine."
+        Restricted -> "4 trajets par jour en gratuit. Trajets illimités avec EONA+."
+        ReportLimit -> "Limite quotidienne atteinte. Reprise à minuit, heure de Paris."
+        TripLimit -> "4 trajets utilisés. Reprise à minuit, heure de Paris."
+        Taxi -> "Voies autorisées aux taxis, selon cartographie."
+        Truck -> "Itinéraires adaptés au gabarit et aux restrictions de votre véhicule."
+        Groups -> "Jusqu'à 5 conducteurs. Position et arrivée partagées."
+        Colours -> "13 thèmes pour tracé, curseur et commandes."
+        Lights -> "Temps restant avant le changement des feux sur votre trajet."
+        Photo -> "Photo de profil, historique conservé. 7 jours EONA+ offerts."
+        Username -> "Pseudo, email, mot de passe. 7 jours EONA+ offerts."
     }
 
     companion object {

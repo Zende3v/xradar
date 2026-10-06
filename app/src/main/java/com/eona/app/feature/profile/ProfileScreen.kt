@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -114,6 +115,10 @@ fun ProfileScreen(
     // What the Google row is doing, and what it has to say.
     var linking by remember { mutableStateOf(false) }
     var linkMessage by remember { mutableStateOf<String?>(null) }
+    var signingIn by remember { mutableStateOf(false) }
+    val hasPlus by AccountRepository.hasPlus.collectAsStateWithLifecycle()
+    // Invité converti : la feuille se ferme seule.
+    LaunchedEffect(account?.isGuest) { if (account?.isGuest == false) signingIn = false }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.GetContent(),
     ) { uri ->
@@ -133,10 +138,21 @@ fun ProfileScreen(
                     onPhoto = { if (account?.canEditProfile == true) picker.launch("image/*") else offers = PaywallReason.Photo },
                     onRename = { if (account?.canChangeUsername == true) renaming = true else offers = PaywallReason.Username },
                 )
-                when {
-                    account?.isRestricted == true -> Note("Navigation et signalements : avec EONA +.")
-                    account?.role == Role.Guest ->
-                        Note("Essai 7 jours · ${account.limits?.reportsPerDay ?: 5} signalements et ${account.limits?.tripsPerDay ?: 7} trajets par jour.")
+                if (!hasPlus) Note("Accès gratuit permanent · 4 trajets par jour. Musique incluse.")
+            }
+
+            if (account?.isGuest == true) {
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                    EonaListGroup {
+                        com.eona.app.designsystem.component.EonaListRow(
+                            title = "Se connecter",
+                            leadingIcon = EonaIcons.User,
+                            glow = true,
+                            onClick = { signingIn = true },
+                            trailing = { EonaIcon(EonaIcons.ChevronRight, contentDescription = null, tint = colors.textTertiary, size = 20.dp) },
+                        )
+                    }
+                    Note("Crée ton compte : historique conservé, sept jours EONA+ offerts.")
                 }
             }
 
@@ -229,6 +245,23 @@ fun ProfileScreen(
 
         if (renaming) {
             UsernameDialog(current = account?.username.orEmpty(), onClose = { renaming = false })
+        }
+
+        // Invité : création de compte ou connexion, par-dessus Mon compte.
+        if (signingIn) {
+            androidx.activity.compose.BackHandler { signingIn = false }
+            Box(Modifier.fillMaxSize()) {
+                com.eona.app.feature.onboarding.OnboardingScreen(converting = true)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(spacing.lg)
+                        .clip(EonaTheme.shapes.pill)
+                        .clickable { signingIn = false }
+                        .padding(horizontal = spacing.md, vertical = spacing.sm),
+                ) { EonaText("Fermer", style = EonaTheme.typography.bodyStrong, color = colors.textSecondary) }
+            }
         }
 
         if (confirmDelete) {

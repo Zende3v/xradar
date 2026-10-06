@@ -5,11 +5,11 @@ import java.time.ZoneId
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** A guest's daily limits and what they used, as the backend counts them: per day, Paris time. */
+/** Limites du jour d'un compte gratuit, comptées par le backend à l'heure de Paris. [reportsPerDay] null : aucun plafond. */
 data class DailyLimits(
     /** The Paris day the counts are for, "yyyy-MM-dd". */
     val day: String,
-    val reportsPerDay: Int,
+    val reportsPerDay: Int?,
     val reportsToday: Int,
     val tripsPerDay: Int,
     val tripsToday: Int,
@@ -19,7 +19,7 @@ data class DailyLimits(
 
     fun tripsUsed(now: Instant = Instant.now()): Int = if (day == parisDay(now)) tripsToday else 0
 
-    fun reportsLeft(now: Instant = Instant.now()): Int = (reportsPerDay - reportsUsed(now)).coerceAtLeast(0)
+    fun reportsLeft(now: Instant = Instant.now()): Int = reportsPerDay?.let { (it - reportsUsed(now)).coerceAtLeast(0) } ?: Int.MAX_VALUE
 
     fun tripsLeft(now: Instant = Instant.now()): Int = (tripsPerDay - tripsUsed(now)).coerceAtLeast(0)
 

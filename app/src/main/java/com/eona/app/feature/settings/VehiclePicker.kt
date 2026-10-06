@@ -29,7 +29,7 @@ import com.eona.app.feature.drive.component.VehicleGlyph
  * d'accent. Grille de 3, comme iOS (VehiclePicker.swift).
  */
 @Composable
-fun VehiclePicker(selection: VehicleType, onPick: (VehicleType) -> Unit) {
+fun VehiclePicker(selection: VehicleType, hasPlus: Boolean = true, onPick: (VehicleType) -> Unit) {
     val spacing = EonaTheme.spacing
     Column(
         modifier = Modifier
@@ -39,7 +39,7 @@ fun VehiclePicker(selection: VehicleType, onPick: (VehicleType) -> Unit) {
     ) {
         VehicleType.entries.chunked(PER_ROW).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                row.forEach { type -> VehicleCard(type, type == selection, { onPick(type) }, Modifier.weight(1f)) }
+                row.forEach { type -> VehicleCard(type, type == selection, type.requiresPlus && !hasPlus, { onPick(type) }, Modifier.weight(1f)) }
                 // La dernière ligne garde la taille des autres.
                 repeat(PER_ROW - row.size) { Spacer(Modifier.weight(1f)) }
             }
@@ -48,7 +48,7 @@ fun VehiclePicker(selection: VehicleType, onPick: (VehicleType) -> Unit) {
 }
 
 @Composable
-private fun VehicleCard(type: VehicleType, chosen: Boolean, onClick: () -> Unit, modifier: Modifier) {
+private fun VehicleCard(type: VehicleType, chosen: Boolean, locked: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
     Column(
@@ -76,12 +76,22 @@ private fun VehicleCard(type: VehicleType, chosen: Boolean, onClick: () -> Unit,
             maxLines = 2,
             minLines = 2,
         )
+        if (locked) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                com.eona.app.designsystem.component.EonaIcon(com.eona.app.designsystem.foundation.EonaIcons.Lock, contentDescription = null, tint = colors.textTertiary, size = 11.dp)
+                EonaText("EONA+", style = EonaTheme.typography.caption.copy(fontSize = 11.sp), color = colors.textTertiary)
+            }
+        }
     }
 }
 
-/** Scooter 50, sans permis : limites et routes ; autres : curseur seul. */
+/** Taxi : voies taxi ; scooter 50, sans permis : limites et routes ; autres : curseur seul. */
 private val VehicleType.rules: String
-    get() = if (moped) "45 km/h max\nSans voie rapide" else "Esthétique"
+    get() = when {
+        this == VehicleType.Taxi -> "Voies taxi\nAutorisées"
+        moped -> "45 km/h max\nSans voie rapide"
+        else -> "Esthétique"
+    }
 
 private const val PER_ROW = 3
 private val GLYPH_SIZE = 40.dp

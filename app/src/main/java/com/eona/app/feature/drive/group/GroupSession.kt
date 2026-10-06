@@ -200,6 +200,7 @@ class GroupSession(private val scope: CoroutineScope, private val trip: TripCont
 
     /** Opens a group on the destination chosen, and hands back its joining code. */
     suspend fun create(): TripGroup? {
+        if (!plusOrOffers()) return null
         val token = trip.token ?: return null
         val destination = trip.destination ?: return null
         _busy.value = true
@@ -214,6 +215,7 @@ class GroupSession(private val scope: CoroutineScope, private val trip: TripCont
      * and my route is sent as soon as it is known.
      */
     suspend fun join(code: String): TripGroup? {
+        if (!plusOrOffers()) return null
         val clean = code.trim().uppercase()
         val token = trip.token ?: return null
         if (clean.isEmpty()) return null
@@ -304,8 +306,20 @@ class GroupSession(private val scope: CoroutineScope, private val trip: TripCont
 
     /** The group as the backend has it right now, when a screen opens. */
     suspend fun refresh() {
+        // Plus d'EONA+ : groupe quitté.
+        if (!com.eona.app.data.account.AccountRepository.hasPlus.value) {
+            if (_group.value != null) leave()
+            return
+        }
         if (trip.token == null) return
         apply(groupApi.mine(trip.token), adopting = true)
+    }
+
+    /** Groupes : EONA+. Gratuit : offres montrées. */
+    private fun plusOrOffers(): Boolean {
+        if (com.eona.app.data.account.AccountRepository.hasPlus.value) return true
+        com.eona.app.feature.subscription.OffersPrompt.show(com.eona.app.feature.subscription.PaywallReason.Groups)
+        return false
     }
 
     fun acknowledgeNotice() {

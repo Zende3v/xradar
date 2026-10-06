@@ -250,15 +250,16 @@ private fun Section(title: String, icon: ImageVector, onClick: () -> Unit) {
 fun displayName(account: Account?): String =
     account?.displayName?.takeIf { it.isNotBlank() } ?: (account?.role ?: Role.Guest).label
 
-/** "Essai gratuit · 3 j restants", "Membre · jusqu'au 12/03/2027", "Accès restreint". */
+/** "Essai gratuit · 3 j restants", "EONA+ · jusqu'au 12/03/2027", "Gratuit", "Compte bloqué" (iOS AccountLabels). */
 fun accessLabel(account: Account?): String {
     if (account == null) return "Invité"
     return when {
         account.role == Role.Admin -> "Admin"
-        account.access == Access.Restricted || !account.canNavigate -> "Accès restreint"
+        account.isRestricted -> "Compte bloqué"
+        !account.hasPlus() -> if (account.isGuest) "Invité · Gratuit" else "Gratuit"
         account.access == Access.Trial -> "Essai gratuit · ${daysLeft(account.accessEndsAt)}"
-        account.accessEndsAt != null -> "Membre · jusqu'au ${shortDate(account.accessEndsAt)}"
-        else -> "Membre"
+        account.accessEndsAt != null -> "EONA+ · jusqu'au ${shortDate(account.accessEndsAt)}"
+        else -> "EONA+"
     }
 }
 

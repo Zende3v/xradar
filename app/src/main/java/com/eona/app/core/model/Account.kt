@@ -1,9 +1,6 @@
 package com.eona.app.core.model
 
-/**
- * Account role. Guest = free trial (7 days) then restricted until they pay; Client =
- * paying subscriber (or referral); Admin = full access.
- */
+/** Identité : invité, membre inscrit, administrateur. EONA+ dépend de l'accès, jamais du rôle seul. */
 enum class Role(val label: String) {
     Guest("Invité"),
     Client("Membre"),
@@ -20,20 +17,23 @@ enum class Role(val label: String) {
 
 /** Where the account stands with regard to access, as the backend computes it. */
 enum class Access {
-    /** Guest within the 7 free days. */
+    Free,
+
+    /** Inscrit pendant sept jours EONA+ offerts. */
     Trial,
 
     /** Client with a running subscription, or admin. */
     Active,
 
-    /** Trial over / subscription lapsed: map only, no navigation, no reporting. */
+    /** Compte bloqué. Essai expiré conserve accès gratuit. */
     Restricted;
 
     companion object {
         fun fromWire(value: String?): Access = when (value) {
             "active" -> Active
             "restricted" -> Restricted
-            else -> Trial
+            "trial" -> Trial
+            else -> Free
         }
     }
 }
@@ -48,10 +48,10 @@ data class Account(
     val email: String?,
     val banned: Boolean,
     val emailVerified: Boolean = false,
-    val access: Access = Access.Trial,
-    /** False once the trial or the subscription has run out. */
+    val access: Access = Access.Free,
+    /** Faux seulement quand accès compte est bloqué. */
     val canNavigate: Boolean = true,
-    /** End of the trial (guest) or of the subscription (client), ISO-8601; null = none. */
+    /** Fin d'essai ou abonnement, ISO-8601 ; null = aucune échéance. */
     val accessEndsAt: String? = null,
     /** "Note de confiance", 0..5 — how often this driver's reports get confirmed. */
     val trust: Double = 2.5,
@@ -74,12 +74,27 @@ data class Account(
     val isOnboarded: Boolean get() = !username.isNullOrBlank()
 
     /** Profile pictures are for members (renames: [canChangeUsername]). */
-    val canEditProfile: Boolean get() = role == Role.Client || role == Role.Admin
+    val canEditProfile: Boolean get() = !banned && (role == Role.Client || role == Role.Admin)
 
-    val isRestricted: Boolean get() = access == Access.Restricted || !canNavigate
+    val isRestricted: Boolean get() = banned || access == Access.Restricted || !canNavigate
 
-    /** A client whose subscription runs, or an admin. */
-    val isSubscriber: Boolean get() = (role == Role.Client || role == Role.Admin) && !isRestricted
+    /** EONA+ en cours : essai, abonnement ou admin. */
+    val isSubscriber: Boolean get() = hasPlus()
+
+    /** Invité : ni email ni fournisseur. */
+    val isGuest: Boolean get() = role == Role.Guest && email == null && providers.isEmpty()
+
+    /** Essai expiré : gratuit immédiat, même avant prochain rafraîchissement serveur. */
+    fun hasPlus(nowMillis: Long = System.currentTimeMillis()): Boolean {
+        if (isRestricted) return false
+        if (role == Role.Admin) return true
+        if (isGuest || (access != Access.Trial && access != Access.Active)) return false
+        if (accessEndsAt != null) {
+            val end = runCatching { java.time.OffsetDateTime.parse(accessEndsAt).toInstant().toEpochMilli() }.getOrNull() ?: return false
+            return end > nowMillis
+        }
+        return access == Access.Active
+    }
 }
 
 /** What the backend says of a username someone wants. */

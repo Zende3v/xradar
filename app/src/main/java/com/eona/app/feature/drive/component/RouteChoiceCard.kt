@@ -67,6 +67,10 @@ fun RouteChoiceCard(
     canAddStop: Boolean = false,
     onAddStop: () -> Unit = {},
     onEditStops: () -> Unit = {},
+    /** Départ demandé au backend. */
+    starting: Boolean = false,
+    /** Départ refusé faute de réseau. */
+    startError: String? = null,
 ) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
@@ -101,6 +105,7 @@ fun RouteChoiceCard(
                 ) { onSelect(RoutePreference.Shortest) }
                 CustomRow()
             }
+            startError?.let { EonaText(it, style = EonaTheme.typography.footnote, color = colors.hazard) }
             if (choice.failed) {
                 EonaText(
                     "Itinéraire indisponible — vérifie la connexion et réessaie.",
@@ -113,7 +118,7 @@ fun RouteChoiceCard(
                     "Démarrer",
                     onStart,
                     leadingIcon = EonaIcons.Navigation,
-                    loading = choice.chosenRoute == null,
+                    loading = starting || choice.chosenRoute == null,
                     fillWidth = true,
                 )
             }

@@ -32,6 +32,8 @@ fun EonaConfirmDialog(
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
     destructive: Boolean = true,
+    /** Null : un seul bouton, [confirmLabel]. */
+    cancelLabel: String? = "Annuler",
 ) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
@@ -55,11 +57,11 @@ fun EonaConfirmDialog(
                 EonaText(title, style = EonaTheme.typography.headline, color = colors.textPrimary)
                 EonaText(message, style = EonaTheme.typography.subhead, color = colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                    Box(
+                    if (cancelLabel != null) Box(
                         Modifier.weight(1f).clip(EonaTheme.shapes.lg).border(1.dp, colors.border, EonaTheme.shapes.lg)
                             .clickable(onClick = onCancel).padding(vertical = spacing.md),
                         contentAlignment = Alignment.Center,
-                    ) { EonaText("Annuler", style = EonaTheme.typography.bodyStrong, color = colors.textPrimary) }
+                    ) { EonaText(cancelLabel, style = EonaTheme.typography.bodyStrong, color = colors.textPrimary) }
                     Box(
                         Modifier.weight(1f).clip(EonaTheme.shapes.lg)
                             .background(if (destructive) colors.danger else colors.accent)

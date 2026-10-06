@@ -5,24 +5,37 @@ import android.content.SharedPreferences
 import com.eona.app.core.model.Account
 import com.eona.app.core.model.Role
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 import java.util.UUID
+import kotlinx.coroutines.launch
 
 /**
- * App-scoped identity + session. A per-install device id restores a session; a
- * chosen username (guest) or email/password (client/admin) completes onboarding.
- * The session token + last account are cached so the app opens without a flash.
+ * Identité, session, droits (iOS AccountStore). Invité permanent avec pseudo aléatoire ; membre
+ * avec email ou fournisseur. Jeton et dernier compte gardés pour ouvrir l'app sans flash.
  */
 object AccountRepository {
 
     private val api = AccountApi()
     private var prefs: SharedPreferences? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var expiryJob: Job? = null
+    private var sessionRevision = 0
 
     private val _account = MutableStateFlow<Account?>(null)
     val account: StateFlow<Account?> = _account.asStateFlow()
+
+    private val _hasPlus = MutableStateFlow(false)
+
+    /** EONA+ en cours : essai, abonnement ou admin. Échéance passée : faux sans attendre le serveur. */
+    val hasPlus: StateFlow<Boolean> = _hasPlus.asStateFlow()
 
     var deviceId: String? = null
         private set
@@ -49,9 +62,10 @@ object AccountRepository {
         p.getString(KEY_ACCOUNT, null)?.let { raw ->
             runCatching { _account.value = accountFromJson(JSONObject(raw)) }
         }
+        scheduleExpiry()
     }
 
-    /** Refresh from the backend: validate the token, else restore a device session. Offline, the cached session stays. */
+    /** Vérifie la session. Refus confirmé : identité effacée ; hors réseau : cache gardé. */
     suspend fun refresh(context: Context) {
         val id = ensureDeviceId(context)
         val t = token
@@ -63,13 +77,20 @@ object AccountRepository {
             } catch (e: Exception) {
                 return
             }
+            if (token != t) return
             if (fresh != null) {
                 store(fresh, t)
                 return
             }
-            setToken(null) // token no longer valid
+            clearSession()
         }
-        api.authDevice(id, appInfo)?.let { store(it.account, it.token) }
+        // Compte membre : connexion explicite. Appareil seul : invité.
+        val cached = _account.value
+        if (cached != null && cached.role != Role.Guest) clearSession()
+        val revision = sessionRevision
+        api.authDevice(id, appInfo)?.let { auth ->
+            if (token == null && sessionRevision == revision) store(auth.account, auth.token)
+        }
     }
 
     /**
@@ -135,11 +156,16 @@ object AccountRepository {
     suspend fun usernameAvailability(username: String): com.eona.app.core.model.UsernameAvailability? =
         api.usernameAvailability(username, token)
 
-    suspend fun claimGuest(username: String, password: String): AuthOutcome =
-        api.claimGuest(ensureDeviceIdOrEmpty(), username, password, appInfo).also(::applyOutcome)
+    /** « Continuer en tant qu'invité » : pseudo aléatoire, sans mot de passe. */
+    suspend fun claimGuest(): AuthOutcome =
+        api.claimGuest(ensureDeviceIdOrEmpty(), appInfo).also(::applyOutcome)
 
-    suspend fun register(email: String, password: String, username: String, referralCode: String? = null): AuthOutcome =
-        api.register(email, password, username, referralCode, appInfo).also(::applyOutcome)
+    /** Inscription ; invité courant converti : identifiant, historique et statistiques gardés. */
+    suspend fun register(email: String, password: String, username: String, referralCode: String? = null): AuthOutcome {
+        val current = _account.value
+        val guestToken = token.takeIf { current?.isGuest == true && current.isOnboarded }
+        return api.register(email, password, username, referralCode, appInfo, deviceId, guestToken).also(::applyOutcome)
+    }
 
     suspend fun stats(): AccountStats? = token?.let { api.stats(it) }
 
@@ -156,10 +182,18 @@ object AccountRepository {
 
     suspend fun createReferral(): ReferralCode? = token?.let { api.createReferral(it) }
 
-    /** Re-read the account (access status can change: trial ending, referral…). */
+    /** Relit le compte (l'accès bouge : essai fini, parrainage…). Refus confirmé : session effacée. */
     suspend fun reload() {
         val t = token ?: return
-        meOrNull(t)?.let { store(it, t) }
+        val fresh = try {
+            api.me(t)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return
+        }
+        if (token != t) return
+        if (fresh != null) store(fresh, t) else clearSession()
     }
 
     /** Email (member) or username (guest), and the password; the account then sticks to this phone. */
@@ -199,14 +233,36 @@ object AccountRepository {
     suspend fun deleteAccount(): String? {
         val t = token ?: return "Non connecté"
         api.deleteAccount(t)?.let { return it }
-        logout()
+        clearSession()
         return null
     }
 
     fun logout() {
+        token?.let { t -> scope.launch { api.logout(t) } }
+        clearSession()
+    }
+
+    private fun clearSession() {
+        expiryJob?.cancel()
         setToken(null)
         _account.value = null
+        _hasPlus.value = false
         prefs?.edit()?.remove(KEY_ACCOUNT)?.apply()
+    }
+
+    /** Droits relus à l'échéance. Hors réseau, l'heure locale coupe déjà les avantages expirés. */
+    private fun scheduleExpiry() {
+        expiryJob?.cancel()
+        val current = _account.value
+        _hasPlus.value = current?.hasPlus() == true
+        val end = isoMillis(current?.accessEndsAt) ?: return
+        val wait = end - System.currentTimeMillis()
+        if (wait <= 0) return
+        expiryJob = scope.launch {
+            delay(wait + 100)
+            _hasPlus.value = _account.value?.hasPlus() == true
+            reload()
+        }
     }
 
     private fun applyOutcome(outcome: AuthOutcome) {
@@ -215,11 +271,13 @@ object AccountRepository {
 
     private fun store(account: Account, newToken: String?) {
         _account.value = account
+        scheduleExpiry()
         if (newToken != null) setToken(newToken)
         prefs?.edit()?.putString(KEY_ACCOUNT, accountToJson(account).toString())?.apply()
     }
 
     private fun setToken(value: String?) {
+        sessionRevision += 1
         token = value
         prefs?.edit()?.apply { if (value == null) remove(KEY_TOKEN) else putString(KEY_TOKEN, value) }?.apply()
     }

@@ -121,32 +121,58 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }.getOrNull()
     }
 
-    /** Legacy device sign-in (used to restore a session by deviceId); [app]: what the phone says of itself. */
+    /** Session invité par appareil. Compte membre exige authentification explicite. 403 : compte bloqué, lu quand même. */
     suspend fun authDevice(deviceId: String, app: Map<String, String> = emptyMap()): AuthResult? = withContext(Dispatchers.IO) {
         val payload = JSONObject().put("deviceId", deviceId).put("platform", "android")
         if (app.isNotEmpty()) payload.put("app", JSONObject(app))
-        post("/api/accounts/auth", payload).let { (ok, body) -> if (ok) parseAuth(body) else null }
+        try {
+            val req = Request.Builder().url(url("/api/accounts/auth")).post(payload.toString().toRequestBody(JSON)).build()
+            client.newCall(req).execute().use { r ->
+                if (r.isSuccessful || r.code == 403) runCatching { parseAuth(r.body?.string() ?: "") }.getOrNull() else null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
-    suspend fun claimGuest(deviceId: String, username: String, password: String, app: Map<String, String> = emptyMap()): AuthOutcome =
+    /** Invité : pseudo aléatoire donné par le backend, aucun mot de passe, aucune expiration. */
+    suspend fun claimGuest(deviceId: String, app: Map<String, String> = emptyMap()): AuthOutcome =
         withContext(Dispatchers.IO) {
-            val payload = JSONObject().put("deviceId", deviceId).put("username", username).put("password", password).put("platform", "android")
+            val payload = JSONObject().put("deviceId", deviceId).put("platform", "android")
             if (app.isNotEmpty()) payload.put("app", JSONObject(app))
             outcome("/api/accounts/guest", payload)
         }
 
+    /** Inscription ; [guestToken] : conversion de l'invité courant, identifiant et historique gardés. */
     suspend fun register(
         email: String,
         password: String,
         username: String,
         referralCode: String?,
         app: Map<String, String> = emptyMap(),
+        deviceId: String? = null,
+        guestToken: String? = null,
     ): AuthOutcome = withContext(Dispatchers.IO) {
         val payload = JSONObject().put("email", email).put("password", password).put("username", username)
         if (!referralCode.isNullOrBlank()) payload.put("referralCode", referralCode.trim())
         // What the app knows of itself, for the admin card: nothing read behind the driver's back.
         if (app.isNotEmpty()) payload.put("app", JSONObject(app))
-        outcome("/api/accounts/register", payload)
+        if (!deviceId.isNullOrBlank()) payload.put("deviceId", deviceId)
+        val req = Request.Builder()
+            .url(url(if (guestToken == null) "/api/accounts/register" else "/api/accounts/me/register"))
+            .post(payload.toString().toRequestBody(JSON))
+            .apply { guestToken?.let { header("Authorization", "Bearer $it") } }
+            .build()
+        runOutcome(req)
+    }
+
+    /** Session fermée côté serveur ; échec réseau sans effet, la session locale part quand même. */
+    suspend fun logout(token: String): Unit = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url(url("/api/accounts/logout")).header("Authorization", "Bearer $token")
+                .post("{}".toRequestBody(JSON)).build()
+            client.newCall(req).execute().close()
+        }
     }
 
     // ---- Sign in with Google --------------------------------------------------
@@ -366,10 +392,12 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
     suspend fun me(token: String): Account? = withContext(Dispatchers.IO) {
         val req = Request.Builder().url(url("/api/accounts/me")).header("Authorization", "Bearer $token").build()
         client.newCall(req).execute().use { r ->
-            if (r.code == 401 || r.code == 403) return@use null
+            if (r.code == 401) return@use null
+            // Compte bloqué : le backend renvoie encore le compte, banni ou suspendu.
+            if (r.code == 403) return@use runCatching { JSONObject(r.body?.string() ?: "").optJSONObject("account")?.let(::parseAccount) }.getOrNull()
             if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code}")
             val body = r.body?.string() ?: throw java.io.IOException("empty answer")
-            JSONObject(body).optJSONObject("account")?.let(::parseAccount)
+            JSONObject(body).optJSONObject("account")?.let(::parseAccount) ?: throw java.io.IOException("no account")
         }
     }
 
@@ -506,6 +534,8 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         err.contains("password too short") -> "Mot de passe trop court (8 caractères min)."
         err.contains("invalid credentials") -> "Identifiant ou mot de passe incorrect."
         err.contains("banned") -> "Ce compte est banni."
+        err == "suspended" || err == "revoked" -> "Compte suspendu."
+        err == "member session required" -> "Reconnecte-toi avec ton compte."
         err.contains("invalid referral") -> "Code de parrainage invalide."
         err.contains("subscription required") -> "Abonnement requis."
         err.contains("google sign-in not configured") -> "Connexion Google indisponible pour l'instant."
@@ -607,10 +637,10 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             )
         }
 
-        /** A guest's daily limits, as `/me` sends them (and as the account is cached). */
+        /** Limites du jour d'un compte gratuit, comme `/me` les envoie (et comme le compte est gardé). */
         fun parseLimits(o: JSONObject) = DailyLimits(
             day = o.optString("day"),
-            reportsPerDay = o.optInt("reportsPerDay"),
+            reportsPerDay = if (!o.has("reportsPerDay") || o.isNull("reportsPerDay")) null else o.optInt("reportsPerDay"),
             reportsToday = o.optInt("reportsToday"),
             tripsPerDay = o.optInt("tripsPerDay"),
             tripsToday = o.optInt("tripsToday"),

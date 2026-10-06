@@ -85,6 +85,10 @@ data class DriveUiState(
     val stopNotice: String? = null,
     /** Coût carburant estimé du choix ; null sans prix connu. */
     val fuelEstimate: com.eona.app.core.model.FuelEstimate? = null,
+    /** « Démarrer » en cours : départ demandé au backend. */
+    val routeStarting: Boolean = false,
+    /** Départ refusé faute de réseau ; null sinon. */
+    val routeStartError: String? = null,
     /** Where [speedLimitKmh] comes from: the road's own limit or a radar's VMA. */
     val speedLimitSource: SpeedLimitSource? = null,
     /** Traffic on the route being followed (TomTom's and the drivers' jams); null until known. */

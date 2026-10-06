@@ -41,22 +41,26 @@ import com.eona.app.designsystem.component.EonaText
 import com.eona.app.designsystem.theme.EonaTheme
 import kotlinx.coroutines.launch
 
-private enum class Mode { Choose, Guest, Login, Register, Forgot, Reset }
+private enum class Mode { Choose, Login, Register, Forgot, Reset }
 
 @Composable
 fun OnboardingRoute() {
     OnboardingScreen()
 }
 
+/**
+ * Inscription, connexion, conversion invité (iOS OnboardingView). Invité : pseudo aléatoire, aucun
+ * mot de passe, aucune expiration. [converting] : invité qui crée son compte depuis Mon compte.
+ */
 @Composable
-fun OnboardingScreen() {
+fun OnboardingScreen(converting: Boolean = false) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var mode by remember { mutableStateOf(Mode.Choose) }
-    var pseudo by remember { mutableStateOf("") }
+    var mode by remember { mutableStateOf(if (converting) Mode.Register else Mode.Choose) }
+    var pseudo by remember { mutableStateOf(if (converting) AccountRepository.account.value?.username.orEmpty() else "") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var referral by remember { mutableStateOf("") }
@@ -90,8 +94,12 @@ fun OnboardingScreen() {
                 // An empty message means the driver simply closed Google's sheet.
                 is GoogleResult.Failure -> if (result.message.isNotEmpty()) error = result.message
                 is GoogleResult.Token -> {
-                    val outcome = AccountRepository.signInWithGoogle(result.idToken)
-                    if (outcome is AuthOutcome.Failure) error = outcome.message
+                    if (converting && AccountRepository.account.value?.isGuest == true) {
+                        error = AccountRepository.linkGoogle(result.idToken)
+                    } else {
+                        val outcome = AccountRepository.signInWithGoogle(result.idToken)
+                        if (outcome is AuthOutcome.Failure) error = outcome.message
+                    }
                 }
             }
             loading = false
@@ -113,9 +121,8 @@ fun OnboardingScreen() {
             EonaText("EONA", style = EonaTheme.typography.displayHero, color = colors.accent)
             val subtitle = when (mode) {
                 Mode.Choose -> null
-                Mode.Guest -> "Choisis un pseudo et un mot de passe."
                 Mode.Login -> "Content de te revoir."
-                Mode.Register -> "7 jours d'essai gratuit — ou un code de parrainage."
+                Mode.Register -> if (converting) "Crée ton compte. Historique conservé, sept jours EONA+ offerts." else "Sept jours EONA+ offerts. Puis gratuit automatiquement."
                 Mode.Forgot -> "Reçois un code par email."
                 Mode.Reset -> "Entre le code reçu et ton nouveau mot de passe."
             }
@@ -133,21 +140,10 @@ fun OnboardingScreen() {
                     Mode.Choose -> {
                         Primary("Créer un compte", loading = false) { mode = Mode.Register }
                         Ghost("Se connecter") { mode = Mode.Login; error = null }
-                        Ghost("Continuer en invité") { mode = Mode.Guest; error = null }
+                        Ghost(if (loading) "…" else "Continuer en tant qu'invité") {
+                            if (!loading) submit { AccountRepository.claimGuest() }
+                        }
                         if (GoogleAuth.isAvailable) GoogleButton("Continuer avec Google", ::google)
-                    }
-                    Mode.Guest -> {
-                        Field(pseudo, { pseudo = it.trim() }, "Pseudo", KeyboardCapitalization.None)
-                        Field(password, { password = it }, "Mot de passe (8 min.)", KeyboardCapitalization.None, KeyboardType.Password, password = true)
-                        EonaText(
-                            "Il sert à retrouver ton compte si tu réinstalles l'app. Un compte invité est supprimé au bout de 7 jours.",
-                            style = EonaTheme.typography.footnote,
-                            color = colors.textTertiary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Primary("Continuer", loading) { submit { AccountRepository.claimGuest(pseudo, password) } }
-                        Back { mode = Mode.Choose; error = null }
                     }
                     Mode.Login -> {
                         Field(email, { email = it.trim() }, "Email ou pseudo", KeyboardCapitalization.None, KeyboardType.Email)
@@ -155,7 +151,7 @@ fun OnboardingScreen() {
                         Primary("Se connecter", loading) { submit { AccountRepository.login(email, password) } }
                         if (GoogleAuth.isAvailable) GoogleButton("Se connecter avec Google", ::google)
                         Back(label = "Mot de passe oublié ?") { mode = Mode.Forgot; error = null; info = null }
-                        Back { mode = Mode.Choose; error = null }
+                        Back(label = if (converting) "Créer mon compte" else "Retour") { mode = if (converting) Mode.Register else Mode.Choose; error = null }
                     }
                     Mode.Register -> {
                         Field(pseudo, { pseudo = it.trim() }, "Pseudo", KeyboardCapitalization.None)
@@ -167,7 +163,7 @@ fun OnboardingScreen() {
                             submit { AccountRepository.register(email, password, pseudo, referral.ifBlank { null }) }
                         }
                         if (GoogleAuth.isAvailable) GoogleButton("Créer un compte avec Google", ::google)
-                        Back { mode = Mode.Choose; error = null }
+                        Back(label = if (converting) "Compte existant ? Se connecter" else "Retour") { mode = if (converting) Mode.Login else Mode.Choose; error = null }
                     }
                     Mode.Forgot -> {
                         Field(email, { email = it.trim() }, "Email", KeyboardCapitalization.None, KeyboardType.Email)

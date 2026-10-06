@@ -41,6 +41,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -99,6 +101,9 @@ fun DriveDock(
     onOpenChange: (Boolean) -> Unit = {},
     /** Tap on the limit sign: propose a new limit (null = the sign is not tappable). */
     onLimitClick: (() -> Unit)? = null,
+    /** EONA+ : timer des feux ouvert ; sinon cadenas, tap = offres. */
+    hasPlus: Boolean = true,
+    onLightLocked: () -> Unit = {},
 ) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
@@ -182,7 +187,7 @@ fun DriveDock(
                         onLimitClick = onLimitClick,
                         modifier = Modifier.weight(1.45f),
                     )
-                    RedLightCard(secondsLeft = redLightSeconds, modifier = Modifier.weight(1f))
+                    RedLightCard(secondsLeft = redLightSeconds, locked = !hasPlus, onLocked = onLightLocked, modifier = Modifier.weight(1f))
                     OptionsCard(open = open, onClick = { settle(progress.value < 0.5f) })
                 }
 
@@ -325,12 +330,34 @@ internal fun UnknownLimitSign(size: Dp, modifier: Modifier = Modifier) {
     }
 }
 
-/** "E4": how long the red light we are stopped at still has to run. */
+/** "E4": how long the red light we are stopped at still has to run. Gratuit : cadenas, vitrine EONA+. */
 @Composable
-private fun RedLightCard(secondsLeft: Int?, modifier: Modifier = Modifier) {
+private fun RedLightCard(secondsLeft: Int?, locked: Boolean, onLocked: () -> Unit, modifier: Modifier = Modifier) {
     val colors = EonaTheme.colors
-    val active = secondsLeft != null
-    DockCard(modifier = modifier) {
+    val active = secondsLeft != null && !locked
+    var information by remember { mutableStateOf(false) }
+    if (information) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { information = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            com.eona.app.designsystem.component.EonaConfirmDialog(
+                title = "Feux en direct",
+                message = "Fonction en préparation. Aucun compte à rebours disponible actuellement.",
+                confirmLabel = "Fermer",
+                onCancel = { information = false },
+                onConfirm = { information = false },
+                destructive = false,
+                cancelLabel = null,
+            )
+        }
+    }
+    DockCard(
+        modifier = modifier
+            .clip(EonaTheme.shapes.lg)
+            .clickable(onClickLabel = if (locked) "Voir EONA+" else null) { if (locked) onLocked() else information = true }
+            .semantics { contentDescription = if (locked) "Timer feux, réservé EONA+, verrouillé" else "Timer feux" },
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -348,12 +375,16 @@ private fun RedLightCard(secondsLeft: Int?, modifier: Modifier = Modifier) {
                     tint = if (active) colors.danger else colors.textTertiary,
                     size = 20.dp,
                 )
-                EonaText(
-                    text = if (active) "${secondsLeft}s" else "--",
-                    style = EonaTheme.typography.title,
-                    color = if (active) colors.textPrimary else colors.textTertiary,
-                    maxLines = 1,
-                )
+                if (locked) {
+                    EonaIcon(EonaIcons.Lock, contentDescription = null, tint = colors.textTertiary, size = 18.dp)
+                } else {
+                    EonaText(
+                        text = if (active) "${secondsLeft}s" else "--",
+                        style = EonaTheme.typography.title,
+                        color = if (active) colors.textPrimary else colors.textTertiary,
+                        maxLines = 1,
+                    )
+                }
             }
             EonaText(
                 "Feu rouge",

@@ -60,6 +60,17 @@ fun EonaApp() {
     LaunchedEffect(account?.isRestricted) {
         if (account?.isRestricted == true) OffersPrompt.offerIfRestricted()
     }
+    // Plus d'EONA+ : thème et véhicule réservés rendus (iOS AppRoot).
+    val hasPlus by AccountRepository.hasPlus.collectAsStateWithLifecycle()
+    LaunchedEffect(hasPlus) {
+        if (hasPlus) return@LaunchedEffect
+        AppPreferences.updateSettings {
+            it.copy(
+                accent = com.eona.app.data.preferences.AccentColor.Cyan,
+                vehicleType = if (it.vehicleType.requiresPlus) com.eona.app.data.preferences.VehicleType.Car else it.vehicleType,
+            )
+        }
+    }
     var proceed by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -94,7 +105,17 @@ fun EonaApp() {
             Box(Modifier.fillMaxSize()) {
                 EonaNavHost()
                 follow?.let { token -> FollowTripScreen(token, onClose = DeepLinks::closeFollow) }
-                watch?.let { token -> GroupWatchScreen(token, onClose = DeepLinks::closeWatch) }
+                watch?.let { token ->
+                    if (hasPlus) {
+                        GroupWatchScreen(token, onClose = DeepLinks::closeWatch)
+                    } else {
+                        // Lien de groupe en gratuit : offres à la place de la carte commune.
+                        LaunchedEffect(token) {
+                            OffersPrompt.show(com.eona.app.feature.subscription.PaywallReason.Groups)
+                            DeepLinks.closeWatch()
+                        }
+                    }
+                }
             }
         }
     }

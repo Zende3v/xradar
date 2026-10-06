@@ -206,7 +206,7 @@ private fun Outside(session: GroupSession, destinationName: String?) {
                 text = "Rejoindre",
                 variant = EonaButtonVariant.Secondary,
                 loading = busy,
-                enabled = code.length == CODE_LENGTH,
+                enabled = code.length == CODE_LENGTH || !com.eona.app.data.account.AccountRepository.hasPlus.collectAsStateWithLifecycle().value,
                 fillWidth = true,
                 onClick = {
                     scope.launch {

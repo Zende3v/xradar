@@ -74,8 +74,6 @@ fun SubscriptionScreen(account: Account?, onBack: () -> Unit) {
                 val limits = account?.limits
                 if (limits != null && account.isRestricted.not()) {
                     EonaListGroup(title = "Aujourd'hui") {
-                        Info("Signalements", "${limits.reportsUsed()} / ${limits.reportsPerDay}")
-                        Divider()
                         Info("Trajets", "${limits.tripsUsed()} / ${limits.tripsPerDay}")
                     }
                 }
@@ -133,6 +131,6 @@ private fun status(account: Account?): String {
         return "$ended. La carte reste disponible."
     }
     if (account.role == Role.Client) return "Tout est inclus, sans limite."
-    val perDay = account.limits?.let { " · ${it.reportsPerDay} signalements et ${it.tripsPerDay} trajets par jour" } ?: ""
+    val perDay = account.limits?.let { " · ${it.tripsPerDay} trajets par jour" } ?: ""
     return "Essai jusqu'au ${shortDate(account.accessEndsAt)}$perDay."
 }

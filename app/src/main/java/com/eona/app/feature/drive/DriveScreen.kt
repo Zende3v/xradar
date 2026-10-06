@@ -128,7 +128,7 @@ fun DriveRoute(
         onReport = viewModel::report,
         isAdmin = account?.role == com.eona.app.core.model.Role.Admin,
         restricted = account?.isRestricted == true,
-        isGuest = account?.role == com.eona.app.core.model.Role.Guest,
+        hasPlus = com.eona.app.data.account.AccountRepository.hasPlus.collectAsStateWithLifecycle().value,
         limits = account?.limits,
         account = account,
         offers = offers,
@@ -171,7 +171,8 @@ fun DriveScreen(
     /** Trial over / subscription lapsed: map only — no navigation, no reporting. */
     restricted: Boolean = false,
     /** Guests: no music shortcut, limits of the day ([limits]). */
-    isGuest: Boolean = false,
+    /** EONA+ en cours : feux, groupes, Taxi, thèmes. */
+    hasPlus: Boolean = false,
     limits: DailyLimits? = null,
     account: Account? = null,
     /** The offers shown over the map, and why; null when hidden. */
@@ -476,6 +477,8 @@ fun DriveScreen(
                 canAddStop = stops.size < ActiveTripRepository.MAX_STOPS,
                 onAddStop = addStop,
                 onEditStops = { stopsOpen = true },
+                starting = state.routeStarting,
+                startError = state.routeStartError,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
@@ -638,6 +641,8 @@ fun DriveScreen(
                 closeRequest = dockCloseRequest,
                 onOpenChange = { dockOpen = it },
                 onLimitClick = openLimitReport.takeUnless { state.isSearchingGps },
+                hasPlus = hasPlus,
+                onLightLocked = { onBlocked(PaywallReason.Lights) },
             )
         }
 
@@ -684,18 +689,12 @@ fun DriveScreen(
                         size = MAP_CONTROL_SIZE,
                     )
                 }
-                // Music: opens the mini-player under the search bar; a second tap closes it. The
-                // shortcut is for members; an open banner can always be closed.
+                // Music: opens the mini-player under the search bar; a second tap closes it.
+                // Accessible à tous, invité et gratuit compris.
                 EonaIconButton(
                     icon = ImageVector.vectorResource(R.drawable.ic_music),
                     contentDescription = if (state.musicOpen) "Fermer la musique" else "Musique",
-                    onClick = {
-                        when {
-                            state.musicOpen || (!restricted && !isGuest) -> onMusic(MusicAction.ToggleBanner)
-                            restricted -> onBlocked(PaywallReason.Restricted)
-                            else -> onBlocked(PaywallReason.Music)
-                        }
-                    },
+                    onClick = { onMusic(MusicAction.ToggleBanner) },
                     tint = colors.textPrimary,
                     background = colors.surface.copy(alpha = 0.62f),
                     border = BorderStroke(1.dp, colors.border),

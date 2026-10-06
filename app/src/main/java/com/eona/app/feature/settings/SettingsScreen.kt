@@ -28,6 +28,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -53,6 +54,7 @@ import com.eona.app.data.preferences.CONSUMPTION_RANGE
 import com.eona.app.data.preferences.AppPreferences
 import com.eona.app.data.preferences.AppTheme
 import com.eona.app.data.preferences.OverspeedWarning
+import com.eona.app.data.preferences.VehicleType
 import com.eona.app.designsystem.component.EonaIcon
 import com.eona.app.designsystem.component.EonaListGroup
 import com.eona.app.designsystem.component.EonaListRow
@@ -84,6 +86,8 @@ fun SettingsScreen(
 ) {
     val spacing = EonaTheme.spacing
     val account by com.eona.app.data.account.AccountRepository.account.collectAsStateWithLifecycle()
+    val hasPlus by com.eona.app.data.account.AccountRepository.hasPlus.collectAsStateWithLifecycle()
+    var offers by remember { mutableStateOf<com.eona.app.feature.subscription.PaywallReason?>(null) }
 
     EonaScreenScaffold(title = "Réglages", onBack = onBack) {
         Column(
@@ -97,12 +101,18 @@ fun SettingsScreen(
 
             EonaListGroup(title = "Apparence") {
                 ThemeSetting()
-                AccentSetting()
+                AccentSetting(hasPlus) { offers = com.eona.app.feature.subscription.PaywallReason.Colours }
             }
 
             val settings by AppPreferences.settings.collectAsStateWithLifecycle()
             SettingsGroup("Véhicule", "Protection pluie : écran verrouillé dès 15 km/h.") {
-                VehiclePicker(settings.vehicleType) { type -> AppPreferences.updateSettings { it.copy(vehicleType = type) } }
+                VehiclePicker(settings.vehicleType, hasPlus) { type ->
+                    if (type.requiresPlus && !hasPlus) {
+                        offers = if (type == VehicleType.Taxi) com.eona.app.feature.subscription.PaywallReason.Taxi else com.eona.app.feature.subscription.PaywallReason.Truck
+                    } else {
+                        AppPreferences.updateSettings { it.copy(vehicleType = type) }
+                    }
+                }
                 SettingSwitch("Protection pluie", settings.rainLock) { on -> AppPreferences.updateSettings { it.copy(rainLock = on) } }
             }
 
@@ -139,6 +149,8 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(spacing.xxl))
         }
+
+        offers?.let { reason -> com.eona.app.feature.subscription.OffersSheet(reason, account, onClose = { offers = null }) }
     }
 }
 
@@ -186,7 +198,7 @@ private fun ThemeSetting() {
 
 /** « Couleur de l'app » : boutons, tracé du trajet, détails. La palette en piste, un cran par teinte. */
 @Composable
-private fun AccentSetting() {
+private fun AccentSetting(hasPlus: Boolean, onLocked: () -> Unit) {
     val settings by AppPreferences.settings.collectAsStateWithLifecycle()
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
@@ -196,7 +208,7 @@ private fun AccentSetting() {
             EonaText(settings.accent.label, style = EonaTheme.typography.callout, color = colors.textSecondary)
         }
         Spacer(Modifier.height(spacing.sm))
-        AccentSlider(settings.accent) { colour -> AppPreferences.updateSettings { it.copy(accent = colour) } }
+        AccentSlider(settings.accent) { colour -> if (hasPlus) AppPreferences.updateSettings { it.copy(accent = colour) } else onLocked() }
     }
 }
 
