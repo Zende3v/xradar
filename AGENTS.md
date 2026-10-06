@@ -44,7 +44,8 @@ irréversibles.
 - Navigation et bouton EONA+ flottants : aucun bandeau opaque, séparateur périphérique ni effet de bord visible.
 - Thèmes : onze unicolores conservés ; Pastels EONA+ et Minéral ajoutés. Palettes sobres sur accents, jamais couleurs de sécurité.
 - Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
-- Pilotage EONA réservé admin : présence observée, activité anonyme, gestion réversible, bannissements persistants.
+- Gestion EONA réservé admin : présence observée, activité anonyme, gestion réversible, bannissements persistants.
+- Réglages : ligne Thème compacte ; treize choix dans feuille dédiée. Palettes visibles sur actions, sélection et curseur.
 - Gratuit regroupe invités et comptes gratuits ; Client correspond EONA+ ; Admin reste séparé.
 - Appareil banni : identifiant EONA conservé dans Keychain, aucun HWID matériel disponible. Emails et fournisseurs connus également bloqués.
 
@@ -80,7 +81,7 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 37. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 38. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 

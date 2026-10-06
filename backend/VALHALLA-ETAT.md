@@ -1,13 +1,15 @@
 # Valhalla : état du chantier
 
-Mis à jour : **05/10/2026**. Pilotage EONA déployé après accord Arthur ; santé et conservation comptes vérifiées.
+Mis à jour : **06/10/2026**. Corrections iOS 38 poussées. Backend déployé le 05/10, inchangé dans ce lot.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
-- Backend **`a85c6bc`** en production. iOS **`4e784ac`**, build **37**, poussé ; Arthur lance Codemagic et tests téléphone.
-- Pilotage EONA déployé : présence, activité anonyme, gestion comptes, bans persistants, historique HERE.
-- **48 contrôles backend ciblés passent** : sécurité/accès 25, consommation/cache 19, dashboard 4. Revue contrat backend/iOS réalisée.
+- Backend **`a85c6bc`** en production. Livraison iOS **`7792bb8`**, build **38** ; Arthur lance Codemagic et tests téléphone.
+- Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
+- iOS 38 : chargement initial réparé ; ligne Thème compacte, treize choix dans feuille dédiée.
+- Mélanges Pastels EONA+ et Minéral accentués sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
+- **48 contrôles backend ciblés validés pour `a85c6bc`** : sécurité/accès 25, consommation/cache 19, dashboard 4. Revue contrat réalisée.
 - ORS reste secours et comparaison en ombre. OSRM démo retiré.
 - Trafic traité dans le backend : **HERE, EONA, data.gouv**.
 - ETA dynamique dans les apps. HERE Route Import chronomètre notre tracé ; dernière durée valide conservée.
@@ -84,12 +86,17 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - « Vos avantages EONA+ » : sept descriptions précises, reprises dans fiches. Prestations prévues présentées au présent, selon demande Arthur.
 - iOS 37 : texte Trajets intelligents ajusté, icône Feux vectorielle, logo radar dans catégorie EONA+.
 - Onze couleurs conservées ; Pastels EONA+ et Minéral ajoutés. Interface, tracé, curseur suivent choix sans relance.
-- Pilotage EONA réservé administrateurs : présence par droits, activité anonyme, comptes, bannissements, mesures Valhalla et HERE.
+- Gestion EONA réservé administrateurs : présence par droits, activité anonyme, comptes, bannissements, mesures Valhalla et HERE.
 - Compteurs HERE cumulés et hebdomadaires persistants ; semaine lundi Paris, migration ancien mois sans historique antérieur inventé.
 - Bans indépendants du fichier comptes : compte, emails, appareils EONA connus et fournisseurs. Déban possible après suppression source.
 - Suspension réversible, sessions coupées ; aucun nouveau bouton suppression définitive. Protection propre compte et dernier administrateur actif.
 - Profil Taxi accepté sur VPS : trajet Paris de 6 070 m, péages/autoroutes/ferries exclus, aucune alerte d'exclusion ignorée.
 - Accès réservés dépend de cartographie OSM. Validation sur voies Taxi par Arthur reste à réaliser.
+- 06/10 : iOS 38 renomme Pilotage EONA en Gestion EONA. Aucun changement backend ni déploiement supplémentaire.
+- Chargement initial : état de visibilité capturé par tâche ; identifiant de requête protège résultat et état de chargement.
+- Ouverture affiche chargement. Changement de visibilité annule travail précédent ; réponse obsolète ne remplace plus résultat courant.
+- Réglages : une ligne Thème ouvre feuille dédiée. Onze couleurs et deux palettes restent accessibles.
+- Pastels EONA+ et Minéral : mélanges visibles sur actions, sélection, recentrage, curseur et halo, sans recolorer signalisation.
 
 ## Points ouverts
 
@@ -99,8 +106,10 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 37 : diff vérifié, contrat backend/iOS revu. Compilation, contrôles Swift ciblés et rendu téléphone par Arthur via Codemagic.
-- Déploiement Pilotage EONA autorisé puis réalisé. Validation fonctionnelle admin et thèmes reste sur téléphone, après build Codemagic.
+- Build iOS 38 : compilation indisponible sous Windows. Arthur lance Codemagic puis validation téléphone.
+- Vérifier ouverture Gestion EONA sans Réessayer, retour après arrière-plan, changement immédiat de thème et fermeture des feuilles.
+- Vérifier mélange des palettes sur actions, sélection, recentrage, curseur et halo. Onze couleurs et signalisation restent intactes.
+- Déploiement Gestion EONA autorisé puis réalisé le 05/10. Backend inchangé ; aucune nouvelle campagne backend dans ce lot.
 - Sessions backend restent en mémoire. Membres exigent Bearer valide ; redémarrage impose reconnexion, cache iOS périmé effacé.
 - Identifiant appareil EONA reste dans Keychain ; aucun HWID matériel accessible. Blocage limite appareils connus par ce service.
 - Perso reporté. Feux en direct toujours en préparation, cadenas gratuit ; aucune donnée réelle actuellement.

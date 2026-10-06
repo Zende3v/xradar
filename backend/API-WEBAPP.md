@@ -736,9 +736,15 @@ Cyclomoteurs 50 cm³ et voiturettes : 45 km/h, ni autoroute ni voie rapide. Anci
 
 Source profil : [Valhalla 3.9, TaxiCost](https://github.com/valhalla/valhalla/blob/3.9.0/src/sif/autocost.cc#L797).
 
-## Pilotage EONA : 05/10/2026, iOS 37
+## Gestion EONA : 06/10/2026, iOS 38
 
-Déployé : `a85c6bc`, 05/10 à 22:27 Paris, après accord Arthur. iOS `4e784ac`, build 37, poussé.
+Backend déployé : `a85c6bc`, 05/10 à 22:27 Paris, après accord Arthur. Contrat et endpoints inchangés dans ce lot.
+Livraison iOS : `7792bb8`, build 38. Compilation sous Codemagic et validation téléphone par Arthur.
+
+- Catégorie renommée Gestion EONA. Chargement initial corrigé : visibilité capturée, requêtes identifiées, état Chargement dès ouverture.
+- Réglages : ligne Thème compacte, onze couleurs et deux palettes dans feuille dédiée.
+- Mélanges Pastels EONA+ et Minéral accentués sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
+- Aucun nouveau déploiement backend ni changement de contrat requis.
 
 - Tous endpoints admin exigent Bearer administrateur valide. `ADMIN_TOKEN` reste disponible pour scripts.
 - Bearer invalide : aucun repli appareil. Compte membre exige connexion explicite ; appareil seul réservé invité.
