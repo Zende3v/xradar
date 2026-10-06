@@ -1,12 +1,12 @@
 # Valhalla : état du chantier
 
-Mis à jour : **06/10/2026**. iOS 43 poussé ; correction HERE préparée, déploiement attend accord Arthur.
+Mis à jour : **06/10/2026**. iOS 44 poussé ; correction HERE préparée, déploiement attend accord Arthur.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
 - Backend **`a85c6bc`** en production. Correction HERE **`435837c`** prête localement ; aucun nouveau déploiement autorisé.
-- Livraison iOS **`118cdda`**, build **43**, poussée ; Arthur lance Codemagic « IPA non signée » et tests téléphone.
+- Livraison iOS **`5bf0c75`**, build **44**, poussée ; Arthur relance Codemagic « IPA non signée » et tests téléphone.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
 - Chargement initial réparé ; ligne Thème compacte, quinze choix dans feuille dédiée.
 - Pastels EONA+, Minéral, Opale et Crépuscule sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
@@ -120,6 +120,8 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Métadonnées absentes sans avertissement. État via vitesse lecture, lecteur identifié, puis activité audio autre app observée.
 - Notifications, polling visible et relevés après clic. Métadonnées conservées ; lectures antérieures ignorées, aucun second envoi automatique.
 - Revue ciblée ABI et lifecycle réalisée. Trois régressions Swift ajoutées ; compilation et exécution indisponibles sous Windows.
+- Archive 43 échoue Swift 6 : transfert snapshot Objective-C non `Sendable` vers interface. Code sortie 65.
+- iOS 44 convertit callbacks en valeurs Swift immuables avant isolation. Aucun `@unchecked Sendable` ni contrôle désactivé.
 - Backend inchangé, aucun nouveau déploiement ni test backend. Procédure téléphone dans repo iOS `docs/LECTEUR-SYSTEME.md`.
 
 ## Points ouverts
@@ -131,7 +133,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 43 : compilation indisponible sous Windows. Arthur lance Codemagic puis validation téléphone.
+- Build iOS 44 : compilation indisponible sous Windows. Arthur relance Codemagic puis validation téléphone.
 - Lecteur système : vérifier icône, capacités, intervalles et effet réel des pistes. Envoi accepté ne démontre aucune action effective.
 - API privée incompatible règles App Store/TestFlight ; désactiver variante avant distribution correspondante.
 - Vérifier inclinaison/recentrage, quinze récents persistants, historique annoncé et départ groupe avec HERE.
