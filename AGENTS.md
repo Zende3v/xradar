@@ -50,7 +50,9 @@ irréversibles.
 - Mini-player : Lecteur système expérimental dans IPA non signée, API privée Apple. Lecture/pause Video Lite confirmée sur iPhone.
 - Skip/Back Video Lite confirmés avec playlist. Synchronisation icône iOS 45 attend validation téléphone.
 - iOS 46 (Claude, 06/10) : toutes commandes par MRMediaRemoteSendCommand ; boutons jamais grisés, avance seule 15 s par défaut.
-- Diagnostic iOS 46 : relevé brut MediaRemote et essais par transport. Titre autre app attendu bloqué (mediaremoted, entitlement Apple).
+- Relevé iOS 46 (iPhone 26.5.2) : lectures MediaRemote toutes vides (infos nil, PID 0, commandes vides). Titre autre app impossible en logiciel.
+- Commandes acceptées : ±15 s legacy marchent ; piste par envoi ciblé marche avec playlist. iOS 47 : Back/Skip envoient avance puis piste.
+- Piste pour titre : Apple Media Service (BLE, spécification Apple) via boîtier ESP32, à valider avec Arthur.
 - Navigation lecteur : piste prioritaire si annoncée ; sinon intervalle natif annoncé, affiché explicitement. Aucun faux changement piste.
 - Métadonnées facultatives sans avertissement. État observé, notifications visibles uniquement ; aucune bascule optimiste ni second envoi automatique.
 - Lecture/Pause demandée signalée séparément de l'état observé ; aucune confirmation simulée. Événements directs prioritaires sur getters.
@@ -94,7 +96,7 @@ irréversibles.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
 - Alternative : GitHub Actions, workflow manuel « IPA non signée » (`.github/workflows/ios-ipa.yml`, macos-26), IPA en artefact.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 46. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 47. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
