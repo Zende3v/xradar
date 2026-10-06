@@ -1,14 +1,14 @@
 # Valhalla : état du chantier
 
-Mis à jour : **06/10/2026**. Corrections iOS 38 poussées. Backend déployé le 05/10, inchangé dans ce lot.
+Mis à jour : **06/10/2026**. Palettes iOS 39 poussées. Backend déployé le 05/10, inchangé dans ce lot.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
-- Backend **`a85c6bc`** en production. Livraison iOS **`7792bb8`**, build **38** ; Arthur lance Codemagic et tests téléphone.
+- Backend **`a85c6bc`** en production. Livraison iOS **`b766668`**, build **39** ; Arthur lance Codemagic et tests téléphone.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
-- iOS 38 : chargement initial réparé ; ligne Thème compacte, treize choix dans feuille dédiée.
-- Mélanges Pastels EONA+ et Minéral accentués sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
+- Chargement initial réparé ; ligne Thème compacte, quinze choix dans feuille dédiée.
+- Pastels EONA+, Minéral, Opale et Crépuscule sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
 - **48 contrôles backend ciblés validés pour `a85c6bc`** : sécurité/accès 25, consommation/cache 19, dashboard 4. Revue contrat réalisée.
 - ORS reste secours et comparaison en ombre. OSRM démo retiré.
 - Trafic traité dans le backend : **HERE, EONA, data.gouv**.
@@ -97,6 +97,8 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Ouverture affiche chargement. Changement de visibilité annule travail précédent ; réponse obsolète ne remplace plus résultat courant.
 - Réglages : une ligne Thème ouvre feuille dédiée. Onze couleurs et deux palettes restent accessibles.
 - Pastels EONA+ et Minéral : mélanges visibles sur actions, sélection, recentrage, curseur et halo, sans recolorer signalisation.
+- 06/10 : iOS 39 ajoute Opale, jade/glacier/perle, et Crépuscule, cuivre/rose poudré/prune. Quinze thèmes, actualisation immédiate.
+- Onze unicolores et deux palettes précédentes conservés. Backend inchangé ; diff vérifié, aucun test ajouté pour changement cosmétique.
 
 ## Points ouverts
 
@@ -106,9 +108,8 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 38 : compilation indisponible sous Windows. Arthur lance Codemagic puis validation téléphone.
-- Vérifier ouverture Gestion EONA sans Réessayer, retour après arrière-plan, changement immédiat de thème et fermeture des feuilles.
-- Vérifier mélange des palettes sur actions, sélection, recentrage, curseur et halo. Onze couleurs et signalisation restent intactes.
+- Build iOS 39 : compilation indisponible sous Windows. Arthur lance Codemagic puis validation téléphone.
+- Vérifier Opale et Crépuscule : mélange sur actions, sélection, recentrage, curseur et halo ; conservation après relance.
 - Déploiement Gestion EONA autorisé puis réalisé le 05/10. Backend inchangé ; aucune nouvelle campagne backend dans ce lot.
 - Sessions backend restent en mémoire. Membres exigent Bearer valide ; redémarrage impose reconnexion, cache iOS périmé effacé.
 - Identifiant appareil EONA reste dans Keychain ; aucun HWID matériel accessible. Blocage limite appareils connus par ce service.
