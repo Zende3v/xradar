@@ -1,12 +1,12 @@
 # Valhalla : état du chantier
 
-Mis à jour : **06/10/2026**. iOS 41 poussé ; correction HERE préparée, déploiement attend accord Arthur.
+Mis à jour : **06/10/2026**. iOS 42 poussé ; correction HERE préparée, déploiement attend accord Arthur.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
 - Backend **`a85c6bc`** en production. Correction HERE **`435837c`** prête localement ; aucun nouveau déploiement autorisé.
-- Livraison iOS **`7d67b30`**, build **41**, poussée ; Arthur lance Codemagic et tests téléphone.
+- Livraison iOS **`7a76e3f`**, build **42**, poussée ; Arthur lance Codemagic « IPA non signée » et tests téléphone.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
 - Chargement initial réparé ; ligne Thème compacte, quinze choix dans feuille dédiée.
 - Pastels EONA+, Minéral, Opale et Crépuscule sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
@@ -111,6 +111,11 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Plafond HERE 10 € estimés/mois choisi par Arthur. Configuration source et surcharge systemd prêtes ; aucune activation VPS effectuée.
 - 06/10 : iOS 41 libère onze couleurs et Opale. Expiration conserve choix gratuit ; palette réservée revient sur Opale.
 - Catalogue et cadenas reflètent accès sélectif. Backend inchangé ; aucun nouveau test pour modification mineure.
+- 06/10 : iOS 42 ajoute source Lecteur système, essai demandé par Arthur. Commandes globales via API privée Apple.
+- Lecture/pause, suivant, précédent ; métadonnées facultatives, état inconnu conservé. Aucune reprise forcée vers Apple Music.
+- Variante activée uniquement par archive Codemagic non signée. Build standard compile adaptateur inactif ; aucun entitlement privé ajouté.
+- Revue ciblée ABI, callbacks, timeout et interop réalisée. Compilation et fonctionnement iOS 26 / Video Lite non démontrés.
+- Backend inchangé, aucun nouveau déploiement ni test backend. Procédure téléphone dans repo iOS `docs/LECTEUR-SYSTEME.md`.
 
 ## Points ouverts
 
@@ -121,7 +126,9 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 41 : compilation indisponible sous Windows. Arthur lance Codemagic puis validation téléphone.
+- Build iOS 42 : compilation indisponible sous Windows. Arthur lance Codemagic puis validation téléphone.
+- Lecteur système expérimental : contrôler effets réels pause/reprise/suivant/précédent. Envoi accepté ne démontre aucune action effective.
+- API privée incompatible règles App Store/TestFlight ; désactiver variante avant distribution correspondante.
 - Vérifier inclinaison/recentrage, quinze récents persistants, historique annoncé et départ groupe avec HERE.
 - Déployer `435837c` et activer plafond 10 € exige accord distinct, après sauvegarde code/comptes/bans/consommation HERE.
 - Déploiement Gestion EONA autorisé puis réalisé le 05/10. Backend inchangé ; aucune nouvelle campagne backend dans ce lot.

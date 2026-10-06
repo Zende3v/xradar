@@ -47,6 +47,8 @@ irréversibles.
 - Opale par défaut sans choix enregistré. Conserver choix existants ; expiration remplace seulement palette réservée par Opale.
 - Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
 - Carte iOS : inclinaison native à deux doigts ; recentrage conserve angle choisi. Quinze recherches récentes conservées.
+- Mini-player : Lecteur système expérimental dans IPA non signée, API privée Apple. iOS 26 / Video Lite restent à valider.
+- Variante standard exclut API privée. Aucun entitlement privé ajouté ; App Store/TestFlight exigent désactivation.
 - Historique ETA : référence arrivée annoncée au départ ; trajets interrompus signalés, données brutes conservées.
 - Gestion EONA réservé admin : présence observée, activité anonyme, gestion réversible, bannissements persistants.
 - Réglages : ligne Thème compacte ; quinze choix dans feuille dédiée. Palettes visibles sur actions, sélection et curseur.
@@ -85,7 +87,7 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 41. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 42. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
