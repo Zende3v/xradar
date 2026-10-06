@@ -48,8 +48,10 @@ irréversibles.
 - Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
 - Carte iOS : inclinaison native à deux doigts ; recentrage conserve angle choisi. Quinze recherches récentes conservées.
 - Mini-player : Lecteur système expérimental dans IPA non signée, API privée Apple. Lecture/pause Video Lite confirmée sur iPhone.
+- Skip/Back Video Lite confirmés avec playlist. Conserver transport ; synchronisation icône iOS 45 attend validation téléphone.
 - Navigation lecteur : piste prioritaire si annoncée ; sinon intervalle natif annoncé, affiché explicitement. Aucun faux changement piste.
 - Métadonnées facultatives sans avertissement. État observé, notifications visibles uniquement ; aucune bascule optimiste ni second envoi automatique.
+- Lecture/Pause demandée signalée séparément de l'état observé ; aucune confirmation simulée. Événements directs prioritaires sur getters.
 - Variante standard exclut API privée. Aucun entitlement privé ajouté ; App Store/TestFlight exigent désactivation.
 - Historique ETA : référence arrivée annoncée au départ ; trajets interrompus signalés, données brutes conservées.
 - Gestion EONA réservé admin : présence observée, activité anonyme, gestion réversible, bannissements persistants.
@@ -89,7 +91,7 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 44. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 45. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 

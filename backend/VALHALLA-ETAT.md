@@ -1,12 +1,12 @@
 # Valhalla : état du chantier
 
-Mis à jour : **06/10/2026**. iOS 44 poussé ; correction HERE préparée, déploiement attend accord Arthur.
+Mis à jour : **06/10/2026**. iOS 45 poussé ; correction HERE préparée, déploiement attend accord Arthur.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
 - Backend **`a85c6bc`** en production. Correction HERE **`435837c`** prête localement ; aucun nouveau déploiement autorisé.
-- Livraison iOS **`5bf0c75`**, build **44**, poussée ; Arthur relance Codemagic « IPA non signée » et tests téléphone.
+- Livraison iOS **`e5a50f2`**, build **45**, poussée ; Arthur relance Codemagic « IPA non signée » et tests téléphone.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
 - Chargement initial réparé ; ligne Thème compacte, quinze choix dans feuille dédiée.
 - Pastels EONA+, Minéral, Opale et Crépuscule sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
@@ -122,6 +122,11 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Revue ciblée ABI et lifecycle réalisée. Trois régressions Swift ajoutées ; compilation et exécution indisponibles sous Windows.
 - Archive 43 échoue Swift 6 : transfert snapshot Objective-C non `Sendable` vers interface. Code sortie 65.
 - iOS 44 convertit callbacks en valeurs Swift immuables avant isolation. Aucun `@unchecked Sendable` ni contrôle désactivé.
+- Build 44 compilé selon Arthur. Icône lecture/pause reste figée ; Skip/Back fonctionnent avec playlist Video Lite.
+- iOS 45 consomme état, identité et métadonnées présents dans événements système. Événement direct prime sur getter contradictoire.
+- Lecture/Pause explicites : commandes 0/1. Retour immédiat distingue demande et observation ; confirmation réelle reste nécessaire.
+- Appui prolongé propose Lecture/Pause. Skip/Back et transport existants conservés ; un seul envoi par clic.
+- Changement lecteur efface ancien état ; refus conserve observation précédente. Quatre régressions ciblées ajoutées, non exécutées sous Windows.
 - Backend inchangé, aucun nouveau déploiement ni test backend. Procédure téléphone dans repo iOS `docs/LECTEUR-SYSTEME.md`.
 
 ## Points ouverts
@@ -133,8 +138,9 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 44 : compilation indisponible sous Windows. Arthur relance Codemagic puis validation téléphone.
-- Lecteur système : vérifier icône, capacités, intervalles et effet réel des pistes. Envoi accepté ne démontre aucune action effective.
+- Build iOS 45 : compilation indisponible sous Windows. Arthur relance Codemagic puis validation téléphone.
+- Lecteur système : vérifier icône après clic EONA, casque et Centre de contrôle. Demande signalée ne confirme aucune action effective.
+- Skip/Back playlist confirmés par Arthur ; vérifier absence de régression après build 45. Métadonnées selon accès réel du système.
 - API privée incompatible règles App Store/TestFlight ; désactiver variante avant distribution correspondante.
 - Vérifier inclinaison/recentrage, quinze récents persistants, historique annoncé et départ groupe avec HERE.
 - Déployer `435837c` et activer plafond 10 € exige accord distinct, après sauvegarde code/comptes/bans/consommation HERE.
