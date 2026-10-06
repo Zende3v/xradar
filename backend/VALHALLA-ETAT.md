@@ -1,11 +1,12 @@
 # Valhalla : état du chantier
 
-Mis à jour : **06/10/2026**. Palettes iOS 39 poussées. Backend déployé le 05/10, inchangé dans ce lot.
+Mis à jour : **06/10/2026**. iOS 40 poussé ; correction HERE préparée, déploiement attend accord Arthur.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
-- Backend **`a85c6bc`** en production. Livraison iOS **`b766668`**, build **39** ; Arthur lance Codemagic et tests téléphone.
+- Backend **`a85c6bc`** en production. Correction HERE **`435837c`** prête localement ; aucun nouveau déploiement autorisé.
+- Livraison iOS **`c78e52e`**, build **40**, poussée ; Arthur lance Codemagic et tests téléphone.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
 - Chargement initial réparé ; ligne Thème compacte, quinze choix dans feuille dédiée.
 - Pastels EONA+, Minéral, Opale et Crépuscule sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
@@ -13,6 +14,8 @@ Mis à jour : **06/10/2026**. Palettes iOS 39 poussées. Backend déployé le 05
 - ORS reste secours et comparaison en ombre. OSRM démo retiré.
 - Trafic traité dans le backend : **HERE, EONA, data.gouv**.
 - ETA dynamique dans les apps. HERE Route Import chronomètre notre tracé ; dernière durée valide conservée.
+- HERE actuellement bloqué par plafond 5 € estimés/mois. Arthur choisit 10 € ; activation préparée, pas encore déployée.
+- Bilan lecture production : 62 trajets, 30 retenus, 19 dynamiques. Voir `BILAN-ETA-20261006.md`, sans coordonnées ni comptes.
 - **Phases 1 à 5 livrées.** Collecte et validation de précision continuent, sans nouvelle phase 2.
 - **Phases 6 à 8 du plan initial non implémentées.** Clôture ou maintien en attente à trancher avec Arthur.
 - Aucun chantier supplémentaire lancé. Arthur choisit prochaine étape.
@@ -99,17 +102,25 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Pastels EONA+ et Minéral : mélanges visibles sur actions, sélection, recentrage, curseur et halo, sans recolorer signalisation.
 - 06/10 : iOS 39 ajoute Opale, jade/glacier/perle, et Crépuscule, cuivre/rose poudré/prune. Quinze thèmes, actualisation immédiate.
 - Onze unicolores et deux palettes précédentes conservés. Backend inchangé ; diff vérifié, aucun test ajouté pour changement cosmétique.
+- 06/10 : iOS 40 active inclinaison native à deux doigts ; angle choisi conservé au recentrage. Recherches récentes : 8 à 15.
+- Historique compare relevé initial valide, sans modifier anciens champs. Interruption signalée ; destination modifiée rend référence inconnue.
+- Nouveaux plans utilisent temps attendu avec HERE ; départ groupe demande chronométrage. Arrêt sans observation locale reste incertain.
+- Backend `435837c` : Import valide livré sans attendre flow lent au-delà 2,5 s. Flow poursuit cache, sans appel supplémentaire.
+- Douze tests backend ciblés passent sous Node 22.23.2 ; régressions Swift ajoutées, non exécutées sous Windows.
+- Plafond HERE 10 € estimés/mois choisi par Arthur. Configuration source et surcharge systemd prêtes ; aucune activation VPS effectuée.
 
 ## Points ouverts
 
 - **Précision ETA : à mesurer.** Instrumentation livrée ne constitue pas bilan de précision.
-- Dernier bilan documenté du 03/10 : 5 trajets `dynamic` exploitables, échantillon insuffisant pour conclusion générale.
+- Bilan 06/10 : 19 trajets dynamiques retenus ; erreur absolue médiane départ 128 s, à 75 % 39,27 s.
+- Versions iOS mélangées ; pauses anciennes ambiguës. Aucun gain du build 40 démontré avant nouveaux trajets.
 - Scooter : exclusion `motorroad=yes` encore non prouvée. Test A 6b / D 7 prouve seulement ce trajet sans autoroute.
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 39 : compilation indisponible sous Windows. Arthur lance Codemagic puis validation téléphone.
-- Vérifier Opale et Crépuscule : mélange sur actions, sélection, recentrage, curseur et halo ; conservation après relance.
+- Build iOS 40 : compilation indisponible sous Windows. Arthur lance Codemagic puis validation téléphone.
+- Vérifier inclinaison/recentrage, quinze récents persistants, historique annoncé et départ groupe avec HERE.
+- Déployer `435837c` et activer plafond 10 € exige accord distinct, après sauvegarde code/comptes/bans/consommation HERE.
 - Déploiement Gestion EONA autorisé puis réalisé le 05/10. Backend inchangé ; aucune nouvelle campagne backend dans ce lot.
 - Sessions backend restent en mémoire. Membres exigent Bearer valide ; redémarrage impose reconnexion, cache iOS périmé effacé.
 - Identifiant appareil EONA reste dans Keychain ; aucun HWID matériel accessible. Blocage limite appareils connus par ce service.

@@ -766,6 +766,12 @@ Livraison iOS : `7792bb8`, build 38. Compilation sous Codemagic et validation t�
 
 ### HERE : historique mesuré
 
+- 06/10 : correction `435837c` préparée, pas encore déployée. Plafond 10 € estimés/mois choisi par Arthur.
+- `/api/traffic/route` ajoute `flowPending` ; durée Import valide peut précéder flow/incidents après attente bornée à 2,5 s.
+- Snapshot partiel : `flowAvailable:false`, `incidentsAvailable:false`, `delayS:null`, aucune couverture inventée. Flow poursuit cache partagé.
+- Sans durée Import valide : trafic complet attendu. Champs existants conservés, aucune requête HERE supplémentaire.
+- iOS `c78e52e`, build 40 : départ groupe chronométré, historique basé sur relevé initial ; données enregistrées inchangées.
+
 - `here` conserve ancien contrat budget ; champ additif `history` persisté dans même fichier atomique.
 - `history` : `since`, `baselineMonth`, `totalRequests`, `totalEstimatedEUR`, `weekStart`, `weekRequests`, `weekEstimatedEUR`.
 - `weekComplete` compare début collecte à lundi 00:00 Paris. Changements d'heure inclus.
