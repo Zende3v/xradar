@@ -43,6 +43,8 @@ irréversibles.
 - Cible EONA Poids lourd confirmée : itinéraires selon gabarit et restrictions du véhicule. État technique réel conservé dans docs.
 - Navigation et bouton EONA+ flottants : aucun bandeau opaque, séparateur périphérique ni effet de bord visible.
 - Thèmes : onze unicolores ; quatre palettes, Pastels EONA+, Minéral, Opale et Crépuscule. Accents sobres, jamais couleurs de sécurité.
+- Onze unicolores et Opale gratuits. Pastels EONA+, Minéral et Crépuscule réservés EONA+ ou essai actif.
+- Opale par défaut sans choix enregistré. Conserver choix existants ; expiration remplace seulement palette réservée par Opale.
 - Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
 - Carte iOS : inclinaison native à deux doigts ; recentrage conserve angle choisi. Quinze recherches récentes conservées.
 - Historique ETA : référence arrivée annoncée au départ ; trajets interrompus signalés, données brutes conservées.
@@ -83,7 +85,7 @@ irréversibles.
   `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 40. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 41. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
