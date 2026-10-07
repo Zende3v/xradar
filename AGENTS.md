@@ -47,6 +47,10 @@ irréversibles.
 - Opale par défaut sans choix enregistré. Conserver choix existants ; expiration remplace seulement palette réservée par Opale.
 - Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
 - Carte iOS : inclinaison native à deux doigts ; recentrage conserve angle choisi. Quinze recherches récentes conservées.
+- Stations : carburant, classement Proximité/Prix et Espèces indépendants ; prix conservés en tri Proximité.
+- Espèces : OSM `payment:cash=yes|only` uniquement ; absence inconnue. Filtre strict confirmé Arthur le 08/10.
+- Rayon stations 10 km, élargissement explicite 25/50 km si peu de résultats. Paiement ne prouve pas disponibilité actuelle.
+- Import conserve paiement ; enrichissement initial par identifiant OSM exact, sans rapprochement géographique ni déduction d'enseigne.
 - Mini-player : Lecteur système expérimental dans IPA non signée, API privée Apple. Lecture/pause Video Lite confirmée sur iPhone.
 - Skip/Back Video Lite confirmés avec playlist. Synchronisation icône iOS 45 attend validation téléphone.
 - iOS 46 (Claude, 06/10) : toutes commandes par MRMediaRemoteSendCommand ; boutons jamais grisés, avance seule 15 s par défaut.
@@ -97,7 +101,7 @@ irréversibles.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
 - Alternative : GitHub Actions, workflow manuel « IPA non signée » (`.github/workflows/ios-ipa.yml`, macos-26), IPA en artefact.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 49. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 50. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 

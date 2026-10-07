@@ -1,12 +1,14 @@
 # Valhalla : état du chantier
 
-Mis à jour : **06/10/2026**. iOS 45 poussé ; correction HERE préparée, déploiement attend accord Arthur.
+Mis à jour : **08/10/2026**. iOS 50 poussé ; backend stations préparé, déploiement attend accord Arthur.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
 - Backend **`a85c6bc`** en production. Correction HERE **`435837c`** prête localement ; aucun nouveau déploiement autorisé.
-- Livraison iOS **`e5a50f2`**, build **45**, poussée ; Arthur relance Codemagic « IPA non signée » et tests téléphone.
+- Livraison iOS **`5124dc9`**, build **50**, poussée ; Arthur lance archive et tests téléphone.
+- Backend stations **`5646f45`** commité sans push. Livraison ciblée préparée, distincte du lot HERE non autorisé.
+- Activation exige sauvegardes, enrichissement paiement OSM et redémarrage autorisés. Production conserve actuellement zéro tag espèces.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
 - Chargement initial réparé ; ligne Thème compacte, quinze choix dans feuille dédiée.
 - Pastels EONA+, Minéral, Opale et Crépuscule sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
@@ -19,7 +21,7 @@ Mis à jour : **06/10/2026**. iOS 45 poussé ; correction HERE préparée, dépl
 - Bilan lecture production : 62 trajets, 30 retenus, 19 dynamiques. Voir `BILAN-ETA-20261006.md`, sans coordonnées ni comptes.
 - **Phases 1 à 5 livrées.** Collecte et validation de précision continuent, sans nouvelle phase 2.
 - **Phases 6 à 8 du plan initial non implémentées.** Clôture ou maintien en attente à trancher avec Arthur.
-- Aucun chantier supplémentaire lancé. Arthur choisit prochaine étape.
+- Dernier lot : stations proches, espèces strictes et ergonomie iOS. Activation production reste à autoriser.
 
 ## Phases du plan initial
 
@@ -128,6 +130,19 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Appui prolongé propose Lecture/Pause. Skip/Back et transport existants conservés ; un seul envoi par clic.
 - Changement lecteur efface ancien état ; refus conserve observation précédente. Quatre régressions ciblées ajoutées, non exécutées sous Windows.
 - Backend inchangé, aucun nouveau déploiement ni test backend. Procédure téléphone dans repo iOS `docs/LECTEUR-SYSTEME.md`.
+- 06–07/10 : iOS 46–49 par Claude. Commandes Video Lite conservées ; sondes titre tiers négatives, chantier titre abandonné.
+- 08/10 : iOS 50 sépare carburant, classement et paiement. Prix restent visibles en Proximité ; contrôles compacts sans ruban carburants.
+- Espèces exige `cashPayment.accepted=true`, même stations fermées. Filtre précède limite et densité, côté serveur et application.
+- Rayon 10 km ; moins de cinq stations ouvertes propose 25 puis 50 km. Aucun élargissement ni retrait de filtre automatique.
+- Résultat vide propose élargissement ou Tous les paiements. Chargement immédiat ; erreur donne Réessayer ; callbacks annulés ignorés.
+- Backend `5646f45` : paramètres additifs `radius` et `cash`, champs paiement/critères, prix et horaires conservés.
+- SQL vérifié en lecture seule sur PostgreSQL : rayon/espèces avant limite 60, index spatial existant utilisé.
+- Cinq tests Node et trois tests Python ciblés passent. Régressions Swift contrat/tri ajoutées, non exécutées sous Windows.
+- Flux officiel examiné : aucun service espèces. OSM déclare oui/non ; enseigne et automate ne permettent aucune déduction.
+- Export Osmose du 08/10 : 12 534 lignes, 173 oui, 110 non, 1 intervalle, 12 250 absentes. Couverture export ≈2,3 %.
+- Production observée : 11 844 stations, zéro tag espèces. Ancien import supprimait tag ; nouveau style le conserve.
+- Enrichissement initial préparé depuis PBF existant du 04/10, identifiants exacts uniquement. Aucun import ni déploiement exécuté.
+- Archive ciblée : `C:\Users\usr\Documents\x_radar_eco\fuel-5646f45.tar`, quatre fichiers. Aucun changement HERE inclus.
 
 ## Points ouverts
 
@@ -138,7 +153,10 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 45 : compilation indisponible sous Windows. Arthur relance Codemagic puis validation téléphone.
+- Build iOS 50 : compilation indisponible sous Windows. Arthur lance archive puis validation téléphone.
+- Stations espèces : activation backend et enrichissement attendent accord explicite. Sauvegarder code, données privées et table stations avant intervention.
+- Valider filtres combinés, rayon 10/25/50 km, peu/beaucoup de stations, vide, Réessayer et choix station/étape.
+- Données espèces peu renseignées. Acceptation déclarée ne garantit jamais disponibilité encaissement actuelle.
 - Lecteur système : vérifier icône après clic EONA, casque et Centre de contrôle. Demande signalée ne confirme aucune action effective.
 - Skip/Back playlist confirmés par Arthur ; vérifier absence de régression après build 45. Métadonnées selon accès réel du système.
 - API privée incompatible règles App Store/TestFlight ; désactiver variante avant distribution correspondante.
