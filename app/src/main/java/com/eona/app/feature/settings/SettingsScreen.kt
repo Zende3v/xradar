@@ -162,7 +162,7 @@ fun SettingsScreen(
             selection = current.accent,
             hasPlus = hasPlus,
             onPick = { colour ->
-                if (hasPlus) {
+                if (!colour.requiresPlus || hasPlus) {
                     AppPreferences.updateSettings { it.copy(accent = colour) }
                 } else {
                     themeOpen = false

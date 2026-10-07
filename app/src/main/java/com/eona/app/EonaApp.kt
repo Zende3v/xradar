@@ -60,13 +60,13 @@ fun EonaApp() {
     LaunchedEffect(account?.isRestricted) {
         if (account?.isRestricted == true) OffersPrompt.offerIfRestricted()
     }
-    // Plus d'EONA+ : thème et véhicule réservés rendus (iOS AppRoot).
+    // Plus d'EONA+ : palette réservée remplacée par Opale, véhicule réservé par Voiture (iOS AppRoot).
     val hasPlus by AccountRepository.hasPlus.collectAsStateWithLifecycle()
     LaunchedEffect(hasPlus) {
         if (hasPlus) return@LaunchedEffect
         AppPreferences.updateSettings {
             it.copy(
-                accent = com.eona.app.data.preferences.AccentColor.Cyan,
+                accent = if (it.accent.requiresPlus) com.eona.app.data.preferences.AccentColor.Opal else it.accent,
                 vehicleType = if (it.vehicleType.requiresPlus) com.eona.app.data.preferences.VehicleType.Car else it.vehicleType,
             )
         }

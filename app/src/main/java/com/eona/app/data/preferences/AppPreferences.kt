@@ -93,6 +93,9 @@ enum class AccentColor(val hex: String, val label: String) {
 
     val isMulticolour: Boolean get() = this in palettes
 
+    /** Unicolores et Opale gratuits ; Pastels EONA+, Minéral et Crépuscule réservés EONA+ et essai. */
+    val requiresPlus: Boolean get() = this == Pastels || this == Mineral || this == Dusk
+
     /** Pastels EONA+, Minéral, Opale et Crépuscule : mélanges sobres, trois teintes distinctes par ajout. */
     val paletteValues: List<Int>
         get() = when (this) {
@@ -122,7 +125,8 @@ enum class AccentColor(val hex: String, val label: String) {
         }
 
     companion object {
-        fun fromHex(hex: String?): AccentColor = entries.firstOrNull { it.hex == hex } ?: Cyan
+        /** Aucun choix enregistré : Opale. Choix existants gardés. */
+        fun fromHex(hex: String?): AccentColor = entries.firstOrNull { it.hex == hex } ?: Opal
 
         val unicolours: List<AccentColor> get() = entries.filterNot { it.isMulticolour }
         val palettes: List<AccentColor> get() = listOf(Pastels, Mineral, Opal, Dusk)
@@ -165,7 +169,7 @@ val CONSUMPTION_RANGE = 1.0..30.0
 data class AppSettings(
     val theme: AppTheme = AppTheme.Auto,
     /** "Couleur de l'app". */
-    val accent: AccentColor = AccentColor.Cyan,
+    val accent: AccentColor = AccentColor.Opal,
     /** "Véhicule": the position cursor's drawing. */
     val vehicleType: VehicleType = VehicleType.Arrow,
     /** Ask the router to keep the trip off toll roads. */

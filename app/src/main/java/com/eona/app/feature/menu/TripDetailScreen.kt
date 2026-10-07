@@ -48,10 +48,10 @@ fun TripDetailScreen(trip: TripRecord, onBack: () -> Unit) {
             EonaListGroup(title = "Temps") {
                 Info("Temps réel", trip.durationLabel)
                 Divider()
-                Info("Temps prévu", trip.plannedLabel ?: "Inconnu")
+                Info("Prévision au départ", trip.plannedLabel ?: "Inconnue")
                 trip.delayLabel?.let {
                     Divider()
-                    Info("Écart", it)
+                    Info(if (trip.measure?.arrived == false) "État" else "Écart", it)
                 }
             }
 

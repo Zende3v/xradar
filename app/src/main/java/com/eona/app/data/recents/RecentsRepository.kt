@@ -58,6 +58,6 @@ class RecentsRepository(context: Context) {
 
     private companion object {
         const val KEY = "list"
-        const val MAX = 8
+        const val MAX = 15
     }
 }

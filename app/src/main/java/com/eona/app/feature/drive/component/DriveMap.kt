@@ -199,6 +199,7 @@ fun DriveMap(
     val drawnPathState = rememberUpdatedState(drawnPath)
     val routePathState = rememberUpdatedState(routePath)
     val trafficState = rememberUpdatedState(traffic)
+    val previewState = rememberUpdatedState(preview)
     // "Couleur de l'app": the route, the arrow and its halo take it; the style is redrawn with it.
     val settings by AppPreferences.settings.collectAsStateWithLifecycle()
     val accent = 0xFF000000.toInt() or settings.accent.routeRgb
@@ -262,12 +263,15 @@ fun DriveMap(
 
     LaunchedEffect(mapView) {
         mapView.getMapAsync { ready ->
-            ready.uiSettings.isTiltGesturesEnabled = false
+            // Inclinaison native : deux doigts glissés à la verticale.
+            ready.uiSettings.isTiltGesturesEnabled = true
             ready.uiSettings.isLogoEnabled = false
             ready.uiSettings.isAttributionEnabled = true
             // A user pan/zoom/rotate breaks follow mode (shows the recenter button).
             ready.addOnCameraMoveStartedListener { reason ->
                 if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                    // Geste du conducteur : son angle sera gardé au recentrage (hors aperçu).
+                    nav.manualCamera = previewState.value == null
                     latestOnGesture()
                 }
             }
@@ -284,6 +288,7 @@ fun DriveMap(
                     .queryRenderedFeatures(screen, RADAR_CLUSTER, REPORT_CLUSTER, SIGN_CLUSTER)
                     .firstOrNull()
                 if (cluster != null) {
+                    nav.manualCamera = false
                     ready.animateCamera(
                         CameraUpdateFactory.newLatLngZoom(
                             latLng,
@@ -625,6 +630,7 @@ fun DriveMap(
         val bounds = LatLngBounds.Builder().apply { all.forEach { include(LatLng(it.lat, it.lon)) } }.build()
         runCatching {
             // Vue de dessus, nord en haut : trajets lisibles d'un coup d'œil.
+            nav.manualCamera = false
             current.moveCamera(
                 CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(current.cameraPosition).tilt(0.0).bearing(0.0).build()),
             )
@@ -687,6 +693,9 @@ fun DriveMap(
         var camBearing = startCam.bearing
         var camZoom = if (startCam.zoom > 1.0) startCam.zoom else NAV_ZOOM
         var camTilt = startCam.tilt
+        /** Angle choisi : gardé au recentrage, hors vues d'ensemble automatiques. */
+        var preferredTilt = NAV_TILT
+        var wasFollowing = followingState.value
 
         while (isActive) {
             val style = current.style
@@ -766,6 +775,7 @@ fun DriveMap(
                 if (groupLayer != null) {
                     groupRenderer.step(style, groupLayer, now)
                     groupRenderer.takeOverview(groupLayer, arrowLat, arrowLon)?.let { bounds ->
+                        nav.manualCamera = false
                         runCatching {
                             current.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, OVERVIEW_PADDING_PX), OVERVIEW_MS)
                         }
@@ -777,24 +787,32 @@ fun DriveMap(
                 val followLon = focused?.second ?: arrowLon
                 val followBearing = focused?.third?.toFloat() ?: arrowBearing
                 val pulse = (sin(phase.toDouble()).toFloat() + 1f) / 2f
-                (style.getLayer(POSITION_HALO) as? CircleLayer)?.setProperties(
-                    PropertyFactory.circleRadius(16f + 8f * pulse),
-                    PropertyFactory.circleOpacity(0.10f + 0.16f * pulse),
+                // Halo en image (couleur ou dégradé du thème) : rayon 18 dp de base.
+                (style.getLayer(POSITION_HALO) as? SymbolLayer)?.setProperties(
+                    PropertyFactory.iconSize((16f + 8f * pulse) / 18f),
+                    PropertyFactory.iconOpacity(0.10f + 0.16f * pulse),
                 )
-                if (followingState.value) {
+                val followingNow = followingState.value
+                if (followingNow && !wasFollowing) {
+                    // Recentrage : l'angle choisi à la main devient celui du suivi.
+                    if (nav.manualCamera) preferredTilt = camTilt
+                    nav.manualCamera = false
+                }
+                wasFollowing = followingNow
+                if (followingNow) {
                     val targetZoom = navZoom(speedLimitState.value)
                     if (firstFollow) {
                         // Snap on the very first frame so the map opens already upright.
                         firstFollow = false
                         camLat = followLat; camLon = followLon
-                        camZoom = targetZoom; camTilt = NAV_TILT
+                        camZoom = targetZoom; camTilt = preferredTilt
                         camBearing = followBearing.toDouble()
                     }
                     camLat += (followLat - camLat) * POS_LERP
                     camLon += (followLon - camLon) * POS_LERP
                     // The change of distance is eased like the rest: about two seconds, no jump.
                     camZoom += (targetZoom - camZoom) * EASE_LERP
-                    camTilt += (NAV_TILT - camTilt) * EASE_LERP
+                    camTilt += (preferredTilt - camTilt) * EASE_LERP
                     camBearing = lerpAngle(camBearing, followBearing, BEARING_LERP)
                     current.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
@@ -914,6 +932,8 @@ private class NavHolder {
     /** Last fix's ground speed and arrival time — the render loop extrapolates from them. */
     @Volatile var speedMps: Double = 0.0
     @Volatile var fixAtMs: Long = 0L
+    /** Caméra déplacée par un geste du conducteur, hors aperçu et vues d'ensemble automatiques. */
+    @Volatile var manualCamera: Boolean = false
 }
 
 /** Fused heading: smoothed sensor azimuth realigned to the GPS travel direction. */

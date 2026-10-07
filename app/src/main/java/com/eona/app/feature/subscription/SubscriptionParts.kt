@@ -72,7 +72,7 @@ data class MembershipBenefit(
             MembershipBenefit("EONA Taxi", "Empruntez les voies réservées et les accès autorisés aux taxis.", { EonaIcons.CarSide }, EonaPlusStyle.peach, "Verrouillé", "Inclus"),
             MembershipBenefit("EONA Poids lourd", "Suivez des itinéraires adaptés au gabarit et aux restrictions de votre véhicule.", { EonaIcons.Truck }, EonaPlusStyle.sky, "Verrouillé", "Inclus"),
             MembershipBenefit("Trajets en groupe", "Partagez votre position et votre heure d'arrivée avec un groupe de cinq conducteurs maximum.", { EonaIcons.People }, EonaPlusStyle.mint, "Verrouillé", "Inclus"),
-            MembershipBenefit("Thème", "Choisissez parmi 15 thèmes pour votre interface, votre tracé et votre véhicule.", { EonaIcons.Palette }, EonaPlusStyle.pink, "Cyan", "15 thèmes"),
+            MembershipBenefit("Thème", "Pastels EONA+, Minéral et Crépuscule pour votre interface, votre tracé et votre véhicule.", { EonaIcons.Palette }, EonaPlusStyle.pink, "11 couleurs + Opale", "15 thèmes"),
             MembershipBenefit("Feux en direct", "Consultez le temps restant avant le changement des feux sur votre trajet.", { ImageVector.vectorResource(R.drawable.ic_eona_traffic_light) }, EonaPlusStyle.peach, "Verrouillé", "Inclus"),
         )
     }
@@ -313,6 +313,6 @@ private val FEATURES = listOf(
     Triple("EONA Taxi", "Verrouillé", "Inclus"),
     Triple("EONA Poids lourd", "Verrouillé", "Inclus"),
     Triple("Trajets en groupe", "Verrouillé", "Inclus"),
-    Triple("Thème", "Cyan", "15 thèmes"),
+    Triple("Thème", "11 couleurs + Opale", "15 thèmes"),
     Triple("Feux en direct", "Verrouillé", "Inclus"),
 )

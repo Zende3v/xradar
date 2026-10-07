@@ -8,6 +8,7 @@ import com.eona.app.core.model.RoadAlert
 import com.eona.app.core.model.Route
 import com.eona.app.core.model.TripMeasure
 import com.eona.app.core.model.TripRecord
+import com.eona.app.core.model.expectedSeconds
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -94,7 +95,8 @@ class TripRecorder(
     /** The trip's route: the time already driven plus its estimate, once per destination. */
     fun plan(route: Route, now: Long = System.currentTimeMillis()) {
         if (plannedSeconds != null) return
-        plannedSeconds = ((now - startedAt) / 1000.0).roundToInt() + route.durationSeconds
+        // Temps HERE du trajet s'il est connu, comme l'arrivée annoncée.
+        plannedSeconds = ((now - startedAt) / 1000.0).roundToInt() + route.expectedSeconds
     }
 
     /** A route the trip follows (the first one, a recalculation, a faster one): its engine counts. */

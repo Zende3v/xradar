@@ -83,7 +83,7 @@ fun ThemeRow(selection: AccentColor, hasPlus: Boolean, onOpen: () -> Unit) {
         EonaText("Thème", style = EonaTheme.typography.body, color = colors.textPrimary, modifier = Modifier.weight(1f))
         ThemeSwatch(selection, 22.dp)
         EonaText(selection.label, style = EonaTheme.typography.callout, color = colors.textSecondary)
-        if (!hasPlus) EonaIcon(EonaIcons.Lock, contentDescription = null, tint = colors.textTertiary, size = 14.dp)
+        if (selection.requiresPlus && !hasPlus) EonaIcon(EonaIcons.Lock, contentDescription = null, tint = colors.textTertiary, size = 14.dp)
         EonaIcon(EonaIcons.ChevronRight, contentDescription = null, tint = colors.textTertiary, size = 16.dp)
     }
 }
@@ -158,7 +158,7 @@ fun ThemePickerSheet(open: Boolean, selection: AccentColor, hasPlus: Boolean, on
                 ) {
                     ThemeSwatch(selection, 32.dp)
                     EonaText(selection.label, style = EonaTheme.typography.bodyStrong, color = EonaPlusStyle.primary, modifier = Modifier.weight(1f))
-                    if (!hasPlus) EonaIcon(EonaIcons.Lock, contentDescription = "Thèmes EONA+", tint = EonaPlusStyle.muted, size = 15.dp)
+                    if (selection.requiresPlus && !hasPlus) EonaIcon(EonaIcons.Lock, contentDescription = "Thèmes EONA+", tint = EonaPlusStyle.muted, size = 15.dp)
                 }
                 EonaPlusLabel("Couleurs", color = EonaPlusStyle.muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(spacing.xs), verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
@@ -201,7 +201,7 @@ fun ThemePickerSheet(open: Boolean, selection: AccentColor, hasPlus: Boolean, on
                         ThemeSwatch(palette, 28.dp)
                         EonaText(palette.label, style = EonaTheme.typography.callout, color = EonaPlusStyle.primary, modifier = Modifier.weight(1f))
                         when {
-                            !hasPlus -> EonaIcon(EonaIcons.Lock, contentDescription = null, tint = EonaPlusStyle.muted, size = 15.dp)
+                            palette.requiresPlus && !hasPlus -> EonaIcon(EonaIcons.Lock, contentDescription = null, tint = EonaPlusStyle.muted, size = 15.dp)
                             chosen -> EonaIcon(EonaIcons.Check, contentDescription = null, tint = Color(0xFF000000.toInt() or palette.rgb), size = 18.dp)
                         }
                     }

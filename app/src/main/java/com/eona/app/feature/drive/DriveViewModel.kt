@@ -636,6 +636,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                     from,
                     GeoPoint(destination.lat, destination.lon),
                     if (simulated == null) headingOf(fix) else null,
+                    timed = true,
                 )
                 for (wait in ROUTE_RETRY_MS) {
                     if (answer !is RouteAnswer.Failed) break
@@ -649,6 +650,7 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                         again,
                         GeoPoint(destination.lat, destination.lon),
                         if (simulated == null) headingOf(LocationRepository.location.value) else null,
+                        timed = true,
                     )
                 }
                 if (ActiveTripRepository.destination.value != destination) return@collect
@@ -1445,17 +1447,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * The traffic where the car stands still, for the trip's long stops (D1.4): a jam when the
-     * route's traffic slows it or a "Bouchon" lies close by, a clear road when that traffic is
-     * known here, unknown otherwise.
+     * route's traffic slows it or a "Bouchon" lies close by. Absence de bouchon ne prouve pas route
+     * libre : temps HERE global et sections partielles ne mesurent pas la circulation locale (iOS).
      */
-    private fun stopTraffic(fix: LocationSample): StopTraffic {
-        val slowed = slowedHere()
-        return when {
-            slowed == true || jamReportedNear(fix.latitude, fix.longitude) -> StopTraffic.Jam
-            slowed == false -> StopTraffic.Clear
-            else -> StopTraffic.Unknown
-        }
-    }
+    private fun stopTraffic(fix: LocationSample): StopTraffic =
+        if (slowedHere() == true || jamReportedNear(fix.latitude, fix.longitude)) StopTraffic.Jam else StopTraffic.Unknown
 
     /**
      * "Oui": a "Bouchon" report there (a guest's quota spared); "Non": the probe is taken back

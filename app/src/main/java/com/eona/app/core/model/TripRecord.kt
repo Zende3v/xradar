@@ -126,12 +126,26 @@ data class TripRecord(
     val durationLabel: String get() = duration(durationSeconds)
 
     /** The route's estimate, "41 min"; null without one. */
-    val plannedLabel: String? get() = plannedSeconds?.let { duration(it) }
+    val plannedLabel: String? get() = displayedPlannedSeconds?.let { duration(it) }
 
-    /** The real time against the estimate: "+4 min", "−3 min", or "À l'heure" within a minute; null without an estimate. */
+    /** Prévision affichée au départ (iOS) : relevé 0 % gardé d'abord, ancien plan en secours ; destination changée : aucune. */
+    private val displayedPlannedSeconds: Int?
+        get() {
+            if (measure?.retargeted == true) return null
+            val departure = measure?.etaChecks?.firstOrNull {
+                it.at == 0 && it.shownAt >= startedAt &&
+                    it.shownAt.toDouble() <= startedAt + durationSeconds * 1000.0 &&
+                    it.arrivalAt > it.shownAt
+            }
+            if (departure != null) return ((departure.arrivalAt - startedAt) / 1000.0).toInt()
+            return plannedSeconds
+        }
+
+    /** Écart avec l'arrivée annoncée au départ : "+4 min", "−3 min", "À l'heure". Trajet interrompu : aucune fausse arrivée. */
     val delayLabel: String?
         get() {
-            val planned = plannedSeconds ?: return null
+            if (measure?.arrived == false) return "Interrompu"
+            val planned = displayedPlannedSeconds ?: return null
             val delta = durationSeconds - planned
             if (abs(delta) < 60) return "À l'heure"
             return (if (delta > 0) "+" else "−") + duration(abs(delta))
