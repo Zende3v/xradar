@@ -101,7 +101,7 @@ local PLACE_TAGS = {
     'name', 'brand', 'operator', 'network', 'opening_hours', 'access', 'fee', 'parking', 'capacity',
     'park_ride', 'covered', 'maxstay', 'stars', 'charging_station:output', 'maxpower',
     'addr:housenumber', 'addr:street', 'addr:place', 'addr:postcode', 'addr:city', 'ref:FR:prix-carburants',
-    'amenity', 'shop', 'tourism', 'motorcar', 'bicycle', 'hgv',
+    'amenity', 'shop', 'tourism', 'motorcar', 'bicycle', 'hgv', 'payment:cash',
 }
 
 -- Nobody passing by may use it.

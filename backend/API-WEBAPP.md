@@ -798,3 +798,40 @@ Livraison iOS : `7792bb8`, build 38. Compilation sous Codemagic et validation t�
 - Protection propre compte et dernier administrateur actif. Promotion membre exige email, pseudo et authentification possible.
 - iOS expose suspension réversible, aucun nouveau bouton de suppression définitive.
 - Sauvegarder fichier comptes, registre bannissements et consommation HERE avant déploiement.
+
+## Stations proches : espèces, 08/10/2026
+
+- `GET /api/places/near?lat=48.79&lon=2.36&kind=fuel&pool=1&radius=10000&cash=1`.
+- `radius` facultatif, mètres à vol d'oiseau. Valeur strictement positive, maximum 50 000 m.
+- Sans rayon : comportement historique conservé. Limite 20 ; `pool=1` conserve maximum 60 stations.
+- `cash=1` exige paiement espèces explicitement cartographié. `cash=0` ou absence : toutes stations.
+- Espèces et rayon filtrés avant limite SQL. Stations admissibles restent trouvables en zone dense.
+- Aucun élargissement automatique. Application propose 10, 25 puis 50 km si résultats insuffisants.
+- Station ajoute `cashPayment: {accepted:true|false|null,source:"osm"|null}`.
+- OSM `payment:cash=yes|only` : accepté. `no` : refusé. Absence, horaires ou autre valeur : inconnu.
+- Enseigne, guichet et automate ne prouvent jamais acceptation espèces.
+- Prix officiels, rapprochement sécurisé, distances et horaires station conservés.
+- Réponse carburant ajoute `search: {radiusM:number|null,cashOnly:boolean}`.
+- Acceptation espèces ne garantit pas paiement disponible actuellement. Horaires station ne deviennent jamais horaires paiement.
+- Flux officiel mesure prix et horaires ; aucun service paiement espèces observé dans flux du 08/10.
+- Import OSM conserve désormais `payment:cash`. Base actuelle exige enrichissement ciblé ou prochain import avec nouveau style.
+- Aucun déploiement, import ni redémarrage exécuté dans ce lot.
+
+Sources : [OSM payment:cash](https://wiki.openstreetmap.org/wiki/Key:payment:cash),
+[données officielles carburants](https://www.prix-carburants.gouv.fr/rubrique/opendata/).
+
+### Enrichissement ciblé préparé
+
+- Production observée : 11 844 stations, aucun tag `payment:cash` conservé.
+- Source locale existante : `/var/lib/eona-signs/roads-signs.osm.pbf`, extrait du 04/10, tags originaux avant import Lua.
+- `bin/eona-fuel-cash-backfill.py` prépare SQL ; aucun accès réseau, aucune connexion base.
+- Extraction : `osmium tags-filter --omit-referenced -f osm /var/lib/eona-signs/roads-signs.osm.pbf nwr/amenity=fuel`.
+- Entrée XML pipée vers `python3 bin/eona-fuel-cash-backfill.py - /chemin/fuel-cash.sql`.
+- Correspondance exacte `node/ID`, `way/ID`, `relation/ID`. Aucun rapprochement par position, nom ou enseigne.
+- Transaction complète tags absents seulement. Tags existants conservés, géométrie et prix inchangés.
+- Table publiée `signs.place` enrichie. `osm.places` complétée seulement si schéma import existe encore.
+- Sauvegarder table publiée avant exécution. Bloquer reconstruction concurrente avec verrou geodata existant.
+- Exécuter SQL avec utilisateur `eona` et arrêt sur erreur, uniquement après accord Arthur.
+- Style Lua conserve tag pour imports suivants ; prochaine publication garde donc donnée.
+
+Extraction : [documentation Osmium tags-filter](https://docs.osmcode.org/osmium/latest/osmium-tags-filter.html).

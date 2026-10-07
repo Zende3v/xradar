@@ -22,19 +22,23 @@ const FALLBACK_NAMES = {
 
 // The kind is part of the SQL text (checked against KINDS) so each search uses its own
 // partial index; the position and the count stay parameters.
-const nearSql = (kind) => `
+const nearSql = (kind, { radiusM, cashOnly }) => `
   SELECT p.id, p.tags, p.commune, ST_Y(p.geom) AS lat, ST_X(p.geom) AS lon,
          round(ST_Distance(p.geom_m, q.here))::int AS distance_m
   FROM (SELECT ST_Transform(ST_SetSRID(ST_MakePoint($2, $1), 4326), 2154) AS here) q
   CROSS JOIN LATERAL (
-    SELECT * FROM ${config.placeTable} WHERE kind = '${kind}' ORDER BY geom_m <-> q.here LIMIT $3
+    SELECT * FROM ${config.placeTable} WHERE kind = '${kind}'
+      ${radiusM === null ? '' : 'AND ST_DWithin(geom_m, q.here, $4)'}
+      ${cashOnly ? "AND lower(trim(tags->>'payment:cash')) IN ('yes', 'only')" : ''}
+    ORDER BY geom_m <-> q.here LIMIT $3
   ) p
   ORDER BY distance_m`;
 
 /** The [limit] nearest places of [kind] around lat/lon, nearest first. */
-export async function near(kind, lat, lon, limit) {
+export async function near(kind, lat, lon, limit, { radiusM = null, cashOnly = false } = {}) {
   if (!KINDS.includes(kind)) throw new Error(`unknown kind ${kind}`);
-  const { rows } = await db.query(nearSql(kind), [lat, lon, limit]);
+  const values = radiusM === null ? [lat, lon, limit] : [lat, lon, limit, radiusM];
+  const { rows } = await db.query(nearSql(kind, { radiusM, cashOnly }), values);
   return rows.map((row) => ({
     id: row.id,
     kind,
@@ -69,10 +73,18 @@ export function describe(place, { officialHours = null, now = new Date() } = {})
     distanceM: place.distanceM,
     customersOnly: tags.access === 'customers',
     hours: official ? { ...official, source: 'official' } : mapped && { ...mapped, source: 'osm' },
+    ...(kind === 'fuel' ? { cashPayment: cashPayment(tags) } : {}),
     ...(kind === 'charging' ? { charging: charging(tags) } : {}),
     ...(kind === 'parking' ? { parking: parking(tags) } : {}),
     ...(kind === 'hotel' ? { stars: stars(tags.stars) } : {}),
   };
+}
+
+/** Explicit cash payment only: an absent tag or another value never means refusal. */
+export function cashPayment(tags) {
+  const value = String(tags?.['payment:cash'] ?? '').trim().toLowerCase();
+  const accepted = value === 'yes' || value === 'only' ? true : value === 'no' ? false : null;
+  return { accepted, source: accepted === null ? null : 'osm' };
 }
 
 function nameOf(kind, tags) {

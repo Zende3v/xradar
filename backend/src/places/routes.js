@@ -6,13 +6,15 @@ import { KINDS, describe, near } from './store.js';
 export const placeRouter = Router();
 
 /**
- * GET /api/places/near?lat&lon&kind=fuel[&limit=20][&pool=1]
+ * GET /api/places/near?lat&lon&kind=fuel[&limit=20][&pool=1][&radius=10000][&cash=1]
  * The nearest places of a kind, nearest first — no perimeter: PostGIS walks outwards until it
  * has them. Each comes with its opening state and today's hours, and what matters for its
  * kind: power and connectors for a charger, fee and type for a car park, stars for a hotel,
  * the official prices (and declared hours) for a fuel station.
  * `pool=1`: up to `placePoolLimit` places instead of `limit`, for the app to rank them (open
  * first, fuel with a price first).
+ * Fuel can constrain distance and require explicitly mapped cash payment. These constraints
+ * apply before LIMIT, so dense areas cannot hide eligible stations behind a candidate pool.
  */
 placeRouter.get('/near', async (req, res) => {
   const lat = Number(req.query.lat);
@@ -24,13 +26,24 @@ placeRouter.get('/near', async (req, res) => {
   if (!KINDS.includes(kind)) {
     return res.status(400).json({ error: `unknown kind, expected one of ${KINDS.join(', ')}` });
   }
+  const radiusM = req.query.radius === undefined ? null : Number(req.query.radius);
+  if (radiusM !== null && (!Number.isFinite(radiusM) || radiusM <= 0 || radiusM > 50000)) {
+    return res.status(400).json({ error: 'radius must be greater than 0 and at most 50000 metres' });
+  }
+  if (req.query.cash !== undefined && req.query.cash !== '0' && req.query.cash !== '1') {
+    return res.status(400).json({ error: 'cash must be 0 or 1' });
+  }
+  const cashOnly = req.query.cash === '1';
+  if (cashOnly && kind !== 'fuel') {
+    return res.status(400).json({ error: 'cash filter is available for fuel only' });
+  }
   const limit = req.query.pool === '1'
     ? config.placePoolLimit
     : Math.max(1, Math.min(Number(req.query.limit) || config.placeLimit, config.placePoolLimit));
 
   let found;
   try {
-    found = await near(kind, lat, lon, limit);
+    found = await near(kind, lat, lon, limit, { radiusM, cashOnly });
   } catch (e) {
     console.error('[places]', kind, e.message);
     return res.status(503).json({ error: 'places unavailable' });
@@ -52,6 +65,7 @@ placeRouter.get('/near', async (req, res) => {
     count: places.length,
     places,
     source: 'postgis',
+    search: { radiusM, cashOnly },
     fuelPrices: {
       provider: 'prix-carburants.gouv.fr',
       ready: fuelStore.meta.ready,
