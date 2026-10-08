@@ -814,15 +814,15 @@ Livraison iOS : `7792bb8`, build 38. Compilation sous Codemagic et validation t�
 - Réponse carburant ajoute `search: {radiusM:number|null,cashOnly:boolean}`.
 - Acceptation espèces ne garantit pas paiement disponible actuellement. Horaires station ne deviennent jamais horaires paiement.
 - Flux officiel mesure prix et horaires ; aucun service paiement espèces observé dans flux du 08/10.
-- Import OSM conserve désormais `payment:cash`. Base actuelle exige enrichissement ciblé ou prochain import avec nouveau style.
-- Aucun déploiement, import ni redémarrage exécuté dans ce lot.
+- Import OSM conserve désormais `payment:cash`. Enrichissement initial exécuté le 08/10 après accord Arthur.
+- Backend `5646f45` déployé sur quatre fichiers, puis redémarré. Code HERE et routage conservés.
 
 Sources : [OSM payment:cash](https://wiki.openstreetmap.org/wiki/Key:payment:cash),
 [données officielles carburants](https://www.prix-carburants.gouv.fr/rubrique/opendata/).
 
-### Enrichissement ciblé préparé
+### Enrichissement ciblé
 
-- Production observée : 11 844 stations, aucun tag `payment:cash` conservé.
+- Avant intervention : 11 844 stations, aucun tag `payment:cash` conservé.
 - Source locale existante : `/var/lib/eona-signs/roads-signs.osm.pbf`, extrait du 04/10, tags originaux avant import Lua.
 - `bin/eona-fuel-cash-backfill.py` prépare SQL ; aucun accès réseau, aucune connexion base.
 - Extraction : `osmium tags-filter --omit-referenced -f osm /var/lib/eona-signs/roads-signs.osm.pbf nwr/amenity=fuel`.
@@ -833,5 +833,9 @@ Sources : [OSM payment:cash](https://wiki.openstreetmap.org/wiki/Key:payment:cas
 - Sauvegarder table publiée avant exécution. Bloquer reconstruction concurrente avec verrou geodata existant.
 - Exécuter SQL avec utilisateur `eona` et arrêt sur erreur, uniquement après accord Arthur.
 - Style Lua conserve tag pour imports suivants ; prochaine publication garde donc donnée.
+- Intervention du 08/10, 02:00 Paris : 271 objets explicites ; 265 stations enrichies, dont 160 `yes` et 105 `no`.
+- 11 579 stations restent inconnues. Couverture déclarative environ 2,2 % ; aucune inférence supplémentaire.
+- Sauvegarde privée code/données/stations : `/var/backups/eona/fuel-5646f45-20261008-000014`.
+- API publique Paris, rayon 10 km, espèces : trois résultats avec prix. Sans filtre : 60 candidats, 33 avec prix.
 
 Extraction : [documentation Osmium tags-filter](https://docs.osmcode.org/osmium/latest/osmium-tags-filter.html).

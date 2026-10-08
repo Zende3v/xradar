@@ -1,14 +1,14 @@
 # Valhalla : état du chantier
 
-Mis à jour : **08/10/2026**. iOS 50 poussé ; backend stations préparé, déploiement attend accord Arthur.
+Mis à jour : **08/10/2026**. iOS 50 poussé ; backend stations déployé, espèces enrichies après accord Arthur.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
-- Backend **`a85c6bc`** en production. Correction HERE **`435837c`** prête localement ; aucun nouveau déploiement autorisé.
+- Backend **`a85c6bc`** avec quatre fichiers stations **`5646f45`** en production. Correction HERE **`435837c`** reste locale, non déployée.
 - Livraison iOS **`5124dc9`**, build **50**, poussée ; Arthur lance archive et tests téléphone.
-- Backend stations **`5646f45`** commité sans push. Livraison ciblée préparée, distincte du lot HERE non autorisé.
-- Activation exige sauvegardes, enrichissement paiement OSM et redémarrage autorisés. Production conserve actuellement zéro tag espèces.
+- Backend stations **`5646f45`** commité sans push ; déploiement ciblé réalisé le 08/10 à 02:00 Paris, accord Arthur reçu.
+- Production : 11 844 stations ; espèces déclarées oui pour 160, non pour 105, inconnues pour 11 579.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
 - Chargement initial réparé ; ligne Thème compacte, quinze choix dans feuille dédiée.
 - Pastels EONA+, Minéral, Opale et Crépuscule sur actions, sélection, recentrage, curseur et halo. Couleurs de sécurité conservées.
@@ -21,7 +21,7 @@ Mis à jour : **08/10/2026**. iOS 50 poussé ; backend stations préparé, dépl
 - Bilan lecture production : 62 trajets, 30 retenus, 19 dynamiques. Voir `BILAN-ETA-20261006.md`, sans coordonnées ni comptes.
 - **Phases 1 à 5 livrées.** Collecte et validation de précision continuent, sans nouvelle phase 2.
 - **Phases 6 à 8 du plan initial non implémentées.** Clôture ou maintien en attente à trancher avec Arthur.
-- Dernier lot : stations proches, espèces strictes et ergonomie iOS. Activation production reste à autoriser.
+- Dernier lot : stations proches, espèces strictes et ergonomie iOS. API publique vérifiée ; validation téléphone reste à réaliser.
 
 ## Phases du plan initial
 
@@ -140,9 +140,14 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Cinq tests Node et trois tests Python ciblés passent. Régressions Swift contrat/tri ajoutées, non exécutées sous Windows.
 - Flux officiel examiné : aucun service espèces. OSM déclare oui/non ; enseigne et automate ne permettent aucune déduction.
 - Export Osmose du 08/10 : 12 534 lignes, 173 oui, 110 non, 1 intervalle, 12 250 absentes. Couverture export ≈2,3 %.
-- Production observée : 11 844 stations, zéro tag espèces. Ancien import supprimait tag ; nouveau style le conserve.
-- Enrichissement initial préparé depuis PBF existant du 04/10, identifiants exacts uniquement. Aucun import ni déploiement exécuté.
+- Avant intervention : 11 844 stations, zéro tag espèces. Ancien import supprimait tag ; nouveau style le conserve.
+- Enrichissement depuis PBF existant du 04/10 : 271 objets explicites, 265 identifiants publiés enrichis. Aucun rapprochement géographique.
 - Archive ciblée : `C:\Users\usr\Documents\x_radar_eco\fuel-5646f45.tar`, quatre fichiers. Aucun changement HERE inclus.
+- Accord Arthur reçu ; sauvegardes code, données privées et stations vérifiées avant enrichissement et redémarrage.
+- Sauvegarde privée : `/var/backups/eona/fuel-5646f45-20261008-000014`. Verrou geodata détenu pendant intervention.
+- Service actif, prix officiels chargés. Paris 10 km : trois stations espèces, toutes avec prix ; API publique confirme.
+- Recherche sans filtre : 60 candidats, 33 avec prix. Filtre strict et rayon respectés ; autres fichiers source vérifiés inchangés.
+- Preuves locales VPS : `/opt/eona-fuel-stage-5646f45-20261008-000014/verification.json`. Aucun gain couverture supposé.
 
 ## Points ouverts
 
@@ -154,7 +159,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
 - Build iOS 50 : compilation indisponible sous Windows. Arthur lance archive puis validation téléphone.
-- Stations espèces : activation backend et enrichissement attendent accord explicite. Sauvegarder code, données privées et table stations avant intervention.
+- Stations espèces : backend activé et données enrichies après accord. Couverture renseignée 265/11 844, soit environ 2,2 %.
 - Valider filtres combinés, rayon 10/25/50 km, peu/beaucoup de stations, vide, Réessayer et choix station/étape.
 - Données espèces peu renseignées. Acceptation déclarée ne garantit jamais disponibilité encaissement actuelle.
 - Lecteur système : vérifier icône après clic EONA, casque et Centre de contrôle. Demande signalée ne confirme aucune action effective.
@@ -162,7 +167,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - API privée incompatible règles App Store/TestFlight ; désactiver variante avant distribution correspondante.
 - Vérifier inclinaison/recentrage, quinze récents persistants, historique annoncé et départ groupe avec HERE.
 - Déployer `435837c` et activer plafond 10 € exige accord distinct, après sauvegarde code/comptes/bans/consommation HERE.
-- Déploiement Gestion EONA autorisé puis réalisé le 05/10. Backend inchangé ; aucune nouvelle campagne backend dans ce lot.
+- Déploiement Gestion EONA réalisé le 05/10. Lot stations du 08/10 conserve code comptes, bans, routage et HERE.
 - Sessions backend restent en mémoire. Membres exigent Bearer valide ; redémarrage impose reconnexion, cache iOS périmé effacé.
 - Identifiant appareil EONA reste dans Keychain ; aucun HWID matériel accessible. Blocage limite appareils connus par ce service.
 - Perso reporté. Feux en direct toujours en préparation, cadenas gratuit ; aucune donnée réelle actuellement.

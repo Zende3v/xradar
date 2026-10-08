@@ -51,6 +51,7 @@ irréversibles.
 - Espèces : OSM `payment:cash=yes|only` uniquement ; absence inconnue. Filtre strict confirmé Arthur le 08/10.
 - Rayon stations 10 km, élargissement explicite 25/50 km si peu de résultats. Paiement ne prouve pas disponibilité actuelle.
 - Import conserve paiement ; enrichissement initial par identifiant OSM exact, sans rapprochement géographique ni déduction d'enseigne.
+- Stations backend `5646f45` déployé le 08/10 après accord ; 160 oui, 105 non, 11 579 inconnues. HERE inchangé.
 - Mini-player : Lecteur système expérimental dans IPA non signée, API privée Apple. Lecture/pause Video Lite confirmée sur iPhone.
 - Skip/Back Video Lite confirmés avec playlist. Synchronisation icône iOS 45 attend validation téléphone.
 - iOS 46 (Claude, 06/10) : toutes commandes par MRMediaRemoteSendCommand ; boutons jamais grisés, avance seule 15 s par défaut.
