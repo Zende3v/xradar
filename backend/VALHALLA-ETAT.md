@@ -1,12 +1,12 @@
 # Valhalla : état du chantier
 
-Mis à jour : **08/10/2026**. iOS 50 poussé ; backend stations déployé, espèces enrichies après accord Arthur.
+Mis à jour : **10/10/2026**. iOS 51 poussé, boutons stations corrigés ; backend inchangé depuis déploiement du 08/10.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
 - Backend **`a85c6bc`** avec quatre fichiers stations **`5646f45`** en production. Correction HERE **`435837c`** reste locale, non déployée.
-- Livraison iOS **`5124dc9`**, build **50**, poussée ; Arthur lance archive et tests téléphone.
+- Livraison iOS **`ef76dea`**, build **51**, poussée ; Arthur lance archive et validation téléphone.
 - Backend stations **`5646f45`** commité sans push ; déploiement ciblé réalisé le 08/10 à 02:00 Paris, accord Arthur reçu.
 - Production : 11 844 stations ; espèces déclarées oui pour 160, non pour 105, inconnues pour 11 579.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
@@ -21,7 +21,7 @@ Mis à jour : **08/10/2026**. iOS 50 poussé ; backend stations déployé, espè
 - Bilan lecture production : 62 trajets, 30 retenus, 19 dynamiques. Voir `BILAN-ETA-20261006.md`, sans coordonnées ni comptes.
 - **Phases 1 à 5 livrées.** Collecte et validation de précision continuent, sans nouvelle phase 2.
 - **Phases 6 à 8 du plan initial non implémentées.** Clôture ou maintien en attente à trancher avec Arthur.
-- Dernier lot : stations proches, espèces strictes et ergonomie iOS. API publique vérifiée ; validation téléphone reste à réaliser.
+- Dernier lot : DA stations corrigée, commandes réorganisées. Vérification API du 08/10 conservée ; nouveau rendu téléphone à valider.
 
 ## Phases du plan initial
 
@@ -148,6 +148,10 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Service actif, prix officiels chargés. Paris 10 km : trois stations espèces, toutes avec prix ; API publique confirme.
 - Recherche sans filtre : 60 candidats, 33 avec prix. Filtre strict et rayon respectés ; autres fichiers source vérifiés inchangés.
 - Preuves locales VPS : `/opt/eona-fuel-stage-5646f45-20261008-000014/verification.json`. Aucun gain couverture supposé.
+- 10/10 : Arthur refuse DA introduite au build 50. iOS 51 réutilise `EonaChip` et `EonaButton`, sélection et palettes partagées.
+- Carburants directs sur ruban existant ; classement Proximité/Prix, Espèces et rayon dessous. Commandes adaptent largeur et texte agrandi.
+- Rayon reste disponible pendant chargement et erreur. Élargir, Tous les paiements et Réessayer utilisent boutons EONA.
+- Aucun changement backend, règles métiers, réseau ou carte. Diff vérifié ; aucune nouvelle campagne tests pour présentation.
 
 ## Points ouverts
 
@@ -158,7 +162,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 50 : compilation indisponible sous Windows. Arthur lance archive puis validation téléphone.
+- Build iOS 51 : compilation indisponible sous Windows. Arthur lance archive puis validation téléphone, verre/palettes/texte agrandi à contrôler.
 - Stations espèces : backend activé et données enrichies après accord. Couverture renseignée 265/11 844, soit environ 2,2 %.
 - Valider filtres combinés, rayon 10/25/50 km, peu/beaucoup de stations, vide, Réessayer et choix station/étape.
 - Données espèces peu renseignées. Acceptation déclarée ne garantit jamais disponibilité encaissement actuelle.
