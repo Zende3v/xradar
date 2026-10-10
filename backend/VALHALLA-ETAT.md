@@ -1,12 +1,12 @@
 # Valhalla : état du chantier
 
-Mis à jour : **10/10/2026**. iOS 51 poussé, boutons stations corrigés ; backend inchangé depuis déploiement du 08/10.
+Mis à jour : **10/10/2026**. iOS 52 poussé, carburants regroupés selon choix Arthur ; backend inchangé depuis déploiement du 08/10.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
 - Backend **`a85c6bc`** avec quatre fichiers stations **`5646f45`** en production. Correction HERE **`435837c`** reste locale, non déployée.
-- Livraison iOS **`ef76dea`**, build **51**, poussée ; Arthur lance archive et validation téléphone.
+- Livraison iOS **`22af8e3`**, build **52**, poussée ; Arthur lance archive et validation téléphone.
 - Backend stations **`5646f45`** commité sans push ; déploiement ciblé réalisé le 08/10 à 02:00 Paris, accord Arthur reçu.
 - Production : 11 844 stations ; espèces déclarées oui pour 160, non pour 105, inconnues pour 11 579.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
@@ -152,6 +152,8 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Carburants directs sur ruban existant ; classement Proximité/Prix, Espèces et rayon dessous. Commandes adaptent largeur et texte agrandi.
 - Rayon reste disponible pendant chargement et erreur. Élargir, Tous les paiements et Réessayer utilisent boutons EONA.
 - Aucun changement backend, règles métiers, réseau ou carte. Diff vérifié ; aucune nouvelle campagne tests pour présentation.
+- Réponse Arthur reçue : carburants regroupés dans bouton. iOS 52 remplace ruban par menu, conserve `EonaChip` et palette.
+- Carburant et Proximité/Prix première ligne ; Espèces et rayon dessous. Menu coche carburant actif, prix changent localement.
 
 ## Points ouverts
 
@@ -162,7 +164,7 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 51 : compilation indisponible sous Windows. Arthur lance archive puis validation téléphone, verre/palettes/texte agrandi à contrôler.
+- Build iOS 52 : compilation indisponible sous Windows. Arthur lance archive puis validation téléphone, verre/palettes/texte agrandi à contrôler.
 - Stations espèces : backend activé et données enrichies après accord. Couverture renseignée 265/11 844, soit environ 2,2 %.
 - Valider filtres combinés, rayon 10/25/50 km, peu/beaucoup de stations, vide, Réessayer et choix station/étape.
 - Données espèces peu renseignées. Acceptation déclarée ne garantit jamais disponibilité encaissement actuelle.

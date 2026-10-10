@@ -49,7 +49,7 @@ irréversibles.
 - Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
 - Carte iOS : inclinaison native à deux doigts ; recentrage conserve angle choisi. Quinze recherches récentes conservées.
 - Stations : carburant, classement Proximité/Prix et Espèces indépendants ; prix conservés en tri Proximité.
-- Stations iOS 51 : carburants directs ; Proximité/Prix, Espèces et rayon dessous. `EonaChip`/`EonaButton` existants, aucune capsule locale.
+- Stations iOS 52 : carburant regroupé dans bouton, choix Arthur. Proximité/Prix directs ; Espèces et rayon dessous. Composants EONA existants.
 - Espèces : OSM `payment:cash=yes|only` uniquement ; absence inconnue. Filtre strict confirmé Arthur le 08/10.
 - Rayon stations 10 km, élargissement explicite 25/50 km si peu de résultats. Paiement ne prouve pas disponibilité actuelle.
 - Import conserve paiement ; enrichissement initial par identifiant OSM exact, sans rapprochement géographique ni déduction d'enseigne.
@@ -104,7 +104,7 @@ irréversibles.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
 - Alternative : GitHub Actions, workflow manuel « IPA non signée » (`.github/workflows/ios-ipa.yml`, macos-26), IPA en artefact.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 51. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 52. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
