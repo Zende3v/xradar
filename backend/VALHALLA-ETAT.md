@@ -1,12 +1,12 @@
 # Valhalla : état du chantier
 
-Mis à jour : **13/10/2026**. iOS 53 poussé, schéma stations appliqué ; aucun changement backend dans ce lot.
+Mis à jour : **13/10/2026**. iOS 54 poussé, rangée stations compacte validée sur proposition ; rendu iPhone à contrôler.
 
 ## Point de reprise
 
 - Valhalla **3.9.0** actif pour tous : `/health.routing.mode = "all"`, état `up`.
 - Backend **`a85c6bc`** avec quatre fichiers stations **`5646f45`** en production. Correction HERE **`435837c`** reste locale, non déployée.
-- Livraison iOS **`6f7bc64`**, build **53**, poussée ; Arthur lance archive et validation téléphone.
+- Livraison iOS **`c51b834`**, build **54**, poussée ; Arthur lance archive et validation téléphone.
 - Backend stations **`5646f45`** commité sans push ; déploiement ciblé réalisé le 08/10 à 02:00 Paris, accord Arthur reçu.
 - Production : 11 844 stations ; espèces déclarées oui pour 160, non pour 105, inconnues pour 11 579.
 - Gestion EONA : présence, activité anonyme, gestion comptes, bans persistants, historique HERE. Contrat backend inchangé.
@@ -21,7 +21,7 @@ Mis à jour : **13/10/2026**. iOS 53 poussé, schéma stations appliqué ; aucun
 - Bilan lecture production : 62 trajets, 30 retenus, 19 dynamiques. Voir `BILAN-ETA-20261006.md`, sans coordonnées ni comptes.
 - **Phases 1 à 5 livrées.** Collecte et validation de précision continuent, sans nouvelle phase 2.
 - **Phases 6 à 8 du plan initial non implémentées.** Clôture ou maintien en attente à trancher avec Arthur.
-- Dernier lot : A1 conservé, A3 trois menus, A2 liste commune ; secours automatique si vide. Rendu téléphone à valider.
+- Dernier lot : A3 rangée unique, deux menus et Espèces direct ; Plus proche défaut. Secours automatique et A2 conservés.
 
 ## Phases du plan initial
 
@@ -161,6 +161,10 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Erreur ou annulation arrête séquence ; données espèces strictes et rayon recoupés localement. Aucun retrait automatique du filtre.
 - Six tests Swift ciblés ajoutés, non exécutés sous Windows. Revue ciblée surface commune et diff réalisée, aucune compilation revendiquée.
 - Backend existant conserve contrat rayon/espèces. Aucun déploiement, changement Android ni requête HERE dans ce lot.
+- iOS 54 : Arthur valide rangée unique, trois largeurs égales ; menus carburant/Plus proche-Prix et interrupteur Espèces direct.
+- Boutons réduits, label et surface partagés ; thème conservé. Aucun retour sur deux lignes ; dimensions suivent texte agrandi.
+- Plus proche devient défaut lors passage à nouvelle clé locale `fuelSortOrder`. Nouveau choix Prix reste mémorisé.
+- Test ciblé migration/persistance ajouté, non exécuté Windows. Revue ciblée géométrie et initialisation réalisée, compilation non vérifiée.
 
 ## Points ouverts
 
@@ -171,9 +175,9 @@ Ne pas déclarer ces trois phases livrées sans changement correspondant et preu
 - Rebuild **dimanche 11/10 à 03:30, Europe/Paris** : premier passage avec `extra.sql`, résultat à documenter.
 - X2 Fitness Park Orly : coordonnées approchées, numéro exact à fournir.
 - Consommation initiale **6,5 L/100 km** : valeur choisie, non mesurée. Péages non chiffrés dans coût carburant.
-- Build iOS 53 : compilation indisponible sous Windows. Arthur lance archive puis validation téléphone, verre/palettes/texte agrandi à contrôler.
+- Build iOS 54 : compilation indisponible sous Windows. Arthur lance archive puis validation téléphone, verre/palettes/texte agrandi à contrôler.
 - Stations espèces : backend activé et données enrichies après accord. Couverture renseignée 265/11 844, soit environ 2,2 %.
-- Valider trois menus, prix/proximité, espèces, secours automatique si vide, erreur/Réessayer, annulation et choix station/étape.
+- Valider rangée fixe, deux menus, défaut Plus proche, Prix mémorisé, Espèces direct, secours si vide, erreur et choix station/étape.
 - Données espèces peu renseignées. Acceptation déclarée ne garantit jamais disponibilité encaissement actuelle.
 - Lecteur système : vérifier icône après clic EONA, casque et Centre de contrôle. Demande signalée ne confirme aucune action effective.
 - Skip/Back playlist confirmés par Arthur ; vérifier absence de régression après build 45. Métadonnées selon accès réel du système.

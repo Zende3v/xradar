@@ -49,7 +49,9 @@ irréversibles.
 - Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
 - Carte iOS : inclinaison native à deux doigts ; recentrage conserve angle choisi. Quinze recherches récentes conservées.
 - Stations : carburant, classement Proximité/Prix et Espèces indépendants ; prix conservés en tri Proximité.
-- Stations iOS 53 : A1 conservé ; A3 trois menus carburant/classement/paiement dessous ; A2 lignes communes Bornes/Tabac, prix à droite.
+- Stations iOS 54 : A1 conservé ; A3 rangée unique, trois boutons compacts égaux ; A2 lignes communes Bornes/Tabac, prix à droite.
+- A3 : menus carburant et Plus proche/Prix ; Espèces bascule directement, cercle vide/coché. Désactivé accepte tous paiements.
+- Plus proche défaut après mise à jour ; nouveau choix Prix persisté via clé locale `fuelSortOrder`.
 - A3 reprend boutons principaux Démarrer, choix Arthur du 13/10. Surface primaire partagée ; couleurs du thème, aucune palette locale.
 - Espèces : OSM `payment:cash=yes|only` uniquement ; absence inconnue. Filtre strict confirmé Arthur le 08/10.
 - Rayon stations automatique 10/25/50 km, uniquement si zéro résultat. Aucun sélecteur rayon, compteur ou bouton Élargir.
@@ -106,7 +108,7 @@ irréversibles.
 - Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
   lance le build.
 - Alternative : GitHub Actions, workflow manuel « IPA non signée » (`.github/workflows/ios-ipa.yml`, macos-26), IPA en artefact.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 53. Le monter à chaque
+- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 54. Le monter à chaque
   nouvelle IPA.
 - Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
 
