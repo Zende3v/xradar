@@ -806,7 +806,8 @@ Livraison iOS : `7792bb8`, build 38. Compilation sous Codemagic et validation t�
 - Sans rayon : comportement historique conservé. Limite 20 ; `pool=1` conserve maximum 60 stations.
 - `cash=1` exige paiement espèces explicitement cartographié. `cash=0` ou absence : toutes stations.
 - Espèces et rayon filtrés avant limite SQL. Stations admissibles restent trouvables en zone dense.
-- Aucun élargissement automatique. Application propose 10, 25 puis 50 km si résultats insuffisants.
+- Backend ne modifie jamais rayon demandé. iOS 53 consulte 10, 25 puis 50 km seulement si zéro résultat admissible.
+- Résultat, erreur ou annulation arrête secours. Critères conservés ; rayon jamais proposé comme réglage utilisateur.
 - Station ajoute `cashPayment: {accepted:true|false|null,source:"osm"|null}`.
 - OSM `payment:cash=yes|only` : accepté. `no` : refusé. Absence, horaires ou autre valeur : inconnu.
 - Enseigne, guichet et automate ne prouvent jamais acceptation espèces.
