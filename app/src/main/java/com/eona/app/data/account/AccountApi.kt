@@ -8,6 +8,8 @@ import com.eona.app.core.model.EtaCheck
 import com.eona.app.core.model.Role
 import com.eona.app.core.model.TripMeasure
 import com.eona.app.core.model.TripRecord
+import com.eona.app.core.model.TripSample
+import com.eona.app.core.model.TripStop
 import com.eona.app.core.model.UsernameAvailability
 import com.eona.app.core.model.alertTypeFromWire
 import com.eona.app.core.model.wireName
@@ -577,8 +579,27 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                         .put("pausedBefore", c.pausedBefore)
                         .put("uncertainBefore", c.uncertainBefore)
                         .put("withDatagouvAt", c.withDatagouvAt ?: JSONObject.NULL)
-                        .put("withoutDatagouvAt", c.withoutDatagouvAt ?: JSONObject.NULL),
+                        .put("withoutDatagouvAt", c.withoutDatagouvAt ?: JSONObject.NULL)
+                        .put("base", c.base ?: JSONObject.NULL)
+                        .put("engineLeftS", c.engineLeftS ?: JSONObject.NULL),
                 )
+            }
+            val timeline = JSONArray()
+            m.timeline.orEmpty().forEach { s ->
+                timeline.put(
+                    JSONObject()
+                        .put("t", s.t)
+                        .put("drivenM", s.drivenM)
+                        .put("leftM", s.leftM)
+                        .put("leftS", s.leftS)
+                        .put("engineLeftS", s.engineLeftS ?: JSONObject.NULL)
+                        .put("base", s.base)
+                        .put("kmh", s.kmh),
+                )
+            }
+            val stopLog = JSONArray()
+            m.stopLog.orEmpty().forEach { s ->
+                stopLog.put(JSONObject().put("at", s.at).put("seconds", s.seconds).put("drivenM", s.drivenM).put("jam", s.jam))
             }
             o.put("arrived", m.arrived)
                 .put("departedAt", m.departedAt ?: JSONObject.NULL)
@@ -596,6 +617,12 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 .put("platform", m.platform)
                 .put("etaMode", m.etaMode)
                 .put("trafficSources", JSONArray(m.trafficSources))
+                .put("firstMoveAt", m.firstMoveAt ?: JSONObject.NULL)
+                .put("lastFixAt", m.lastFixAt ?: JSONObject.NULL)
+                .put("endReason", m.endReason ?: JSONObject.NULL)
+                .put("endDistanceM", m.endDistanceM ?: JSONObject.NULL)
+                .put("timeline", timeline)
+                .put("stopLog", stopLog)
         }
 
         /** A trip's measures read back; null for a trip recorded before them. */
@@ -624,6 +651,8 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                         uncertainBefore = c.optInt("uncertainBefore"),
                         withDatagouvAt = if (c.isNull("withDatagouvAt")) null else c.optLong("withDatagouvAt"),
                         withoutDatagouvAt = if (c.isNull("withoutDatagouvAt")) null else c.optLong("withoutDatagouvAt"),
+                        base = if (c.isNull("base")) null else c.optString("base").ifBlank { null },
+                        engineLeftS = if (c.isNull("engineLeftS")) null else c.optInt("engineLeftS"),
                     )
                 },
                 recalcCount = o.optInt("recalcCount"),
@@ -634,6 +663,31 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
                 platform = o.optString("platform"),
                 etaMode = o.optString("etaMode"),
                 trafficSources = strings("trafficSources"),
+                firstMoveAt = if (o.isNull("firstMoveAt")) null else o.optLong("firstMoveAt"),
+                lastFixAt = if (o.isNull("lastFixAt")) null else o.optLong("lastFixAt"),
+                endReason = if (o.isNull("endReason")) null else o.optString("endReason").ifBlank { null },
+                endDistanceM = if (o.isNull("endDistanceM")) null else o.optInt("endDistanceM"),
+                // Absents de l'historique local et des réponses serveur : null.
+                timeline = o.optJSONArray("timeline")?.let { a ->
+                    (0 until a.length()).mapNotNull { i ->
+                        val s = a.optJSONObject(i) ?: return@mapNotNull null
+                        TripSample(
+                            t = s.optLong("t"),
+                            drivenM = s.optInt("drivenM"),
+                            leftM = s.optInt("leftM"),
+                            leftS = s.optInt("leftS"),
+                            engineLeftS = if (s.isNull("engineLeftS")) null else s.optInt("engineLeftS"),
+                            base = s.optString("base"),
+                            kmh = s.optInt("kmh"),
+                        )
+                    }
+                },
+                stopLog = o.optJSONArray("stopLog")?.let { a ->
+                    (0 until a.length()).mapNotNull { i ->
+                        val s = a.optJSONObject(i) ?: return@mapNotNull null
+                        TripStop(at = s.optLong("at"), seconds = s.optInt("seconds"), drivenM = s.optInt("drivenM"), jam = s.optBoolean("jam"))
+                    }
+                },
             )
         }
 

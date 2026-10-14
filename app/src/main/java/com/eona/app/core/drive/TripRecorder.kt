@@ -3,12 +3,17 @@ package com.eona.app.core.drive
 import com.eona.app.core.geo.Geo
 import com.eona.app.core.model.AlertType
 import com.eona.app.core.model.EtaCheck
+import com.eona.app.core.model.GeoPoint
 import com.eona.app.core.model.LocationSample
 import com.eona.app.core.model.RoadAlert
 import com.eona.app.core.model.Route
+import com.eona.app.core.model.TripEnd
 import com.eona.app.core.model.TripMeasure
 import com.eona.app.core.model.TripRecord
+import com.eona.app.core.model.TripSample
+import com.eona.app.core.model.TripStop
 import com.eona.app.core.model.expectedSeconds
+import java.util.UUID
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -38,9 +43,24 @@ class TripRecorder(
     private val platform: String,
     private val appVersion: String,
     val startedAt: Long = System.currentTimeMillis(),
+    /** Destination, pour la distance de fin seulement : jamais envoyée. */
+    private var destination: GeoPoint? = null,
+    /** Identifiant du trajet : même valeur pour l'instantané d'app fermée et l'envoi final. */
+    val id: String = UUID.randomUUID().toString().lowercase(),
 ) {
     var toLabel: String = toLabel
         private set
+    /** Dernier point reçu (epoch millis) et sa vitesse. */
+    var lastFixAt: Long? = null
+        private set
+    private var lastKmh = 0.0
+    private var firstMoveAt: Long? = null
+    /** Premier point d'une suite à 10 km/h ou plus, pas encore confirmée. */
+    private var movingSince: Long? = null
+    /** Mètres roulés au début de l'arrêt en cours. */
+    private var stoppedAtMeters = 0.0
+    private val stopLog = ArrayList<TripStop>()
+    private val timeline = ArrayList<TripSample>()
     var distanceMeters: Double = 0.0
         private set
     private var topSpeedKmh = 0
@@ -86,9 +106,10 @@ class TripRecorder(
     val awaitsCheckpoint: Boolean get() = departedAt != null && checkpointsPassed < CHECKPOINTS.size
 
     /** The destination changed on the way: the next route gives the new estimate. */
-    fun retarget(label: String) {
+    fun retarget(label: String, to: GeoPoint? = null) {
         retargeted = true
         toLabel = label
+        if (to != null) destination = to
         plannedSeconds = null
     }
 
@@ -126,14 +147,22 @@ class TripRecorder(
      * map, and the arrival the dock shows ([arrivalAt]) is the 0 % checkpoint; none without a
      * route yet.
      */
-    fun depart(route: Route?, arrivalAt: Long?, manualStart: Boolean, both: EtaPair? = null, now: Long = System.currentTimeMillis()) {
+    fun depart(
+        route: Route?,
+        arrivalAt: Long?,
+        manualStart: Boolean,
+        both: EtaPair? = null,
+        base: String? = null,
+        engineLeftSeconds: Double? = null,
+        now: Long = System.currentTimeMillis(),
+    ) {
         if (departedAt != null) return
         departedAt = now
         departedMeters = distanceMeters
         this.manualStart = manualStart
         plannedMeters = route?.distanceMeters
         mapVersion = route?.mapVersion
-        if (route != null && arrivalAt != null) keepEta(0, arrivalAt, both, now)
+        if (route != null && arrivalAt != null) keepEta(0, arrivalAt, both, base, engineLeftSeconds, now)
     }
 
     /**
@@ -142,20 +171,31 @@ class TripRecorder(
      * Done: the metres driven since the departure, over those plus the metres of [route] left
      * ([remainingShare] of it).
      */
-    fun checkpoint(route: Route, remainingShare: Double, arrivalAt: Long, both: EtaPair? = null, now: Long = System.currentTimeMillis()) {
+    fun checkpoint(
+        route: Route,
+        remainingShare: Double,
+        arrivalAt: Long,
+        both: EtaPair? = null,
+        base: String? = null,
+        engineLeftSeconds: Double? = null,
+        now: Long = System.currentTimeMillis(),
+    ) {
         if (!awaitsCheckpoint) return
         val driven = distanceMeters - departedMeters
         val total = driven + route.distanceMeters * remainingShare.coerceIn(0.0, 1.0)
         if (total <= 0) return
         val done = driven / total
         while (checkpointsPassed < CHECKPOINTS.size && done >= CHECKPOINTS[checkpointsPassed] / 100.0) {
-            keepEta(CHECKPOINTS[checkpointsPassed], arrivalAt, both, now)
+            keepEta(CHECKPOINTS[checkpointsPassed], arrivalAt, both, base, engineLeftSeconds, now)
             checkpointsPassed++
         }
     }
 
-    /** The arrival the dock announces now, and the pauses and uncertain stops already over. */
-    private fun keepEta(at: Int, arrivalAt: Long, both: EtaPair?, now: Long) {
+    /**
+     * The arrival the dock announces now, and the pauses and uncertain stops already over. [base]
+     * et [engineLeftSeconds] : base de l'ETA et temps restant moteur seul (null : inconnus).
+     */
+    private fun keepEta(at: Int, arrivalAt: Long, both: EtaPair?, base: String?, engineLeftSeconds: Double?, now: Long) {
         etaChecks += EtaCheck(
             at = at,
             shownAt = now,
@@ -164,6 +204,27 @@ class TripRecorder(
             withoutDatagouvAt = both?.withoutDatagouvAt,
             pausedBefore = pausedSeconds.roundToInt(),
             uncertainBefore = uncertainSeconds.roundToInt(),
+            base = base,
+            engineLeftS = engineLeftSeconds?.roundToInt(),
+        )
+    }
+
+    /**
+     * Après départ, à chaque point : un relevé par minute au plus. [leftMeters] et [leftSeconds] :
+     * restant de la route et ETA calculée ; [engineLeftSeconds] : restant moteur seul.
+     */
+    fun sample(leftMeters: Double, leftSeconds: Double, engineLeftSeconds: Double?, base: String, now: Long = System.currentTimeMillis()) {
+        if (departedAt == null || timeline.size >= TIMELINE_MAX) return
+        val last = timeline.lastOrNull()
+        if (last != null && now - last.t < SAMPLE_EVERY_MS) return
+        timeline += TripSample(
+            t = now,
+            drivenM = distanceMeters.roundToInt(),
+            leftM = leftMeters.coerceAtLeast(0.0).roundToInt(),
+            leftS = leftSeconds.coerceAtLeast(0.0).roundToInt(),
+            engineLeftS = engineLeftSeconds?.coerceAtLeast(0.0)?.roundToInt(),
+            base = base,
+            kmh = lastKmh.roundToInt(),
         )
     }
 
@@ -177,10 +238,22 @@ class TripRecorder(
         lastLon = fix.longitude
         val kmh = fix.speedKmh.toDouble()
         topSpeedKmh = maxOf(topSpeedKmh, kmh.roundToInt())
+        lastFixAt = fix.timeMs
+        lastKmh = kmh
+        // Premier mouvement réel : deux points de suite à 10 km/h, une pointe GPS seule ne compte pas.
+        if (firstMoveAt == null) {
+            if (kmh >= MOVING_KMH) {
+                val since = movingSince
+                if (since != null) firstMoveAt = since else movingSince = fix.timeMs
+            } else {
+                movingSince = null
+            }
+        }
 
         if (kmh < STOPPED_KMH) {
             if (stoppedSince == null) {
                 stoppedSince = fix.timeMs
+                stoppedAtMeters = distanceMeters
                 stopInJam = false
                 stopAllClear = true
             }
@@ -199,6 +272,9 @@ class TripRecorder(
             if (still >= MIN_STOP_S) {
                 stops++
                 stoppedSeconds += still
+                if (stopLog.size < STOP_LOG_MAX) {
+                    stopLog += TripStop(at = since, seconds = still.roundToInt(), drivenM = stoppedAtMeters.roundToInt(), jam = stopInJam)
+                }
             }
             // A long stop in a jam is part of the drive; on a road known clear all along it is a
             // pause, otherwise it stays uncertain.
@@ -219,9 +295,17 @@ class TripRecorder(
      * The history record, or null for a trip too short to keep. [arrived]: it ended at the
      * destination. A standstill still running at the end (parked at the destination) is not a stop.
      */
-    fun record(id: String, arrived: Boolean, now: Long = System.currentTimeMillis()): TripRecord? {
+    fun record(id: String, arrived: Boolean, interrupted: Boolean = false, now: Long = System.currentTimeMillis()): TripRecord? {
         val duration = (now - startedAt) / 1000.0
         if (distanceMeters < MIN_METERS || duration < MIN_SECONDS) return null
+        val endDistance = endDistanceMeters
+        val near = endDistance != null && endDistance <= NEAR_METERS
+        val end = when {
+            arrived -> TripEnd.ARRIVED
+            interrupted -> TripEnd.INTERRUPTED
+            near -> TripEnd.NEAR
+            else -> TripEnd.STOPPED
+        }
         return TripRecord(
             id = id,
             startedAt = startedAt,
@@ -236,7 +320,7 @@ class TripRecorder(
             stoppedSeconds = stoppedSeconds.roundToInt(),
             events = met.values.groupingBy { it }.eachCount(),
             measure = TripMeasure(
-                arrived = arrived,
+                arrived = arrived || near,
                 departedAt = departedAt,
                 manualStart = manualStart,
                 retargeted = retargeted,
@@ -252,9 +336,23 @@ class TripRecorder(
                 platform = platform,
                 etaMode = ETA_MODE,
                 trafficSources = trafficSources.toList(),
+                firstMoveAt = firstMoveAt,
+                lastFixAt = lastFixAt,
+                endReason = end,
+                endDistanceM = endDistance?.roundToInt(),
+                timeline = timeline.toList(),
+                stopLog = stopLog.toList(),
             ),
         )
     }
+
+    /** Distance du dernier point à la destination, mètres ; null inconnue. */
+    val endDistanceMeters: Double?
+        get() {
+            val to = destination ?: return null
+            if (lastLat.isNaN()) return null
+            return Geo.haversine(lastLat, lastLon, to.lat, to.lon)
+        }
 
     companion object {
         /** Shorter trips are not kept. */
@@ -277,6 +375,14 @@ class TripRecorder(
         const val ETA_MODE = EtaEstimator.MODE
         /** The engine of a route that does not say. */
         private const val UNKNOWN_ENGINE = "unknown"
+        /** Premier mouvement : deux points de suite à cette vitesse ou plus (km/h). */
+        private const val MOVING_KMH = 10.0
+        /** Arrêt du conducteur à moins de cette distance de la destination : arrivé (m). */
+        const val NEAR_METERS = 300.0
+        /** Un relevé par minute après départ, 4 h au plus ; 300 arrêts au plus. Comme le backend. */
+        private const val SAMPLE_EVERY_MS = 60_000L
+        private const val TIMELINE_MAX = 240
+        private const val STOP_LOG_MAX = 300
     }
 }
 

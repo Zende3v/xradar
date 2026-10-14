@@ -54,7 +54,43 @@ data class EtaCheck(
     /** The two ETAs (D2.6), with and without data.gouv; null when they were not computed. */
     val withDatagouvAt: Long? = null,
     val withoutDatagouvAt: Long? = null,
+    /** Base de l'ETA au relevé : "here" (temps live), "engine" (moteur seul) ; null inconnue. */
+    val base: String? = null,
+    /** Temps restant moteur seul au relevé, secondes ; null inconnu. */
+    val engineLeftS: Int? = null,
 )
+
+/**
+ * Relevé minute après départ, sans coordonnée : [t] epoch millis, mètres roulés depuis début du
+ * trajet, mètres et secondes restants, temps restant moteur seul, base de l'ETA, vitesse.
+ */
+data class TripSample(
+    val t: Long,
+    val drivenM: Int,
+    val leftM: Int,
+    val leftS: Int,
+    val engineLeftS: Int?,
+    val base: String,
+    val kmh: Int,
+)
+
+/**
+ * Arrêt de 10 s ou plus, sans coordonnée : début (epoch millis), durée, mètres roulés depuis
+ * début du trajet, dans un bouchon connu ou non.
+ */
+data class TripStop(val at: Long, val seconds: Int, val drivenM: Int, val jam: Boolean)
+
+/** Fin d'un trajet. Mêmes valeurs qu'iOS et backend. */
+object TripEnd {
+    /** Arrivée automatique à la destination. */
+    const val ARRIVED = "arrived"
+    /** Arrêté par le conducteur près de la destination : compte comme arrivé. */
+    const val NEAR = "near"
+    /** Arrêté par le conducteur en route. */
+    const val STOPPED = "stopped"
+    /** App fermée en route : trajet repris au lancement suivant. */
+    const val INTERRUPTED = "interrupted"
+}
 
 /**
  * What a trip tells about the ETA and the routes (D1.7 of the Valhalla plan), sent with it; no
@@ -88,7 +124,22 @@ data class TripMeasure(
     val trafficSources: List<String>,
     /** The destination changed during this trip; excluded from the ETA report (P1.6). */
     val retargeted: Boolean = false,
-)
+    /** Premier mouvement réel (epoch millis) : deux points de suite à 10 km/h ou plus. */
+    val firstMoveAt: Long? = null,
+    /** Dernier point GPS reçu (epoch millis). */
+    val lastFixAt: Long? = null,
+    /** Fin du trajet (TripEnd) ; null avant cette mesure. */
+    val endReason: String? = null,
+    /** Distance au point d'arrivée à la fin, mètres ; null inconnue. */
+    val endDistanceM: Int? = null,
+    /** Relevés minute après départ ; null hors file d'envoi (historique local allégé). */
+    val timeline: List<TripSample>? = null,
+    /** Arrêts de 10 s ou plus ; null hors file d'envoi. */
+    val stopLog: List<TripStop>? = null,
+) {
+    /** Mêmes mesures sans relevés minute ni journal d'arrêts : historique local allégé. */
+    val withoutDetail: TripMeasure get() = copy(timeline = null, stopLog = null)
+}
 
 /**
  * A completed trip in the history. Stores raw values; labels are derived for display. Pure
@@ -116,6 +167,9 @@ data class TripRecord(
     /** The ETA and route measures; null for a trip recorded before them. */
     val measure: TripMeasure? = null,
 ) {
+    /** Même trajet sans relevés minute ni journal d'arrêts : historique local allégé. */
+    val withoutDetail: TripRecord get() = copy(measure = measure?.withoutDetail)
+
     val distanceLabel: String
         get() {
             val km = distanceMeters / 1000.0

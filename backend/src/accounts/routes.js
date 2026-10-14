@@ -339,7 +339,11 @@ accountRouter.get('/me/stats', (req, res) => {
  *   plannedSeconds?, stops?, stoppedSeconds?, events?,
  *   arrived?, departedAt?, manualStart?, retargeted?, plannedMeters?, pausedSeconds?, uncertainSeconds?,
  *   etaChecks?: [{ at: 0|25|50|75, shownAt, arrivalAt, pausedBefore, uncertainBefore }], recalcCount?, fasterCount?,
- *   engines?, mapVersion?, appVersion?, platform?, etaMode?, trafficSources? }
+ *   engines?, mapVersion?, appVersion?, platform?, etaMode?, trafficSources?,
+ *   firstMoveAt?, lastFixAt?, endReason?: arrived|near|stopped|interrupted, endDistanceM?,
+ *   timeline?: [{ t, drivenM, leftM, leftS, engineLeftS, base, kmh }], stopLog?: [{ at, seconds, drivenM, jam }] }
+ * etaChecks[] reçoit aussi base (here|tomtom|engine) et engineLeftS. Relevés et arrêts gardés
+ * côté serveur, absents des réponses. Même id renvoyé : trajet existant, rien ajouté.
  * The second part is the ETA and routing measures (D1.7). An app before them sends none: its trip
  * is kept as before. One of them sent, all are kept (a missing one at its default), checked, and
  * come back in GET /me/stats; never a coordinate. See accounts/store.js (tripMeasuresShape).

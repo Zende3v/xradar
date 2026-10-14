@@ -35,6 +35,7 @@ import com.eona.app.core.model.RouteOption
 import com.eona.app.core.model.RoutePreference
 import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.RoadAlert
+import com.eona.app.core.model.Role
 import com.eona.app.core.model.Route
 import com.eona.app.core.model.RouteStep
 import com.eona.app.core.model.SignType
@@ -65,6 +66,7 @@ import com.eona.app.feature.subscription.PaywallReason
 import com.eona.app.data.speedlimits.NewSpeedLimitReport
 import com.eona.app.data.speedlimits.SpeedLimitRepository
 import com.eona.app.data.stats.TripHistoryRepository
+import com.eona.app.data.stats.TripOutbox
 import com.eona.app.feature.drive.component.key
 import com.eona.app.location.LocationRepository
 import com.eona.app.media.MediaRepository
@@ -83,7 +85,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
@@ -100,6 +101,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     private val reportsRepository = ReportsRepository()
     private val speedLimitRepository = SpeedLimitRepository()
     private val tripHistory = TripHistoryRepository(application)
+    /** Trajets pas encore reçus par le serveur, trajet en cours repris après fermeture de l'app. */
+    private val tripOutbox = TripOutbox(application)
+    /** Dernier instantané du trajet en cours (app fermée en route : repris au lancement). */
+    private var lastTripSnapshotAt = 0L
+    private var sendingTrips = false
     private val radars = MutableStateFlow<List<Radar>>(emptyList())
     /** The radars this driver said "Pas dans mon sens" for, and their course then. */
     private val radarsQuietForMe = java.util.concurrent.ConcurrentHashMap<String, Double>()
@@ -385,6 +391,12 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        // Trajet laissé par une app fermée en route, puis file d'envoi (compte chargé d'abord).
+        recoverInterruptedTrip()
+        viewModelScope.launch {
+            delay(TRIP_OUTBOX_FIRST_SEND_MS)
+            sendPendingTrips()
+        }
         // EONA+ terminé : groupe quitté (iOS followFilters).
         viewModelScope.launch {
             AccountRepository.hasPlus.collect { plus ->
@@ -682,8 +694,23 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
                 sendSpeeds(sample)
                 // The arrival the dock announces, kept at 25, 50 and 75 % of the way (D1.1).
                 if (current.awaitsCheckpoint) {
-                    ActiveTripRepository.route.value?.let { route -> current.checkpoint(route, remainingShare(route), shownArrival(route), etaPair(route)) }
+                    ActiveTripRepository.route.value?.let { route ->
+                        current.checkpoint(
+                            route, remainingShare(route), shownArrival(route), etaPair(route),
+                            base = etaBase(), engineLeftSeconds = engineSecondsLeft(route),
+                        )
+                    }
                 }
+                // Relevé minute : restant, ETA calculée, part moteur seule, base.
+                ActiveTripRepository.route.value?.let { route ->
+                    current.sample(
+                        leftMeters = routeMetersOf(route) * remainingShare(route),
+                        leftSeconds = secondsLeft(route),
+                        engineLeftSeconds = engineSecondsLeft(route),
+                        base = etaBase(),
+                    )
+                }
+                snapshotTrip(current)
                 // Étape atteinte : retirée ; route inchangée, elle la traverse déjà. Lieu en retrait
                 // de la route (cour, parking) : rayon élargi de ce retrait, sinon jamais atteint.
                 ActiveTripRepository.stops.value.firstOrNull()?.let { next ->
@@ -1007,10 +1034,11 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         arrival.value = null
         val current = trip
         if (current == null) {
-            trip = TripRecorder(destination.name, PLATFORM, APP_VERSION)
+            trip = TripRecorder(destination.name, PLATFORM, APP_VERSION, destination = GeoPoint(destination.lat, destination.lon))
             speedSampler = SpeedSampler()
+            lastTripSnapshotAt = 0L
         } else {
-            current.retarget(destination.name)
+            current.retarget(destination.name, GeoPoint(destination.lat, destination.lon))
         }
         // A navigation bug report joins this trip, to this destination, from now on.
         trip?.let { BugTripTrace.driving(it, GeoPoint(destination.lat, destination.lon)) }
@@ -1029,7 +1057,55 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             arrivalAt = route?.let { shownArrival(it) },
             both = route?.let { etaPair(it) },
             manualStart = ActiveTripRepository.start.value != null,
+            base = etaBase(),
+            engineLeftSeconds = route?.let { engineSecondsLeft(it) },
         )
+    }
+
+    /** Base de l'ETA maintenant : temps HERE de la route, sinon moteur seul. */
+    private fun etaBase(): String =
+        if ((traffic.value?.travelSeconds ?: 0) > 0) TrafficStretch.HERE else ENGINE_BASE
+
+    /** Temps restant moteur seul sur [route], sans trafic : référence de mesure. */
+    private fun engineSecondsLeft(route: Route): Double {
+        val meters = routeMetersOf(route)
+        return route.durationSeconds * EtaEstimator.baseShareLeft(route, meters, meters * (1 - remainingShare(route)))
+    }
+
+    /** Collecte permise : statistiques de conduite actives, ou compte admin (mesure ETA). */
+    private val collectsTrips: Boolean
+        get() = AppPreferences.settings.value.drivingStats || AccountRepository.account.value?.role == Role.Admin
+
+    /**
+     * Instantané du trajet en cours, toutes les 30 s au plus : app fermée en route, repris au
+     * lancement suivant.
+     */
+    private fun snapshotTrip(current: TripRecorder, now: Long = System.currentTimeMillis()) {
+        if (!collectsTrips || now - lastTripSnapshotAt < TRIP_SNAPSHOT_MS) return
+        lastTripSnapshotAt = now
+        val record = current.record(current.id, arrived = false, interrupted = true, now = current.lastFixAt ?: now)
+        tripOutbox.keepRunning(record, AccountRepository.account.value?.id)
+    }
+
+    /** Trajet laissé par une app fermée en route : gardé comme interrompu, envoyé. */
+    private fun recoverInterruptedTrip() {
+        val running = tripOutbox.takeRunning() ?: return
+        if (AppPreferences.settings.value.drivingStats) tripHistory.add(running.trip.withoutDetail)
+        tripOutbox.add(running.trip, running.accountId)
+    }
+
+    /** Envoie la file d'attente. Seuls les trajets du compte connecté partent. Échec : trajet gardé, file bornée à 50. */
+    private suspend fun sendPendingTrips() {
+        val accountId = AccountRepository.account.value?.id ?: return
+        if (sendingTrips) return
+        sendingTrips = true
+        try {
+            for (pending in tripOutbox.pending()) {
+                if (pending.accountId == accountId && AccountRepository.postTrip(pending.trip)) tripOutbox.remove(pending.trip.id)
+            }
+        } finally {
+            sendingTrips = false
+        }
     }
 
     /** Save the finished trip if it is worth keeping, locally and on the server. */
@@ -1049,18 +1125,20 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
             showArrival(finished, arrivedAtDestination)
         }
         _tripUnderway.value = false
-        // "Statistiques de conduite" off: the trip only served the guidance (its arrival).
-        val record = if (AppPreferences.settings.value.drivingStats) {
-            finished.record(UUID.randomUUID().toString(), arrived = arrivedAtDestination)
-        } else {
-            null
-        }
+        // Trajet fini : plus d'instantané à reprendre.
+        tripOutbox.keepRunning(null, null)
+        // "Statistiques de conduite" off: the trip only served the guidance (its arrival). Compte
+        // admin : envoyé quand même, pour la mesure ETA, sans historique local.
+        val stats = AppPreferences.settings.value.drivingStats
+        val record = if (collectsTrips) finished.record(finished.id, arrived = arrivedAtDestination) else null
         // The link and the group hear the arrival, or are stopped with the trip.
-        group.onTripEnded(arrivedAtDestination, finished.distanceMeters.roundToInt(), record?.id)
+        group.onTripEnded(arrivedAtDestination, finished.distanceMeters.roundToInt(), record?.id?.takeIf { stats })
         record ?: return
-        tripHistory.add(record)
-        // Statistics live on the server for everyone: survive a reinstall.
-        viewModelScope.launch { AccountRepository.postTrip(record) }
+        if (stats) tripHistory.add(record.withoutDetail)
+        // Statistics live on the server for everyone: survive a reinstall. File d'envoi : réseau
+        // absent, trajet gardé et renvoyé.
+        AccountRepository.account.value?.id?.let { tripOutbox.add(record, it) }
+        viewModelScope.launch { sendPendingTrips() }
     }
 
     /**
@@ -2046,6 +2124,12 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val RECALC_START_MOVE_M = 300.0
         /** A route never joined and nobody driving: the trip is dropped after this. */
         const val TRIP_ABANDON_MS = 30 * 60_000L
+        /** Trajet en cours copié sur le téléphone à ce rythme : app fermée, 30 s perdues au plus. */
+        const val TRIP_SNAPSHOT_MS = 30_000L
+        /** Premier envoi de la file au lancement : compte chargé d'abord. */
+        const val TRIP_OUTBOX_FIRST_SEND_MS = 10_000L
+        /** Base de l'ETA sans temps live : moteur seul. Comme iOS et backend. */
+        const val ENGINE_BASE = "engine"
         /** A trip's first route: asked again after these pauses before giving up. */
         val ROUTE_RETRY_MS = longArrayOf(1_200L, 3_000L, 6_000L)
         /** « Étape atteinte » : visible ce temps. */

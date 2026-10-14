@@ -81,12 +81,20 @@ function tripEventsShape(value) {
 
 // Mesures ETA et routage : contrat AGENTS.md. Anciennes apps sans ces champs restent compatibles.
 const TRIP_MEASURE_KEYS = ['arrived', 'departedAt', 'manualStart', 'retargeted', 'plannedMeters', 'pausedSeconds', 'uncertainSeconds',
-  'etaChecks', 'recalcCount', 'fasterCount', 'engines', 'mapVersion', 'appVersion', 'platform', 'etaMode', 'trafficSources'];
+  'etaChecks', 'recalcCount', 'fasterCount', 'engines', 'mapVersion', 'appVersion', 'platform', 'etaMode', 'trafficSources',
+  'firstMoveAt', 'lastFixAt', 'endReason', 'endDistanceM', 'timeline', 'stopLog'];
 const TRIP_ENGINES = ['ors', 'osrm', 'valhalla', 'unknown'];
 const TRIP_TRAFFIC_SOURCES = ['tomtom', 'here', 'crowd', 'datagouv', 'sytadin'];
 const TRIP_PLATFORMS = ['android', 'ios'];
 // The ETA is noted at departure and at 25, 50 and 75 % of the trip, once each.
 const TRIP_ETA_CHECKPOINTS = [0, 25, 50, 75];
+// Fin : arrivée auto, arrêt près destination, arrêt en route, app fermée en route.
+const TRIP_END_REASONS = ['arrived', 'near', 'stopped', 'interrupted'];
+// Base ETA au relevé : temps live d'un fournisseur, ou moteur seul.
+const TRIP_ETA_BASES = ['here', 'tomtom', 'engine'];
+// Relevé minute après départ : 4 h au plus. Arrêts de 10 s ou plus : 300 au plus.
+const TRIP_TIMELINE_MAX = 240;
+const TRIP_STOP_LOG_MAX = 300;
 
 /** A whole number ≥ 0 when [value] is a finite number, [fallback] otherwise. */
 function wholeOr(value, fallback) {
@@ -127,9 +135,53 @@ function etaChecksShape(value) {
       uncertainBefore: wholeOr(check.uncertainBefore, 0),
       withDatagouvAt: wholeOr(check.withDatagouvAt, 0) || null,
       withoutDatagouvAt: wholeOr(check.withoutDatagouvAt, 0) || null,
+      base: TRIP_ETA_BASES.includes(check.base) ? check.base : null,
+      engineLeftS: wholeOr(check.engineLeftS, null),
     });
   }
   return TRIP_ETA_CHECKPOINTS.filter((at) => byAt.has(at)).map((at) => byAt.get(at));
+}
+
+/**
+ * Relevés minute après départ : { t, drivenM, leftM, leftS, engineLeftS, base, kmh }. Aucune
+ * coordonnée : mètres roulés depuis début, mètres et secondes restants, part moteur seule.
+ */
+function timelineShape(value) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const point of value.slice(0, TRIP_TIMELINE_MAX)) {
+    const t = wholeOr(point?.t, 0);
+    if (!t) continue;
+    out.push({
+      t,
+      drivenM: wholeOr(point.drivenM, 0),
+      leftM: wholeOr(point.leftM, null),
+      leftS: wholeOr(point.leftS, null),
+      engineLeftS: wholeOr(point.engineLeftS, null),
+      base: TRIP_ETA_BASES.includes(point.base) ? point.base : null,
+      kmh: Math.min(wholeOr(point.kmh, 0), 300),
+    });
+  }
+  return out;
+}
+
+/** Arrêts de 10 s ou plus : { at, seconds, drivenM, jam }. Aucune coordonnée. */
+function stopLogShape(value) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  for (const stop of value.slice(0, TRIP_STOP_LOG_MAX)) {
+    const at = wholeOr(stop?.at, 0);
+    const seconds = wholeOr(stop?.seconds, 0);
+    if (!at || !seconds) continue;
+    out.push({ at, seconds: Math.min(seconds, 86_400), drivenM: wholeOr(stop.drivenM, 0), jam: stop.jam === true });
+  }
+  return out;
+}
+
+/** Trajet sans relevés minute ni journal d'arrêts : réponses aux apps légères. */
+function tripSummary(trip) {
+  const { timeline, stopLog, ...rest } = trip;
+  return rest;
 }
 
 /** A trip's measures (D1.7), checked one by one; null for a trip from an app before them. */
@@ -155,7 +207,20 @@ function tripMeasuresShape(trip) {
     platform: TRIP_PLATFORMS.includes(trip.platform) ? trip.platform : null,
     etaMode: shortText(trip.etaMode),
     trafficSources: knownWords(trip.trafficSources, TRIP_TRAFFIC_SOURCES),
+    // Collecte lot 1 (14/10) : premier mouvement réel, dernier point, fin, relevés, arrêts.
+    firstMoveAt: wholeOr(trip.firstMoveAt, 0) || null,
+    lastFixAt: wholeOr(trip.lastFixAt, 0) || null,
+    endReason: TRIP_END_REASONS.includes(trip.endReason) ? trip.endReason : null,
+    endDistanceM: endDistanceOf(trip.endDistanceM),
+    timeline: timelineShape(trip.timeline),
+    stopLog: stopLogShape(trip.stopLog),
   };
+}
+
+/** Distance au point d'arrivée à la fin, mètres ; null inconnue. */
+function endDistanceOf(value) {
+  const meters = wholeOr(value, null);
+  return meters == null ? null : Math.min(meters, 1_000_000);
 }
 
 function addMonths(iso, months) {
@@ -500,7 +565,7 @@ export class AccountStore {
     this.normalizeAccount(account);
     return {
       totals: { ...account.stats },
-      trips: account.trips.map((trip) => ({ ...trip })),
+      trips: account.trips.map(tripSummary),
     };
   }
 
@@ -519,7 +584,7 @@ export class AccountStore {
       return { error: 'invalid trip' };
     }
     const existing = account.trips.find((item) => item.id === tripId);
-    if (existing) return { trip: existing, stats: { ...account.stats } };
+    if (existing) return { trip: tripSummary(existing), stats: { ...account.stats } };
     const record = {
       id: tripId.slice(0, 100),
       startedAt: Math.round(startedAt),
@@ -543,7 +608,7 @@ export class AccountStore {
     account.stats.tripCount += 1;
     account.stats.alertsTraversed += record.alertsCount;
     this.scheduleSave();
-    return { trip: record, stats: { ...account.stats } };
+    return { trip: tripSummary(record), stats: { ...account.stats } };
   }
 
   /** Time and distance driven with the app open, trip or not. */
