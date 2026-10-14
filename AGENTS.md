@@ -13,7 +13,12 @@ Anciens documents restent consultables dans historique Git.
 - Arthur décide périmètre et livraison ; validation fonctionnelle sur téléphone.
 - Depuis 14/10 : Claude développeur principal backend, iOS et Android. Aucun travail dupliqué.
 - Parité stricte Android/iOS : mêmes règles, mêmes champs JSON, logique dans `core/` et EonaCore.
-- **Ne pas utiliser bridge.** Sessions autonomes, coordonnées par Arthur.
+- **Mode bridge v0.4.0 (15/10) : Claude maître, Codex exécutant.** Config : EXPLOITATION §1.
+- Claude garde cadrage, décisions, intégration, revue finale, commits, push iOS, build Android, VPS, échanges Arthur.
+- Codex : lots bornés (backend, Swift, refactor mécanique), exploration large en lecture, relecture indépendante.
+- Codex ne commite jamais. Petite tâche fortement couplée : Claude la fait seul.
+- Délégation : tâche racine par chantier et dépôt ; scopes d'écriture précis et disjoints ; chaque diff contrôlé.
+- Économie de tokens jamais au détriment de la qualité : code réel, cas limites, vérifications et questions utiles gardés.
 - Français, skill **caveman ultra** pour réponses, textes, commentaires, commits et documents.
 - Phrases courtes, vingt mots maximum, une idée par phrase. Termes techniques exacts.
 - Clarté prioritaire pour sécurité, actions irréversibles et procédures sensibles.
@@ -33,7 +38,7 @@ Anciens documents restent consultables dans historique Git.
 |---|---|---|---|
 | Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `feature/mini-player-musique` ; principale `main` |
 | iOS | `C:\Users\usr\Documents\xradar_ios` | `git@github.com:Zende3v/xradar_ios.git` | `main` |
-| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `b05d017` ; code identique `435837c`, commentaires exceptés |
+| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `b5a1000` ; lot 1 déployé, `435837c` inclus non déployé |
 
 Android : Kotlin, Jetpack Compose sur mesure, MapLibre, tuiles Stadia. Package `com.eona.app`.
 Logique métier commune dans `core/`, portée vers iOS avec mêmes règles et champs JSON.
@@ -221,7 +226,7 @@ Arbitrage décidé : accord ≤ max(60 s, 8 %) → moyenne ; désaccord → vale
 Fermeture ou incident d'une seule source : retenu. Données EONA ajoutent retard, ne tranchent jamais.
 Situations en table (voie × tranche × phase), jamais arbre de conditions. Valeurs de départ, puis calibrées.
 
-**Lot 1 collecte : code présent 15/10, non déployé, non validé téléphone.**
+**Lot 1 collecte : backend déployé 15/10 ; iOS 55 et Android 37 non validés téléphone.**
 Instantané trajet toutes les 30 s ; app fermée : repris au lancement, envoyé `interrupted`.
 File d'envoi persistée, 50 trajets max, liée au compte. Même `id` renvoyé : serveur ignore doublon.
 Fin `near` : arrêt à 300 m ou moins de destination, compte arrivé. Seuils 500 m et 60 s conservés.
@@ -304,6 +309,8 @@ Android version **1.0.2**, code **37** (`6e27a2b`, lot 1) : APK release compilé
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
 Déploiements backend consignés : `a85c6bc`, puis quatre fichiers stations `5646f45` le 08/10.
+15/10 vers 00:45 Paris : `accounts/store.js` et `accounts/routes.js` de `6e27a2b` (lot 1). Sauvegarde `/var/backups/eona/deploy-20261015-003412-lot1` : code, `data`, base.
+Après redémarrage : service actif, santé locale et publique OK, journal sans erreur, 10 comptes. Membres reconnectés à refaire.
 Lecture production 14/10 : santé HTTP 200, Valhalla `all`, carte 11/10, HERE limité à 5 €.
 Empreintes 14/10, 72 fichiers `src`/`bin`, fins de ligne ignorées : code `a85c6bc`.
 Seules exceptions : `places/routes.js` et `places/store.js`, identiques `5646f45`. Fichiers production majoritairement CRLF.
@@ -317,7 +324,7 @@ Points ouverts concrets :
 4. Mesurer ETA après nouvelle livraison ; conserver séparation pauses/embouteillages et versions d'application.
 5. Valider lecteur système sur téléphone ; titre tiers reste sans solution logicielle démontrée.
 6. Perso, feux, gabarit poids lourd et achat abonnement restent chantiers distincts, sans livraison implicite.
-7. Lot 1 : déployer `accounts/store.js` et `accounts/routes.js` après accord ; valider app fermée, file d'envoi, `near`.
+7. Lot 1 : valider sur téléphone app fermée, file d'envoi, `near` ; vérifier nouveaux champs stockés après premier trajet.
 8. Arthur : facture et franchise réelles console HERE ; clé TomTom Freemium.
 9. Test backend `search` « same JSON as before » échoue déjà avant lot 1 ; à corriger à part.
 
