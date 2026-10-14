@@ -1,6 +1,6 @@
 # EONA — Projet et règles
 
-État vérifié : **14 octobre 2026**. Produit : **EONA**, ancien nom XRadar.
+État vérifié : **15 octobre 2026**. Produit : **EONA**, ancien nom XRadar.
 
 Deux références uniquement : ce fichier et [EXPLOITATION.md](EXPLOITATION.md).
 Ce fichier décrit produit, architecture, limites réelles et règles de travail.
@@ -185,11 +185,12 @@ Réservation budget persistée avant appel payant ; échec écriture interdit ap
 Économie HERE ne doit jamais masquer absence de trafic mesuré.
 Validation Import par longueur ±10 % ; identité géométrique exacte non garantie. Taxi HERE reste voiture.
 
-Plafond **estimé** production : **5 €/mois**.
-Arthur choisit 10 €. Code `435837c` prépare plafond et réponse Import indépendante du flow lent.
-Ce correctif local attend déploiement explicitement autorisé ; ne pas le présenter actif.
-Mesure 14/10 : 4,999248 € estimés ; HERE bloque nouveaux appels pour budget mensuel.
+Plafond **estimé** production : **5 €/mois**. Arthur refuse tout coût en plus (15/10) : 5 € gardés.
+Code `435837c` porte défaut 10 € : ramener à 5 € avant tout déploiement. Réponse Import sans attente du flow lent : utile, non déployée.
+Mesure 14/10 : 4,999248 € estimés, `blocked: monthly budget`. Historique depuis 05/10 20:28 UTC : zéro appel HERE.
+Remise à zéro automatique au changement de mois UTC (`traffic/budget.js:128-131`).
 Estimation utilise tarifs configurables et marge 20 %, aucune franchise supposée. Facture réelle non importée.
+Relevé tarifs 29/09 (historique Git) : Traffic 5 000 gratuites/mois. Franchise actuelle à lire dans console HERE.
 Quotas HERE par compte : ETA une/minute, 150/jour UTC ; variantes une/minute, 30/jour UTC.
 Historique cumulé/hebdomadaire persistant ; semaine commence lundi minuit Paris. Historique ancien incomplet indiqué.
 
@@ -204,7 +205,29 @@ Tolérance : 10 % temps restant, minimum deux minutes, maximum huit minutes ; in
 Bilan 06/10 : 62 trajets, 30 retenus, 19 dynamiques ; versions iOS 16–34 mélangées.
 Erreur absolue médiane dynamique : départ 128 s ; relevé 75 % 39,27 s.
 Aucun gain des builds suivants démontré par ce bilan. Nouveau bilan requis pour conclure.
+Bilan 14/10 : 70 trajets lus, 32 retenus, tous iOS ; 30 exclus non arrivés ; 8 trajets depuis 06/10.
+Départ : 47 % bonnes, erreur médiane +158 s, réel/annoncé 1,41. Aucune ETA trop longue au départ.
+Vitesse moyenne réelle < 25 km/h : 1,82 ; ≥ 45 km/h : 0,98. Erreur concentrée premier quart : +90 s médian.
+Sonde Valhalla 14/10 : vitesses Paris = limites taguées, ~3 s par feu, aucun effet de l'heure.
 Aucun coefficient correcteur global, apprentissage historique ou injection trafic Valhalla livré.
+
+### Plan ETA validé 15/10
+
+Lots courts, feu vert Arthur à chaque lot. Aucun coût API en plus.
+1. Collecte totale · 2. Rapport v2 · 3. Franchise HERE comptée · 4. Modèle EONA sans trafic.
+5. ETA apps v2 · 6. Hub trafic + TomTom Freemium · 7. Arbitrage HERE/TomTom · 8. ETA dynamique.
+9. Mémoire trafic + calibrage · 10. Vitesses EONA injectées dans Valhalla, plus tard.
+Arbitrage décidé : accord ≤ max(60 s, 8 %) → moyenne ; désaccord → valeur lente, plafond +25 %.
+Fermeture ou incident d'une seule source : retenu. Données EONA ajoutent retard, ne tranchent jamais.
+Situations en table (voie × tranche × phase), jamais arbre de conditions. Valeurs de départ, puis calibrées.
+
+**Lot 1 collecte : code présent 15/10, non déployé, non validé téléphone.**
+Instantané trajet toutes les 30 s ; app fermée : repris au lancement, envoyé `interrupted`.
+File d'envoi persistée, 50 trajets max, liée au compte. Même `id` renvoyé : serveur ignore doublon.
+Fin `near` : arrêt à 300 m ou moins de destination, compte arrivé. Seuils 500 m et 60 s conservés.
+Champs : `firstMoveAt`, `lastFixAt`, `endReason`, `endDistanceM`, `timeline` minute, `stopLog`, `etaChecks[].base/engineLeftS`.
+Historique local sans relevés minute. Rapport ETA inchangé : nouveaux champs exploités au lot 2.
+Trace GPS admin validée (90 jours) : sous-lot suivant, non codée.
 
 Phases initiales 1–5 livrées. Phases 6–8 non implémentées ; trafic traité dans backend.
 Aucun accès officiel Sytadin documenté. Prochaine évolution choisie par Arthur.
@@ -223,7 +246,7 @@ Ne pas modifier noms JSON entre Android et iOS. Ajouter champs sans casser ancie
 | `POST /api/accounts/login` | `{identifier ou email, password, deviceId?}` ; compte et Bearer |
 | `GET /api/accounts/me` | Identité et droits actuels |
 | `GET /api/accounts/me/stats` | Cumuls et historique, maximum 200 trajets par compte |
-| `POST /api/accounts/me/trips` | Trajet terminé et relevés ETA ; cumuls conservés au-delà historique |
+| `POST /api/accounts/me/trips` | Trajet terminé et relevés ETA ; fin, relevés minute, arrêts ; même `id` ignoré ; relevés absents des réponses |
 | `GET /api/route?preview=1` | Aperçu sans débiter trajet ; API limitée 10/minute et 120/heure/compte |
 | `POST /api/route/start` | `{to, tripId, vehicle?}` ; même identifiant compte une seule fois |
 | `/api/traffic/route`, `/api/route/faster` | Trafic/variantes selon droits, couverture et quotas |
@@ -262,6 +285,7 @@ Vitesses EONA anonymes : clé aléatoire trajet, mémoire trente minutes.
 Mesures routage : 90 jours ; tracés divergents admin : 30 jours ; journal admin : 365 jours.
 Signalements fermés et bugs résolus : 90 jours. Plaque voiture radar jamais exposée.
 Bugs volontaires peuvent joindre destination/tracé même statistiques désactivées.
+Compte admin : trajet et relevés envoyés même statistiques coupées (mesure ETA). Aucune coordonnée, distance de fin seulement.
 Capture facultative : JPEG, 1 Mio maximum, 4096 pixels/côté, huit millions pixels ; accès admin privé.
 
 Bans persistés dans `<ACCOUNTS_FILE>.bans.json`, séparément des comptes.
@@ -275,7 +299,8 @@ Réactivation signalement supprimé et rôle modérateur distinct non développ�
 ## 7. État livré et points ouverts
 
 Référence iOS fonctionnelle : `c51b834`, build **54**, version **1.0.0**.
-Android observé : version **1.0.2**, code **36**.
+iOS build **55** (`7ef22c9`, lot 1 collecte) poussé ; archive et téléphone à valider.
+Android version **1.0.2**, code **37** (`6e27a2b`, lot 1) : APK release compilé, téléphone à valider.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
 Déploiements backend consignés : `a85c6bc`, puis quatre fichiers stations `5646f45` le 08/10.
@@ -286,11 +311,14 @@ Checkout déploiement conserve correctif local `435837c`, encore distinct de pro
 
 Points ouverts concrets :
 
-1. Déployer correctif HERE/plafond 10 € seulement après nouvel accord Arthur.
+1. Correctif HERE `435837c` : ramener défaut à 5 €, déployer seulement après nouvel accord Arthur.
 2. Inclure registre bans dans sauvegarde quotidienne avant prochaine livraison concernée.
 3. Aligner HTML confidentialité : défaut présence et couverture HERE décrits différemment du code actuel.
 4. Mesurer ETA après nouvelle livraison ; conserver séparation pauses/embouteillages et versions d'application.
 5. Valider lecteur système sur téléphone ; titre tiers reste sans solution logicielle démontrée.
 6. Perso, feux, gabarit poids lourd et achat abonnement restent chantiers distincts, sans livraison implicite.
+7. Lot 1 : déployer `accounts/store.js` et `accounts/routes.js` après accord ; valider app fermée, file d'envoi, `near`.
+8. Arthur : facture et franchise réelles console HERE ; clé TomTom Freemium.
+9. Test backend `search` « same JSON as before » échoue déjà avant lot 1 ; à corriger à part.
 
 Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.
