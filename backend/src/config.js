@@ -65,19 +65,16 @@ export const config = {
   // What each ORS key spent today, kept on disk: a restart hands neither the day's calls nor a key
   // set aside back to the budget.
   orsUsageFile: process.env.ORS_USAGE_FILE || './data/ors-usage.json',
-  // An ORS call still unanswered after this is dropped: the apps give up on a route after
-  // 15 s. 10 s for now, to calibrate in phase 2 (shadow mode, PLAN-VALHALLA.md).
+  // Appel ORS abandonné après 10 s ; délai apps : 15 s. État et mesures : AGENTS.md, racine du dépôt.
   orsTimeoutMs: 10 * 1000,
 
-  // Valhalla, EONA's own engine (phase 2 of PLAN-VALHALLA.md, routing/engine.js). Off unless
-  // VALHALLA_ENABLED=1: no call at all (no route, no shadow, no /status). The service listens on
-  // VALHALLA_URL (127.0.0.1:8002 on the VPS, D6.1). Its /status must allow verbose
-  // (has_live_traffic) and its service_limits allow_hard_exclusions (strict avoids, D4.2):
-  // without them, a route that avoids something fails and ORS serves it.
+  // Valhalla, moteur EONA (routing/engine.js ; état dans AGENTS.md).
+  // VALHALLA_ENABLED=1 requis ; sinon aucune route, ombre ou lecture /status.
+  // Écoute : VALHALLA_URL, 127.0.0.1:8002 sur VPS.
+  // /status verbose et service_limits.allow_hard_exclusions requis ; sinon évitements servis par ORS.
   valhallaEnabled: /^(1|true)$/i.test(process.env.VALHALLA_ENABLED || ''),
   valhallaUrl: process.env.VALHALLA_URL || 'http://127.0.0.1:8002',
-  // PROVISIONAL, none of them measured (D5.1, D6.4: calibrated in shadow mode, then written in
-  // VALHALLA-DECISIONS.md); each one can be set from the service environment meanwhile.
+  // Seuils configurables par environnement service. État mesuré et limites : AGENTS.md.
   // - valhallaTimeoutMs: one Valhalla call, body included, and every Valhalla try of a route
   //   together (the retry without the jams, D4.3); what is left of routeDeadlineMs goes to ORS.
   // - routeDeadlineMs: Valhalla then ORS, the jams lookup included, under the apps' 15 s.

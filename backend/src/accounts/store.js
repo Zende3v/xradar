@@ -79,8 +79,7 @@ function tripEventsShape(value) {
   return out;
 }
 
-// What a trip carries for the ETA and routing measures (D1.7, phase 1 of PLAN-VALHALLA.md). A
-// trip from an app before them has none of these keys and is kept as it always was.
+// Mesures ETA et routage : contrat AGENTS.md. Anciennes apps sans ces champs restent compatibles.
 const TRIP_MEASURE_KEYS = ['arrived', 'departedAt', 'manualStart', 'retargeted', 'plannedMeters', 'pausedSeconds', 'uncertainSeconds',
   'etaChecks', 'recalcCount', 'fasterCount', 'engines', 'mapVersion', 'appVersion', 'platform', 'etaMode', 'trafficSources'];
 const TRIP_ENGINES = ['ors', 'osrm', 'valhalla', 'unknown'];

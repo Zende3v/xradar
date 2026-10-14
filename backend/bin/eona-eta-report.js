@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * EONA — ETA report (phase 1 of PLAN-VALHALLA.md: D1.2 to D1.6). Read-only.
+ * EONA — mesures ETA agrégées, lecture seule. Contrat : AGENTS.md ; usage : EXPLOITATION.md.
  *
  * Reads the trips saved in the accounts file and says how right the arrival time shown by the app
  * was, at departure and at 25, 50 and 75 % of the trip, slice by slice. Prints aggregates only:

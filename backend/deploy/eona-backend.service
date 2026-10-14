@@ -18,7 +18,7 @@ Environment=HOST=127.0.0.1
 # Accounts and avatars live under data/ (reports and speed limits are in PostgreSQL).
 Environment=ACCOUNTS_FILE=/opt/eona-backend/data/accounts.json
 # Secrets (ADMIN_TOKEN, ORS_API_KEY, SMTP_*) go in drop-ins under
-# /etc/systemd/system/eona-backend.service.d/ — see deploy/setup-admin.sh and README.md.
+# /etc/systemd/system/eona-backend.service.d/ — procédure : EXPLOITATION.md, racine du dépôt.
 
 # Lightweight hardening. The app only writes under data/, which we open up below.
 NoNewPrivileges=true

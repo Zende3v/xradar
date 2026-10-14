@@ -1,5 +1,4 @@
--- EONA routing measures in PostGIS (phases 1 and 2 of PLAN-VALHALLA.md): the route log, the bench
--- and the shadow mode.
+-- Mesures routage EONA dans PostGIS : journal, banc et mode ombre. État : AGENTS.md, racine du dépôt.
 -- Applied at every backend start, so every statement is idempotent; never a DROP. Nothing here
 -- says where a driver goes: no account, no coordinates, except the bench's fixed test trips and
 -- the shadow's lines of admin accounts (30 days).

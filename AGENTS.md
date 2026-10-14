@@ -1,163 +1,293 @@
-# AGENTS.md — EONA
+# EONA — Projet et règles
 
-Source unique du contexte projet, pour Codex et pour Claude (`CLAUDE.md` l'importe).
+État vérifié : **14 octobre 2026**. Produit : **EONA**, ancien nom XRadar.
 
-## Mode de travail (Arthur, 05/10/2026)
+Deux références uniquement : ce fichier et [EXPLOITATION.md](EXPLOITATION.md).
+Ce fichier décrit produit, architecture, limites réelles et règles de travail.
+EXPLOITATION décrit Git, builds, production, sauvegardes et déploiement.
+Claude doit lire ce fichier au démarrage ; aucun import Markdown supplémentaire.
+Anciens documents restent consultables dans historique Git.
 
-- **ChatGPT : iOS et backend.** Codex travaille directement dans ces périmètres.
-- **Claude local : Android.** Session locale rattrape les fonctionnalités iOS.
-- Respecter périmètres disjoints. Aucun travail dupliqué.
-- Ne pas utiliser le bridge. Sessions autonomes, coordonnées par Arthur.
-- Tests automatiques uniquement indispensables à correction ou risque concret. Aucune campagne par défaut ni relance sans nécessité.
-  Arthur réalise validation fonctionnelle et téléphone. Ne pas ajouter tests pour changements mineurs.
-- Revue croisée ciblée : contrat, changements risqués, défauts concrets. Pas de double audit ni double campagne de tests.
-- Rapports ultra courts : résultat, blocage, prochaine étape. Conserver point de reprise précis après chaque lot.
-- Les deux : skill **caveman** à chaque réponse, en français. Commits et docs en caveman aussi.
-- Arthur ne travaille plus qu'à deux.
+## 1. Travail avec Arthur
 
-### Caveman (Codex et Claude, toujours)
+- Arthur décide périmètre et livraison ; validation fonctionnelle sur téléphone.
+- Codex : iOS et backend. Claude local : Android. Aucun travail dupliqué.
+- **Ne pas utiliser bridge.** Sessions autonomes, coordonnées par Arthur.
+- Français, skill **caveman ultra** pour réponses, textes, commentaires, commits et documents.
+- Phrases courtes, vingt mots maximum, une idée par phrase. Termes techniques exacts.
+- Clarté prioritaire pour sécurité, actions irréversibles et procédures sensibles.
+- Question courte seulement si décision manque. Donner options et recommandation.
+- Rapports courts : résultat, blocage, point de reprise précis.
+- Tests automatiques seulement pour correction ou risque concret. Aucune campagne systématique.
+- Aucun émulateur ni capture demandée pour validation. Arthur teste sur téléphone.
+- Revue ciblée sur contrat ou risque concret. Aucun double audit.
+- Aucun chiffre inventé. Séparer code présent, production vérifiée et validation téléphone.
+- **VPS : lecture seule libre. Chaque déploiement, installation ou redémarrage exige nouvel accord explicite d'Arthur.**
+- Root/backend : commit sans push, sauf demande. iOS : commit et push.
+- Ne pas commiter secrets, artefacts, `.claude/`, `.mcp.json` ou `.bridge/` sans accord.
 
-Skill caveman niveau **ultra**, en français, pour Codex et Claude Opus 5.5. Sans articles superflus, sans formules de politesse, sans
-remplissage. Phrases courtes (20 mots max), une idée par phrase, voix active, impératif pour les
-consignes. Termes techniques, code, commandes et messages d'erreur exacts. Jamais d'abréviation
-inventée. Clarté d'abord : style normal pour les alertes de sécurité et les actions
-irréversibles.
+## 2. Repos et architecture
 
-## Arthur (propriétaire)
+| Périmètre | Chemin Windows | Remote | Branche de référence |
+|---|---|---|---|
+| Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `feature/mini-player-musique` ; principale `main` |
+| iOS | `C:\Users\usr\Documents\xradar_ios` | `git@github.com:Zende3v/xradar_ios.git` | `main` |
+| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché ; code de référence `435837c` |
 
-- Dev pro, équipe de 4. Travaille étape par étape, avec validation entre chaque étape.
-- Choix qui lui revient : question courte, options, ta recommandation.
-- Il fait lui-même les tests sur téléphone : pas d'émulateur, pas de captures.
-- Rapports courts : ce qui est fait, où, ce qu'il doit trancher.
-- Design premium sur mesure, inspiré d'Apple. Refus du look Material ou « interface générée par
-  IA ». Chaque écran a tous ses états (chargement, erreur, vide).
-- DA EONA : OLED `#0A0A0C`, bordures ultra-fines `0,5` blanc `8 %`, verre dépoli, accents minéraux et ambre.
-- Hiérarchie strictement à gauche. Micro-libellés majuscules, lettres espacées. Textes minimaux, directs, proches d'iOS.
-- Interdits : cartes centrées génériques, ombres floues lourdes, rayons uniformes `16`, dégradés violets ou bleus, remplissage marketing.
-- EONA+ : référence Telegram Premium choisie le 05/10. Pastels mixtes, radar animé, icônes colorées, offres compactes.
-- Exception EONA+ : dégradés pastel autorisés sur emblème et action. Animation suspendue hors écran, en arrière-plan, avec mouvements réduits.
-- DA EONA+ validée sur iPhone le 05/10 : référence durable pour prochaines évolutions, pas nouvelle composition sans demande.
-- Garder mouvement vivant, pastels mixtes, fonctions illustrées et offres compactes. Éviter surfaces grises opaques autour navigation et action.
-- Principe durable : partir référence visuelle et usages réels ; privilégier personnalité produit, rythme natif, retouches ciblées.
-- Changer ergonomie ne modifie pas DA : réorganiser commandes, réutiliser composants visuels EONA existants.
-- Catalogue EONA+ : présenter avantages prévus au présent, sans mentions de préparation. Décrire bénéfices précis, conserver noms produit.
-- Cible EONA Poids lourd confirmée : itinéraires selon gabarit et restrictions du véhicule. État technique réel conservé dans docs.
-- Navigation et bouton EONA+ flottants : aucun bandeau opaque, séparateur périphérique ni effet de bord visible.
-- Thèmes : onze unicolores ; quatre palettes, Pastels EONA+, Minéral, Opale et Crépuscule. Accents sobres, jamais couleurs de sécurité.
-- Onze unicolores et Opale gratuits. Pastels EONA+, Minéral et Crépuscule réservés EONA+ ou essai actif.
-- Opale par défaut sans choix enregistré. Conserver choix existants ; expiration remplace seulement palette réservée par Opale.
-- Choix thème observable : actualiser interface, tracé et curseur immédiatement, sans reconstruire navigation ni caméra.
-- Carte iOS : inclinaison native à deux doigts ; recentrage conserve angle choisi. Quinze recherches récentes conservées.
-- Stations : carburant, classement Proximité/Prix et Espèces indépendants ; prix conservés en tri Proximité.
-- Stations iOS 54 : A1 conservé ; A3 rangée unique, trois boutons compacts égaux ; A2 lignes communes Bornes/Tabac, prix à droite.
-- A3 : menus carburant et Plus proche/Prix ; Espèces bascule directement, cercle vide/coché. Désactivé accepte tous paiements.
-- Plus proche défaut après mise à jour ; nouveau choix Prix persisté via clé locale `fuelSortOrder`.
-- A3 reprend boutons principaux Démarrer, choix Arthur du 13/10. Surface primaire partagée ; couleurs du thème, aucune palette locale.
-- Espèces : OSM `payment:cash=yes|only` uniquement ; absence inconnue. Filtre strict confirmé Arthur le 08/10.
-- Rayon stations automatique 10/25/50 km, uniquement si zéro résultat. Aucun sélecteur rayon, compteur ou bouton Élargir.
-- Arrêter sur résultat, erreur ou annulation. Conserver filtre espèces, même pendant secours. Paiement ne prouve pas disponibilité actuelle.
-- Import conserve paiement ; enrichissement initial par identifiant OSM exact, sans rapprochement géographique ni déduction d'enseigne.
-- Stations backend `5646f45` déployé le 08/10 après accord ; 160 oui, 105 non, 11 579 inconnues. HERE inchangé.
-- Mini-player : Lecteur système expérimental dans IPA non signée, API privée Apple. Lecture/pause Video Lite confirmée sur iPhone.
-- Skip/Back Video Lite confirmés avec playlist. Synchronisation icône iOS 45 attend validation téléphone.
-- iOS 46 (Claude, 06/10) : toutes commandes par MRMediaRemoteSendCommand ; boutons jamais grisés, avance seule 15 s par défaut.
-- Relevé iOS 46 (iPhone 26.5.2) : lectures MediaRemote toutes vides (infos nil, PID 0, commandes vides). Titre autre app impossible en logiciel.
-- Commandes acceptées : ±15 s legacy marchent ; piste par envoi ciblé marche avec playlist. iOS 47 : Back/Skip envoient avance puis piste.
-- Piste pour titre : Apple Media Service (BLE, spécification Apple) via boîtier ESP32, refusée par Arthur (pas de matériel).
-- Sondes publiques iOS 48 : systemMusicPlayer ne voit que Musique (morceau générique, pause 0 s) pendant lecture autre app. Titre tiers abandonné le 07/10.
-- Navigation lecteur : piste prioritaire si annoncée ; sinon intervalle natif annoncé, affiché explicitement. Aucun faux changement piste.
-- Métadonnées facultatives sans avertissement. État observé, notifications visibles uniquement ; aucune bascule optimiste ni second envoi automatique.
-- Lecture/Pause demandée signalée séparément de l'état observé ; aucune confirmation simulée. Événements directs prioritaires sur getters.
-- Variante standard exclut API privée. Aucun entitlement privé ajouté ; App Store/TestFlight exigent désactivation.
-- Historique ETA : référence arrivée annoncée au départ ; trajets interrompus signalés, données brutes conservées.
-- Gestion EONA réservé admin : présence observée, activité anonyme, gestion réversible, bannissements persistants.
-- Réglages : ligne Thème compacte ; quinze choix dans feuille dédiée. Palettes visibles sur actions, sélection et curseur.
-- Gratuit regroupe invités et comptes gratuits ; Client correspond EONA+ ; Admin reste séparé.
-- Appareil banni : identifiant EONA conservé dans Keychain, aucun HWID matériel disponible. Emails et fournisseurs connus également bloqués.
+Android : Kotlin, Jetpack Compose sur mesure, MapLibre, tuiles Stadia. Package `com.eona.app`.
+Logique métier commune dans `core/`, portée vers iOS avec mêmes règles et champs JSON.
 
-## Repos
+iOS : SwiftUI, Swift 6, iOS 26, MapKit, projet généré par XcodeGen.
+`Packages/EonaKit` contient EonaCore, EonaData et tests Swift Testing.
+`EONA/Features` porte écrans ; services et adaptateurs restent séparés des vues.
 
-| Repo | Chemin | Remote | Branche | Règle |
-|---|---|---|---|---|
-| Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `feature/mini-player-musique` (principale `main`) | commit **sans push**, sauf demande |
-| iOS | `C:\Users\usr\Documents\xradar_ios` | `git@github.com:Zende3v/xradar_ios.git` | `main` | commit **et push** (Arthur lance Codemagic) |
+Backend : Node 20 ESM, Express, PostgreSQL 17 et PostGIS.
+Point d'entrée : [backend/src/index.js](backend/src/index.js). Montage HTTP : [backend/src/server.js](backend/src/server.js).
+Configuration : [backend/src/config.js](backend/src/config.js). Secrets uniquement hors Git.
 
-- Nom produit : **EONA** (ancien nom XRadar). Package Android : `com.eona.app`.
-- Non suivis dans x_radar, à ne pas commiter sans accord : `.claude/`, `.mcp.json`.
-- `C:\Users\usr\Documents\x_radar_eco` : worktree détaché, déploiement backend seulement.
+- `accounts/` : identité, droits, statistiques, quotas, bans, réglages.
+- `routing/` : Valhalla, ORS, cache, mesures, comparaison et variantes.
+- `traffic/` : HERE, événements publics, vitesses EONA et chronométrage.
+- `search/`, `places/`, `fuel/` : recherche, services proches, prix et espèces.
+- `signs/`, `radars/`, `reports/`, `speedlimits/` : signalisation et contributions.
+- `trips/`, `live/` : groupes, partage et présence.
+- `admin/`, `bugs/` : gestion EONA, modération et bugs privés.
+- `backend/signalisation`, `backend/search`, `backend/valhalla` : imports et publication géographique.
+- `backend/bin`, `backend/deploy` : exploitation, sauvegarde, services et cron.
 
-## Android (`app/`)
+Comptes et réglages persistent en JSON. Schémas PostgreSQL : `signs`, `crowd`, `routing`, `search`.
+Sessions, groupes, partages et vitesses trafic restent en mémoire. Redémarrage vide ces états.
 
-- Kotlin + Jetpack Compose, UI 100 % sur mesure. Carte MapLibre + tuiles Stadia (clé
-  `stadia.apiKey` dans `local.properties`, non versionné).
-- Logique métier en Kotlin pur (`core/`), reprise à l'identique sur iOS.
-- Build release, toujours en PowerShell :
-  `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat :app:assembleRelease`
-  Sortie : `app/build/outputs/apk/release/app-release.apk`, signée avec la clé debug.
-- Toolchain :
-  - JDK 25 (JBR), Gradle 9.7.1, SDK 37, build-tools 36.0.0.
-  - AGP 9 embarque Kotlin : **ne jamais** appliquer `org.jetbrains.kotlin.android`.
-  - KGP 2.2.10 : aucune lib compilée avec Kotlin ≥ 2.4.
-  - Pas de tests unitaires Android.
-- Versions courantes : `versionName` et `versionCode` dans `app/build.gradle.kts`. **Monter le `versionCode` à chaque nouvel APK.**
+API publique : `https://api.lrda-mercuriale.uk`.
+Webapp configurée : `https://ground-truthh.lovable.app` ; CORS limité aux origines autorisées.
 
-## iOS (`xradar_ios`)
+## 3. Direction artistique durable
 
-- SwiftUI iOS 26 (Liquid Glass), Swift 6, XcodeGen (`project.yml`), package SPM
-  `Packages/EonaKit` (EonaCore, EonaData, tests Swift Testing), carte MapKit.
-- Pas de Mac : aucune compilation locale. Codemagic (`codemagic.yaml`) build et teste ; Arthur
-  lance le build.
-- Alternative : GitHub Actions, workflow manuel « IPA non signée » (`.github/workflows/ios-ipa.yml`, macos-26), IPA en artefact.
-- Build : `CURRENT_PROJECT_VERSION` dans `Config/Base.xcconfig`, aujourd'hui 54. Le monter à chaque
-  nouvelle IPA.
-- Parité stricte avec Android : mêmes règles, mêmes noms de champs JSON.
+Partir composants existants et thème choisi. Réorganiser ergonomie ne change jamais direction artistique.
+Écrans : chargement, erreur, vide, contenu. Textes courts, usage natif iOS.
 
-## Backend (`backend/`)
+- OLED `#0A0A0C`, verre dépoli, bordures `0,5 pt`, blanc `8 %`.
+- Accents minéraux et ambre. Hiérarchie à gauche ; micro-libellés majuscules, lettres espacées.
+- Aucun style Material, carte générique centrée, ombre lourde ou rayon uniforme `16`.
+- Aucun dégradé violet/bleu générique, remplissage marketing ou explication permanente inutile.
+- Réutiliser surfaces, boutons, lignes et espacements EONA. Ne pas inventer palette locale.
+- Options réservées restent visibles. Interaction présente offre EONA+, sans masquer fonction.
 
-- Node 20 ESM + Express, PostgreSQL 17 + PostGIS (schémas `signs`, `crowd`, `routing`, `search`).
-- Docs d'exploitation : `README.md` à la racine (install, déploiement §4, surveillance, pannes,
-  API §12) et `backend/API-WEBAPP.md`.
-- Routage actuel : Valhalla 3.9 sur VPS (`127.0.0.1:8002`), ORS en secours. OSRM démo retiré.
-- Trafic : HERE depuis le 30/09. TomTom retiré. Recherche : index OSM EONA, BAN, Photon en secours.
+**EONA+ : référence Telegram Premium validée sur iPhone le 05/10/2026.**
+Conserver pastels mixtes, radar animé, icônes colorées, offres compactes et rythme natif.
+Dégradés pastel autorisés sur emblème et action EONA+.
+Navigation et action flottantes : aucun bandeau opaque, séparateur périphérique ou démarcation visible.
+Suspendre animation hors écran, en arrière-plan et avec mouvements réduits.
+Résumé visible ; comparatif complet dépliable. Aucune nouvelle composition sans demande.
+Catalogue présente avantages prévus au présent, sans mentions de préparation.
+**Documentation technique conserve leurs limites réelles. Catalogue ne prouve pas livraison.**
 
-## VPS de production
+Thèmes : onze unicolores ; Pastels EONA+, Minéral, Opale, Crépuscule.
+Onze unicolores et Opale gratuits. Trois autres palettes réservées EONA+ ou essai actif.
+Opale par défaut sans choix enregistré. Conserver choix existant.
+Expiration remplace seulement palette réservée par Opale ; véhicule réservé revient à Voiture.
+Thème observable : interface, tracé et curseur actualisés immédiatement, sans reconstruire caméra ni navigation.
+Ligne Thème compacte ; quinze choix dans feuille dédiée. Palettes sobres, jamais couleurs de sécurité.
 
-- `ssh root@193.168.146.56` (clé `~/.ssh/id_ed25519`, sans alias). Ancien VPS Tailscale
-  `100.107.151.127` : ne plus utiliser.
-- Debian 13, 8 vCPU, 16 Go RAM, **pas de swap**, 154 Go libres, fuseau Europe/Paris. Ni Docker,
-  ni nginx. ufw : port 22 seulement.
-- Services systemd :
-  - `eona-backend` : `/opt/eona-backend`, user `eona`, `127.0.0.1:8090` ;
-  - `eona-tunnel` : Cloudflare, `https://api.lrda-mercuriale.uk` ;
-  - `eona-privacy` (9020) et `eona-cgu` (9021) ;
-  - `postgresql` : base `eona`, auth peer (`runuser -u eona -- psql -d eona`).
-- **Secrets** : drop-ins `/etc/systemd/system/eona-backend.service.d/*.conf`. Ne jamais les
-  afficher (ni `systemctl cat`, ni env du process).
-- Cron (`/etc/cron.d`) :
-  - dimanche 03:30 : signalisation, Valhalla, recherche (`bin/eona-geodata-rebuild.sh`) ;
-  - `eona-backup` : 03:10, `/var/backups/eona`, 14 jours, sur le VPS seulement ;
-  - banc TomTom arrêté depuis le 30/09 ; historique conservé en lecture seule.
-- Déploiement : README §4. `ssh`, sauvegarde `tar` et `scp` depuis cmd du PC, dossier `x_radar_eco`.
-- Sauvegarder `src` en `.tgz` d'abord. Puis `scp` depuis PC ; `chown`, restart, `/health` sur VPS.
-- Ne jamais lancer `scp` depuis VPS.
-- **Aucun déploiement, installation ni redémarrage sur le VPS sans accord explicite d'Arthur, à
-  chaque fois.** Lecture seule libre.
+## 4. Comptes, accès et fonctions
 
-## Routage actuel : Valhalla et HERE
+Rôles serveur : `guest|client|admin`. Accès : `free|trial|active|restricted`.
+Rôle `client` ne prouve pas abonnement ; vérifier `hasPlus` et échéances.
+Dans statistiques admin : Gratuit = invités + membres gratuits ; Client = EONA+ ; Admin séparé.
 
-- Lire d'abord `backend/VALHALLA-ETAT.md` (état du chantier, à mettre à jour à chaque étape),
-  puis :
-  - `backend/PLAN-VALHALLA.md` : plan validé, phases 1 à 8 ;
-  - `backend/VALHALLA-DECISIONS.md` : journal D1 à D8 et P1.1 à P1.7 ;
-  - `backend/CHECKLIST-TRAJETS.md` : trajets tests de l'équipe.
-- Cadre :
-  - France seule ;
-  - ORS seulement en secours ;
-  - contrat `/api/route` inchangé, tout ajout de champ additif ;
-  - évitements stricts (péages, autoroutes, ferries, bouchons) ;
-  - HERE à économiser ;
-  - aucun chiffre inventé : ce qui n'est pas mesuré est « à mesurer ».
-- Phase 1 : collecte depuis le 25/09. Bilan après 2 à 3 semaines.
-- Phases 1 à 5 livrées. Valhalla généralisé le 29/09 ; phase 5 livrée le 30/09.
-- Phases 6 à 8 du plan initial non implémentées : trafic traité dans backend, sans injection dans Valhalla.
-- Prochaine étape choisie par Arthur. État et preuves : `backend/VALHALLA-ETAT.md`.
+- Invité permanent : pseudo aléatoire, aucun mot de passe, aucune purge après sept jours.
+- Création membre ou conversion invité : sept jours EONA+ offerts, même sans parrainage.
+- Conversion conserve identifiant, trajets, statistiques et session.
+- Expiration conserve compte ; retour gratuit automatique.
+- Gratuit : quatre départs par jour, remise à zéro minuit Europe/Paris.
+- EONA+, essai valide, admin autorisé : aucun plafond quotidien trajets.
+- Taxi, groupe et curseur camion exigent EONA+. Musique reste gratuite.
+- Aucun plafond quotidien signalements ; protections anti-abus restent actives.
+
+| Fonction | État technique actuel |
+|---|---|
+| Rapide / Éco | Calculs réels `fastest\|shortest`, aperçu chronométré si trafic disponible |
+| Carte inclinable | Geste natif à deux doigts ; recentrage conserve angle choisi |
+| Recherches récentes | Quinze entrées locales ; distinctes de limite API recherche |
+| Taxi | Profil Valhalla `taxi` ; accès selon données OSM et restrictions horaires |
+| EONA Poids lourd | Curseur réservé ; routage actuel voiture, sans dimensions ni poids |
+| Trajets intelligents / Perso | Non développé ; aucune consommation quotidienne dédiée |
+| Feux en direct | Non développé ; aucun compte à rebours opérationnel |
+| Groupe | Création/code, cinq participants maximum, positions et destination partagées |
+| Achat abonnement | Non intégré ; aucun parcours StoreKit opérationnel |
+| Apple Music / Spotify | Adaptateurs présents ; Spotify exige client public configuré |
+| Lecteur système | Expérimental, API privée Apple, uniquement distribution adaptée |
+| Gestion EONA | Accès admin, mesures, activité, comptes, suspension, bans et révocation |
+
+Scooter et sans permis : Valhalla `motor_scooter`, 45 km/h, autoroutes exclues.
+Exclusion générale `motorroad=yes` non prouvée. Aucun chronométrage HERE voiture pour ce profil.
+Taxi en secours ORS utilise profil voiture. Ne pas garantir toutes voies de bus ou exceptions réglementaires.
+
+### Stations proches
+
+Disposition demandée par Arthur, implémentée iOS 54 : A1 sélecteur services inchangé ; A3 commandes ; A2 liste.
+A3 : rangée unique, trois boutons compacts égaux, surface principale EONA commune.
+Menu carburant, menu Plus proche/Prix, bascule Espèces directe avec cercle vide/coché.
+A2 reprend lignes Bornes/Tabac ; prix à droite. Aucun compteur ni commande rayon.
+
+Carburant, classement et espèces restent indépendants. Tri proximité conserve prix.
+Plus proche par défaut après mise à jour ; choix Prix suivant persisté dans `fuelSortOrder`.
+Rayons automatiques : 10, 25, 50 km, uniquement si zéro station admissible.
+Station fermée ou sans prix reste résultat ; aucune extension pour obtenir prix artificiellement.
+Arrêter sur résultat, erreur ou annulation. Ne jamais relâcher filtre espèces pendant secours.
+
+Prix officiels : rafraîchissement backend dix minutes ; fraîcheur affichée iOS limitée à 96 heures.
+Paiement : OSM `payment:cash=yes|only` accepté, `no` refusé, absence inconnue.
+Filtre Espèces conserve seulement acceptation explicite. Aucun rapprochement enseigne ou supposition liée au guichet.
+Import conserve tag paiement ; enrichissement par identifiant OSM exact seulement.
+Acceptation déclarée ne prouve pas encaissement disponible actuellement.
+Relevé du 08/10 : 160 oui, 105 non, 11 579 inconnues ; aucun décompte actuel supposé.
+
+### Lecteur système
+
+Video Lite : lecture/pause et Back/Skip avec playlist confirmés par Arthur sur iPhone.
+Synchronisation réelle icône lecture/pause reste à valider ; aucune confirmation simulée.
+Demande envoyée et état observé restent distincts. Événements directs prioritaires sur getters.
+Métadonnées facultatives, sans avertissement orange.
+
+Commandes privées : `MRMediaRemoteSendCommand`, piste ciblée via `MRMediaRemoteSendCommandToApp` si disponible.
+Capacités annoncées : piste prioritaire, sinon intervalle natif affiché ; défaut quinze secondes.
+Capacités inconnues : code actuel envoie avance temporelle, puis commande piste après 300 ms.
+Cette stratégie expérimentale ne garantit pas résultat identique dans chaque lecteur.
+Polling et notifications restent limités au lecteur visible, application au premier plan.
+Titre, pochette et état tiers non lus lors essais iPhone 26.5.2 : infos nulles, PID zéro, commandes vides.
+`systemMusicPlayer` ne fournit pas métadonnées Video Lite. Piste matérielle BLE refusée par Arthur.
+Variante standard exclut adaptateur privé. Aucun entitlement privé ajouté.
+App Store/TestFlight exigent désactivation de `EONA_EXPERIMENTAL_SYSTEM_MEDIA`.
+
+## 5. Routage, trafic et ETA
+
+Valhalla **3.9.0** principal France. ORS secours ; OSRM démo retiré.
+Modes administrables : `ors|admins|all`. Production vérifiée : `all`.
+Échec, délai dépassé, disjoncteur ou accroche hors couverture permettent secours ORS.
+Contrat `/api/route` conserve structure GeoJSON ; nouveaux champs uniquement additifs.
+Route : coordonnées `[lon,lat]`, distances mètres, durées secondes.
+Champs selon demande : `engine`, `mapVersion`, `roads`, `preference`, `travelS`.
+`mapVersion` décrit publication tuiles ; ne prouve pas date exacte données OSM.
+Multi-arrêts : dix étapes maximum. Cap transmis en mouvement, marge 50 m, tolérance 45°.
+
+Évitements péages, autoroutes et ferries stricts.
+Polygones bouchons peuvent être retirés si route impossible ou recherche trafic échoue.
+Rapide : variantes chronométrées symétriquement, maximum deux, gain minimal trois minutes et 5 %.
+Éco et scooter : détour seulement pour fermeture ; variante plus courte.
+Après secours, recherche `/faster` désactivée. Horizon 60 km, fenêtre 85 km ; élargissement non livré.
+
+HERE Traffic v7 fournit flow/incidents. HERE Routing v8 Route Import chronomètre tracé EONA.
+Vitesses EONA et événements publics complètent HERE. TomTom retiré le 30/09 ; banc historique conservé.
+Cache trafic partagé 60 secondes, appels identiques mutualisés.
+Réservation budget persistée avant appel payant ; échec écriture interdit appel.
+Économie HERE ne doit jamais masquer absence de trafic mesuré.
+Validation Import par longueur ±10 % ; identité géométrique exacte non garantie. Taxi HERE reste voiture.
+
+Plafond **estimé** production : **5 €/mois**.
+Arthur choisit 10 €. Code `435837c` prépare plafond et réponse Import indépendante du flow lent.
+Ce correctif local attend déploiement explicitement autorisé ; ne pas le présenter actif.
+Mesure 14/10 : 4,999248 € estimés ; HERE bloque nouveaux appels pour budget mensuel.
+Estimation utilise tarifs configurables et marge 20 %, aucune franchise supposée. Facture réelle non importée.
+Quotas HERE par compte : ETA une/minute, 150/jour UTC ; variantes une/minute, 30/jour UTC.
+Historique cumulé/hebdomadaire persistant ; semaine commence lundi minuit Paris. Historique ancien incomplet indiqué.
+
+### Mesure ETA
+
+Référence historique : arrivée annoncée au départ, jamais remplacée par dernière ETA pour calculer retard final.
+Relevés départ et 25/50/75 %, pauses et arrêts incertains conservés.
+Trajets interrompus signalés ; données brutes conservées.
+Rapport exclut non-arrivée, départ manuel, destination modifiée et mesures absentes.
+Comparer arrêts incertains conservés ou retirés ; ne pas confondre pause et embouteillage.
+Tolérance : 10 % temps restant, minimum deux minutes, maximum huit minutes ; intervalle Wilson 95 %.
+Bilan 06/10 : 62 trajets, 30 retenus, 19 dynamiques ; versions iOS 16–34 mélangées.
+Erreur absolue médiane dynamique : départ 128 s ; relevé 75 % 39,27 s.
+Aucun gain des builds suivants démontré par ce bilan. Nouveau bilan requis pour conclure.
+Aucun coefficient correcteur global, apprentissage historique ou injection trafic Valhalla livré.
+
+Phases initiales 1–5 livrées. Phases 6–8 non implémentées ; trafic traité dans backend.
+Aucun accès officiel Sytadin documenté. Prochaine évolution choisie par Arthur.
+
+## 6. Contrats API et données
+
+Référence exécutable : routeurs sous `backend/src`, montés dans `server.js`.
+Ne pas modifier noms JSON entre Android et iOS. Ajouter champs sans casser anciennes apps.
+
+| Entrée | Contrat essentiel |
+|---|---|
+| `GET /health` | Public ; disponibilité, moteurs, carte, budgets, compteurs et index |
+| `POST /api/accounts/guest` | `{deviceId, platform?}` ; invité permanent |
+| `POST /api/accounts/register` | `{email, password, username, referralCode?}` ; essai automatique |
+| `POST /api/accounts/me/register` | Conversion invité authentifié, conservation identité et statistiques |
+| `POST /api/accounts/login` | `{identifier ou email, password, deviceId?}` ; compte et Bearer |
+| `GET /api/accounts/me` | Identité et droits actuels |
+| `GET /api/accounts/me/stats` | Cumuls et historique, maximum 200 trajets par compte |
+| `POST /api/accounts/me/trips` | Trajet terminé et relevés ETA ; cumuls conservés au-delà historique |
+| `GET /api/route?preview=1` | Aperçu sans débiter trajet ; API limitée 10/minute et 120/heure/compte |
+| `POST /api/route/start` | `{to, tripId, vehicle?}` ; même identifiant compte une seule fois |
+| `/api/traffic/route`, `/api/route/faster` | Trafic/variantes selon droits, couverture et quotas |
+| `GET /api/search` | Index OSM EONA + BAN ; Photon secours ; huit résultats défaut, quinze maximum |
+| `GET /api/places/near` | Services proches ; rayon maximum 50 km, espèces filtrées avant limite SQL |
+| `/api/signs`, `/api/radars` | Signalisation et radars proches/sur tracé |
+| `/api/reports`, `/api/speed-limits` | Contributions, corrections et modération |
+| `/api/trips/share`, `/api/trips/group` | Partage et groupe ; SSE `group`/`pos`, battement quinze secondes |
+| `/api/bugs` | Rapport volontaire ; consultation et capture privées, administrateurs seulement |
+| `/api/live/online`, `/api/live/positions` | Présence et traces réservées administrateurs |
+| `GET /api/admin/overview` | Comptes, présence, activité, Valhalla, HERE ; absence mesures = `null` |
+| `GET /api/admin/trips` | Activité anonyme, pagination, départ décroissant ; aucun lieu ou identifiant compte |
+| `/api/admin/accounts` | Recherche, pagination, création, édition, suppression et registre bans |
+| `POST /api/admin/accounts/:id/action` | `ban\|unban\|suspend\|restore\|revokeSessions` |
+
+`tripId` admis permet recalcul gratuit, même plafond atteint ou après minuit.
+Nouvel identifiant compte nouveau départ, même destination. Anciennes apps gardent comptage historique au calcul.
+Membres exigent Bearer valide ; secours `deviceId` réservé invités. Bearer invalide ne retombe jamais sur appareil.
+Sessions mobiles : 90 jours ; `web:true` : douze heures. Redémarrage nécessite reconnexion membres.
+Admin : session administrateur valide. `ADMIN_TOKEN` réservé scripts, jamais embarqué dans application.
+
+Recherche : trigrammes, proximité 60 km, lieux notables France, enseigne et commune.
+Corrections manuelles : [backend/search/extra.sql](backend/search/extra.sql), rejouées au rebuild.
+Fitness Park Orly : position approchée ; adresse exacte reste à confirmer.
+Coût carburant : consommation estimée et prix proches ; péages non tarifés.
+
+### Confidentialité et modération
+
+Réglages Présence/Temps d'utilisation actifs par défaut dans iOS actuel.
+Deux réglages coupés : aucun ping mobile. Temps cumulé seulement avec `session:true`, absence >90 secondes exclue.
+Positions envoyées en trajet ; dernière position possible à fermeture hors trajet.
+Positions liées au compte, conservation 30 jours ; suppression compte efface positions.
+Historique statistiques conserve libellés, sans coordonnées.
+Groupes/partages mémoire : six heures maximum, quinze minutes après fin.
+Vitesses EONA anonymes : clé aléatoire trajet, mémoire trente minutes.
+Mesures routage : 90 jours ; tracés divergents admin : 30 jours ; journal admin : 365 jours.
+Signalements fermés et bugs résolus : 90 jours. Plaque voiture radar jamais exposée.
+Bugs volontaires peuvent joindre destination/tracé même statistiques désactivées.
+Capture facultative : JPEG, 1 Mio maximum, 4096 pixels/côté, huit millions pixels ; accès admin privé.
+
+Bans persistés dans `<ACCOUNTS_FILE>.bans.json`, séparément des comptes.
+Ban bloque compte, emails normalisés, appareils EONA connus et identités fournisseurs connues.
+Identifiant appareil EONA logiciel conservé dans Keychain ; **aucun HWID matériel disponible**.
+Suppression compte conserve bans. Déban reste possible après suppression compte source.
+Suspension réversible ; révocation sessions distincte. Protéger propre compte et dernier administrateur actif.
+DTO admin explicites : aucun hash mot de passe, code ou jeton exposé.
+Réactivation signalement supprimé et rôle modérateur distinct non développés.
+
+## 7. État livré et points ouverts
+
+Référence iOS fonctionnelle : `c51b834`, build **54**, version **1.0.0**.
+Android observé : version **1.0.2**, code **36** ; évolutions Android réservées Claude local.
+Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
+
+Déploiements backend consignés : `a85c6bc`, puis quatre fichiers stations `5646f45` le 08/10.
+Lecture production 14/10 : santé HTTP 200, Valhalla `all`, carte 11/10, HERE limité à 5 €.
+Checkout déploiement conserve correctif local `435837c`, encore distinct de production.
+
+Points ouverts concrets :
+
+1. Déployer correctif HERE/plafond 10 € seulement après nouvel accord Arthur.
+2. Inclure registre bans dans sauvegarde quotidienne avant prochaine livraison concernée.
+3. Aligner HTML confidentialité : défaut présence et couverture HERE décrits différemment du code actuel.
+4. Mesurer ETA après nouvelle livraison ; conserver séparation pauses/embouteillages et versions d'application.
+5. Valider lecteur système sur téléphone ; titre tiers reste sans solution logicielle démontrée.
+6. Perso, feux, gabarit poids lourd et achat abonnement restent chantiers distincts, sans livraison implicite.
+
+Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.
