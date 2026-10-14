@@ -5,13 +5,14 @@
 Deux références uniquement : ce fichier et [EXPLOITATION.md](EXPLOITATION.md).
 Ce fichier décrit produit, architecture, limites réelles et règles de travail.
 EXPLOITATION décrit Git, builds, production, sauvegardes et déploiement.
-Claude doit lire ce fichier au démarrage ; aucun import Markdown supplémentaire.
+Claude lit ce fichier puis EXPLOITATION à chaque session. Aucun CLAUDE.md ; rien ne se charge seul.
 Anciens documents restent consultables dans historique Git.
 
 ## 1. Travail avec Arthur
 
 - Arthur décide périmètre et livraison ; validation fonctionnelle sur téléphone.
-- Codex : iOS et backend. Claude local : Android. Aucun travail dupliqué.
+- Depuis 14/10 : Claude développeur principal backend, iOS et Android. Aucun travail dupliqué.
+- Parité stricte Android/iOS : mêmes règles, mêmes champs JSON, logique dans `core/` et EonaCore.
 - **Ne pas utiliser bridge.** Sessions autonomes, coordonnées par Arthur.
 - Français, skill **caveman ultra** pour réponses, textes, commentaires, commits et documents.
 - Phrases courtes, vingt mots maximum, une idée par phrase. Termes techniques exacts.
@@ -32,7 +33,7 @@ Anciens documents restent consultables dans historique Git.
 |---|---|---|---|
 | Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `feature/mini-player-musique` ; principale `main` |
 | iOS | `C:\Users\usr\Documents\xradar_ios` | `git@github.com:Zende3v/xradar_ios.git` | `main` |
-| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché ; code de référence `435837c` |
+| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `b05d017` ; code identique `435837c`, commentaires exceptés |
 
 Android : Kotlin, Jetpack Compose sur mesure, MapLibre, tuiles Stadia. Package `com.eona.app`.
 Logique métier commune dans `core/`, portée vers iOS avec mêmes règles et champs JSON.
@@ -274,11 +275,13 @@ Réactivation signalement supprimé et rôle modérateur distinct non développ�
 ## 7. État livré et points ouverts
 
 Référence iOS fonctionnelle : `c51b834`, build **54**, version **1.0.0**.
-Android observé : version **1.0.2**, code **36** ; évolutions Android réservées Claude local.
+Android observé : version **1.0.2**, code **36**.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
 Déploiements backend consignés : `a85c6bc`, puis quatre fichiers stations `5646f45` le 08/10.
 Lecture production 14/10 : santé HTTP 200, Valhalla `all`, carte 11/10, HERE limité à 5 €.
+Empreintes 14/10, 72 fichiers `src`/`bin`, fins de ligne ignorées : code `a85c6bc`.
+Seules exceptions : `places/routes.js` et `places/store.js`, identiques `5646f45`. Fichiers production majoritairement CRLF.
 Checkout déploiement conserve correctif local `435837c`, encore distinct de production.
 
 Points ouverts concrets :
