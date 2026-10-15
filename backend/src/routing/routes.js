@@ -25,7 +25,7 @@ export function createRouteRouter({
   faster = checkFaster,
   liveReady = () => hereAllows(),
   accountAllows = hereAccountAllows,
-  travel = (points) => hereTravel(points, { use: 'eta' }),
+  travel = hereTravel,
 } = {}) {
   const router = Router();
   /** When each account last had a faster-route check (rerouteCheckGapS). */
@@ -58,12 +58,12 @@ export function createRouteRouter({
    * muet, budget atteint ou route non reconnue. Même tracé que premier rafraîchissement trafic de
    * l'app : cache HERE 60 s, aucun second appel pour la route choisie.
    */
-  async function timeRoute(route) {
+  async function timeRoute(route, accountId) {
     const points = (route.coordinates ?? []).map(([lon, lat]) => [lat, lon]);
     let timer;
     const late = new Promise((resolve) => { timer = setTimeout(() => resolve(null), config.routeTimingMs); });
     try {
-      const timing = await Promise.race([Promise.resolve().then(() => travel(points)).catch(() => null), late]);
+      const timing = await Promise.race([Promise.resolve().then(() => travel(points, { use: 'eta', accountId })).catch(() => null), late]);
       return timing?.travelS > 0 ? timing.travelS : null;
     } finally {
       clearTimeout(timer);
@@ -123,7 +123,7 @@ export function createRouteRouter({
     const reply = async (route) => (!preference && !timed ? route : {
       ...route,
       ...(preference ? { preference } : {}),
-      ...(timed ? { travelS: moped ? null : await timeRoute(route) } : {}),
+      ...(timed ? { travelS: moped ? null : await timeRoute(route, account.id) } : {}),
     });
     // A guest starts a limited number of trips a day; recalculations to the same place are free.
     const preview = req.query.preview === '1';
@@ -255,6 +255,7 @@ export function createRouteRouter({
     if (!accountAllows(account.id, now, 'faster')) return answer(429, { error: 'daily check limit' });
     try {
       const { answer: result, compare } = await faster(points, {
+        accountId: account.id,
         avoid,
         sinceRerouteS: Number.isFinite(since) && since >= 0 ? since : null,
         etaS: Number.isFinite(etaS) && etaS > 0 ? etaS : null,

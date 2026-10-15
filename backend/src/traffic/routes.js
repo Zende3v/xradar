@@ -42,7 +42,7 @@ trafficRouter.post('/route', async (req, res) => {
   let traffic = { totalM: Math.round(path.total), travelS: null, delayS: null, updatedAt: new Date().toISOString(), sections: [] };
   let live = false;
   if (wantsLive && config.hereApiKey && hereAccountAllows(account.id)) {
-    ({ traffic, live } = await hereSnapshot(points));
+    ({ traffic, live } = await hereSnapshot(points, { accountId: account.id }));
   }
   const liveSections = traffic.sections.map((section) => ({ ...section, source: liveName }));
   // Without the drivers' jams (database down), the rest still counts.

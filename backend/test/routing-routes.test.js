@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { config } from '../src/config.js';
+import { createHereBudget } from '../src/traffic/budget.js';
+import { createHereCache } from '../src/traffic/here-cache.js';
+import { hereTravel } from '../src/traffic/here.js';
+import { measure } from '../src/routing/geometry.js';
 import { after, before, describe, it } from 'node:test';
 import express from 'express';
 import { createRoutingEngine } from '../src/routing/engine.js';
@@ -34,7 +42,7 @@ const STEP_KEYS = ['distanceM', 'durationS', 'exit', 'exitNumber', 'location', '
 const servers = [];
 after(() => Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve)))));
 
-async function setup({ mode = 'ors', ors = fakeOrs(), valhalla = fakeValhalla(), faster, traffic } = {}) {
+async function setup({ mode = 'ors', ors = fakeOrs(), valhalla = fakeValhalla(), faster, traffic, travel } = {}) {
   let current = mode;
   const routing = createRoutingEngine({
     ors,
@@ -62,6 +70,7 @@ async function setup({ mode = 'ors', ors = fakeOrs(), valhalla = fakeValhalla(),
     faster: faster ?? ((points, options) => checkFaster(points, { ...options, traffic })),
     liveReady: () => true,
     accountAllows: () => true,
+    ...(travel ? { travel } : {}),
   });
   const app = express();
   app.use(express.json({ limit: '3mb' }));
@@ -179,6 +188,41 @@ describe('/api/route', () => {
     await off.queue.idle();
     assert.equal(off.lines.length, 0);
     assert.equal(off.queue.stats().done, 0);
+  });
+
+  it('timed=1 : compte transmis, quota commun et cache sans débit supplémentaire', async t => {
+    const directory = mkdtempSync(join(tmpdir(), 'eona-timed-budget-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const budget = createHereBudget({ settings: { ...config,
+      hereApiKey: 'offline-test', hereUsageFile: join(directory, 'here.json'), hereDailyCap: null,
+      hereMonthlyBudgetEUR: 0, hereAccountDailyMax: 2, hereBillingStart: '2026-10-14',
+    }, now: () => Date.parse('2026-10-15T12:00:00Z') });
+    const cache = createHereCache(), seen = [];
+    let calls = 0;
+    const ctx = await setup({ mode: 'all', travel: (points, options) => {
+      seen.push(options);
+      return hereTravel(points, { ...options, cache, reserve: budget.reserve, fetchImpl: async () => {
+        calls++;
+        return { ok: true, json: async () => ({ routes: [{ sections: [{ summary: {
+          duration: 1500, baseDuration: 1200, length: measure(points).total,
+        } }] }] }) };
+      } });
+    } });
+    assert.equal(budget.reserve('faster', 'flow', USERS.driver.id), true);
+    const first = trip();
+    assert.equal((await call(ctx.server, 'GET', first.path + '&timed=1', as('driver'))).json.travelS, 1500);
+    assert.equal((await call(ctx.server, 'GET', first.path + '&timed=1', as('driver'))).json.travelS, 1500);
+    assert.equal(ctx.logs.at(-1).cached, true);
+    assert.equal(calls, 1);
+    const next = trip();
+    assert.equal((await call(ctx.server, 'GET', next.path + '&timed=1', as('driver'))).json.travelS, null);
+    assert.equal(calls, 1);
+    assert.equal((await call(ctx.server, 'GET', next.path + '&timed=1', as('other'))).json.travelS, 1500);
+    assert.equal(calls, 2);
+    assert.deepEqual(seen.map(options => options.accountId), [USERS.driver.id, USERS.driver.id, USERS.driver.id, USERS.other.id]);
+    assert.ok(seen.every(options => options.use === 'eta'));
+    assert.equal(budget.usage().used, 3);
+    await ctx.queue.idle();
   });
 });
 

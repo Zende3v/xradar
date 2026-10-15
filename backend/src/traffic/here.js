@@ -31,7 +31,7 @@ export const hereQuality = () => ({ import: { ...importStatus, rejected: { ...im
  * (its length off ours by more than hereImportMaxLengthGap). Throws when HERE does not answer.
  * The ETA's time: the engine's alone is far too quick in towns (config.js, 30/09).
  */
-export async function hereTravel(points, { use = 'eta', fetchImpl = globalThis.fetch, reserve = reserveHere, cache = hereCache } = {}) {
+export async function hereTravel(points, { use = 'eta', accountId, fetchImpl = globalThis.fetch, reserve = reserveHere, cache = hereCache } = {}) {
   importStatus.evaluations++;
   const path = measure(points);
   const step = Math.max(config.hereImportStepM, path.total / (config.hereImportMaxPoints - 1));
@@ -47,7 +47,7 @@ export async function hereTravel(points, { use = 'eta', fetchImpl = globalThis.f
     apiKey: config.hereApiKey,
   });
   const load = async () => {
-  if (!reserve(use, 'import')) throw new Error('HERE budget unavailable');
+  if (!reserve(use, 'import', accountId)) throw new Error('HERE budget unavailable');
   const res = await fetchImpl(`${config.hereRouterUrl.replace(/\/$/, '')}/import?${query}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -110,14 +110,14 @@ export function corridorOf(path) {
 }
 
 /** One HERE Traffic request (flow | incidents) over [corridor], counted for [use]. */
-async function ask(kind, corridor, use, fetchImpl = globalThis.fetch, reserve = reserveHere, cache = hereCache) {
+async function ask(kind, corridor, use, accountId, fetchImpl = globalThis.fetch, reserve = reserveHere, cache = hereCache) {
   const body = {
     in: { type: 'corridor', corridor: corridor.polyline, radius: config.hereCorridorRadiusM },
     locationReferencing: ['shape'],
     ...(kind === 'flow' && config.hereDeepCoverage ? { advancedFeatures: ['deepCoverage'] } : {}),
   };
   const load = async () => {
-  if (!reserve(use, kind)) throw new Error('HERE budget unavailable');
+  if (!reserve(use, kind, accountId)) throw new Error('HERE budget unavailable');
   const res = await fetchImpl(`${config.hereTrafficUrl.replace(/\/$/, '')}/${kind}?apiKey=${encodeURIComponent(config.hereApiKey)}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -137,12 +137,12 @@ async function ask(kind, corridor, use, fetchImpl = globalThis.fetch, reserve = 
  * delayS, sections } — flow slowdowns and incidents in metres along [points]. Throws when HERE
  * does not answer. [fetchImpl] stands for the network in the tests.
  */
-export async function hereAlong(points, { use = 'eta', fetchImpl, reserve = reserveHere, cache = hereCache } = {}) {
+export async function hereAlong(points, { use = 'eta', accountId, fetchImpl, reserve = reserveHere, cache = hereCache } = {}) {
   const path = measure(points);
   const corridor = corridorOf(path);
   const [flow, incidents] = await Promise.allSettled([
-    ask('flow', corridor, use, fetchImpl, reserve, cache),
-    ask('incidents', corridor, use, fetchImpl, reserve, cache),
+    ask('flow', corridor, use, accountId, fetchImpl, reserve, cache),
+    ask('incidents', corridor, use, accountId, fetchImpl, reserve, cache),
   ]);
   if (flow.status === 'rejected' && incidents.status === 'rejected') throw flow.reason;
   const sections = placeOnRoute(path, flow.status === 'fulfilled' ? flow.value : [], incidents.status === 'fulfilled' ? incidents.value : []);
@@ -264,7 +264,7 @@ function slowdownOf(part, length) {
 }
 
 /** Durée valide prioritaire ; trafic lent poursuit travail et cache sans bloquer l'ETA. */
-export async function hereSnapshot(points, { along = hereAlong, travel = hereTravel, flowWaitMs = config.routeTimingMs } = {}) {
+export async function hereSnapshot(points, { accountId, along = hereAlong, travel = hereTravel, flowWaitMs = config.routeTimingMs } = {}) {
   // Rejets tardifs consommés même après réponse partielle. Délai commence avec les deux appels.
   const settle = (load) => Promise.resolve().then(load).then(
     value => ({ status: 'fulfilled', value }),
@@ -273,8 +273,8 @@ export async function hereSnapshot(points, { along = hereAlong, travel = hereTra
   const pending = Symbol('flow pending');
   let timer;
   const deadline = new Promise(resolve => { timer = setTimeout(() => resolve(pending), flowWaitMs); });
-  const flow = settle(() => along(points, { use: 'eta' }));
-  const timing = settle(() => travel(points, { use: 'eta' }));
+  const flow = settle(() => along(points, { use: 'eta', accountId }));
+  const timing = settle(() => travel(points, { use: 'eta', accountId }));
   try {
     const durationResult = await timing;
     const duration = durationResult.status === 'fulfilled' ? durationResult.value : null;

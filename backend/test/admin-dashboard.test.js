@@ -15,6 +15,12 @@ Object.assign(process.env, {
 });
 const { dashboardPresence, dashboardTrips, dashboardRoutingStats, createDashboardRouter } = await import('../src/admin/dashboard.js');
 const { accountStore } = await import('../src/accounts/store.js');
+const { config } = await import('../src/config.js');
+const { createHereBudget } = await import('../src/traffic/budget.js');
+const hereBudget = createHereBudget({ settings: { ...config, hereApiKey: 'offline-test', hereMonthlyBudgetEUR: 0,
+  hereAccountDailyMax: 250, hereBillingStart: '2026-10-14',
+}, now: () => Date.parse('2026-10-15T12:00:00Z') });
+for (let n = 0; n < 8; n++) assert.equal(hereBudget.reserve('eta', n % 2 ? 'import' : 'flow', 'private-account'), true);
 
 const now = Date.now();
 const accounts = [
@@ -119,7 +125,7 @@ const app = express();
 app.use('/api/admin', createDashboardRouter({
   store, live: { entries: () => [] }, database: { query: async () => { throw new Error('offline'); } },
   engine: { health: () => ({ provider: 'valhalla', mode: 'all', valhalla: { state: 'ready' }, fallbacks: {} }) },
-  usage: () => ({ monthUsed: 8, estimateOnly: true, history: { totalRequests: 8 } }),
+  usage: hereBudget.usage,
 }));
 const server = app.listen(0, '127.0.0.1');
 await once(server, 'listening');
@@ -141,4 +147,16 @@ test('Panel refuse invité, faux Bearer et appareil admin ; accepte vraie sessio
   assert.equal(result.json.routingStats.available, false);
   assert.equal(result.json.routingStats.totalRequests, null);
   assert.equal(result.json.here.history.totalRequests, 8);
+  assert.equal(result.json.here.monthlyBudgetEUR, 0);
+  assert.equal(result.json.here.estimatedMonthEUR, 0);
+  assert.equal(result.json.here.estimatedOverageEUR, 0);
+  assert.equal(result.json.here.accountDailyMax, 250);
+  assert.equal(result.json.here.fasterAccountDailyMax, 250);
+  assert.deepEqual(result.json.here.franchises, { realTimeTraffic: 5000, advancedTraffic: 2500, routeImport: 2500 });
+  for (const window of Object.values(result.json.here.billingWindows)) {
+    assert.equal(window.usedByProduct.realTimeTraffic, 4);
+    assert.equal(window.usedByProduct.routeImport, 4);
+    assert.equal(window.estimatedOverageEUR, 0);
+  }
+  assert.equal(JSON.stringify(result.json.here).includes('private-account'), false);
 });

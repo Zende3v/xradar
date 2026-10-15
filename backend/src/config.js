@@ -125,28 +125,27 @@ export const config = {
   // stay readable. The OSM classes counted as minor roads (P1.3), for those runs.
   benchMinorRoadClasses: ['unclassified', 'residential', 'living_street', 'service'],
 
-  // HERE Traffic API v7 (traffic/here.js): the live traffic on the route since 30/09, in place of
-  // TomTom. Key from the service environment (drop-in here.conf, never versioned); absent, no live
-  // traffic: the ETA goes on with the engine, EONA and data.gouv. A refresh sends 2 requests (flow,
-  // incidents) over a corridor around the rest of the route (its first hereCorridorMaxM, at most
-  // hereCorridorMaxPoints points, hereCorridorRadiusM either side). Billed past HERE's free tier
-  // (Base Plan): no daily cap asked (Arthur, 29/09) unless HERE_DAILY_CAP; but one account asks at
-  // most once a hereAccountGapS and hereAccountDailyMax times a UTC day, so no loop drains it. A
-  // segment is on the route within hereOnRouteM; slowed from jam factor hereMinJamFactor.
+  // HERE Base Plan : franchises par produit, dépassement nul par défaut.
+  // Quota commun du compte : transactions réservées par jour UTC.
+  // Flow/incidents : Real-Time Traffic, ou Advanced Traffic avec Deep Coverage.
   hereApiKey: process.env.HERE_API_KEY || null,
   hereTrafficUrl: process.env.HERE_TRAFFIC_URL || 'https://data.traffic.hereapi.com/v7',
   hereDeepCoverage: /^(1|true)$/i.test(process.env.HERE_DEEP_COVERAGE || ''),
   hereDailyCap: count(process.env.HERE_DAILY_CAP, null),
-  // Plafond estimé : tarifs configurables, aucune franchise supposée, marge de 20 %.
-  hereMonthlyBudgetEUR: Number(process.env.HERE_MONTHLY_BUDGET_EUR ?? 10),
+  // Dépassement autorisé après franchises ; marge prudente conservée.
+  hereMonthlyBudgetEUR: Number(process.env.HERE_MONTHLY_BUDGET_EUR ?? 0),
+  hereTrafficFreeMonthly: Number(process.env.HERE_TRAFFIC_FREE_MONTHLY ?? 5000),
+  hereAdvancedTrafficFreeMonthly: Number(process.env.HERE_ADVANCED_TRAFFIC_FREE_MONTHLY ?? 2500),
+  hereImportFreeMonthly: Number(process.env.HERE_IMPORT_FREE_MONTHLY ?? 2500),
+  hereBillingStart: process.env.HERE_BILLING_START ?? '2026-10-14',
   hereTrafficEURPer1000: Number(process.env.HERE_TRAFFIC_EUR_PER_1000 ?? 2.33),
+  hereAdvancedTrafficEURPer1000: Number(process.env.HERE_ADVANCED_TRAFFIC_EUR_PER_1000 ?? 4.66),
   hereImportEURPer1000: Number(process.env.HERE_IMPORT_EUR_PER_1000 ?? 4.66),
   herePriceMargin: Number(process.env.HERE_PRICE_MARGIN ?? 1.2),
   hereCacheMs: 60_000,
   hereCacheEntries: 128,
-  hereFasterAccountDailyMax: count(process.env.HERE_FASTER_ACCOUNT_DAILY_MAX, 30),
   hereAccountGapS: 60,
-  hereAccountDailyMax: count(process.env.HERE_ACCOUNT_DAILY_MAX, 150),
+  hereAccountDailyMax: Number(process.env.HERE_ACCOUNT_DAILY_MAX ?? 250),
   hereUsageFile: process.env.HERE_USAGE_FILE || './data/here-usage.json',
   hereTimeoutMs: 12 * 1000,
   hereCorridorMaxM: 490_000,

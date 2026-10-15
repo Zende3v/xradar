@@ -44,7 +44,7 @@ const THROUGH_CLOSURE_SHARE = 0.5;
  * retenue, sans chronométrage HERE (temps voiture faux à 45 km/h) ; tracés motor_scooter.
  * { answer, compare } conserve contrat API et comparaison des moteurs en mode ombre.
  */
-export async function checkFaster(points, { avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest', via = [], moped = false, vehicle = 'car' } = {}) {
+export async function checkFaster(points, { accountId, avoid = [], sinceRerouteS = null, etaS = null, draw, traffic = liveTraffic, travel = hereTravel, preference = 'fastest', via = [], moped = false, vehicle = 'car' } = {}) {
   if (sinceRerouteS != null && sinceRerouteS < config.rerouteCooldownS) {
     return { answer: { better: null, reason: 'cooldown' }, compare: null };
   }
@@ -58,7 +58,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   const stopsM = via.map((stop) => project(path, routeGrid, stop.lat, stop.lon, STOP_ON_ROUTE_M)?.along ?? null);
   if (stopsM.some((m) => m == null)) return { answer: { better: null, reason: 'stop off route' }, compare: null };
   const reach = stopsM.length ? stopsM[0] : path.total;
-  const current = await traffic(points, path);
+  const current = await traffic(points, path, { accountId });
   if (!current.reliable) return { answer: { better: null, reason: 'live traffic unavailable' }, compare: null };
   const sticky = sinceRerouteS != null && sinceRerouteS < config.rerouteStickyS;
   const thresholdS = Math.round(
@@ -87,7 +87,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   // détour imposé par la fermeture, aucun temps à comparer.
   let currentS = null;
   if (!closedOnly) {
-    const baseline = await travel(window, { use: 'faster' }).catch(() => null);
+    const baseline = await travel(window, { use: 'faster', accountId }).catch(() => null);
     if (!(baseline?.travelS > 0)) return { answer: { ...summary, better: null, reason: 'HERE baseline unavailable' }, compare: null };
     currentS = baseline.travelS + delayWithin(current.sections.filter(s=>s.source === 'crowd' || s.source === 'datagouv'), 0, rejoinM);
   }
@@ -127,7 +127,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
   let best = null;
   let timed = 0;
   for (const candidate of drawn.viable) {
-    const live = await traffic(candidate.line).catch((e) => {
+    const live = await traffic(candidate.line, undefined, { accountId }).catch((e) => {
       console.warn('[faster] live traffic on a variant —', String(e.message || e));
       return null;
     });
@@ -139,7 +139,7 @@ export async function checkFaster(points, { avoid = [], sinceRerouteS = null, et
       if (!best || candidate.route.distanceM < best.route.distanceM) best = { candidate, route: candidate.route, travelS: null };
       continue;
     }
-    const timing = await travel(candidate.line, { use: 'faster' }).catch(() => null);
+    const timing = await travel(candidate.line, { use: 'faster', accountId }).catch(() => null);
     if (!(timing?.travelS > 0)) continue;
     timed += 1;
     const travelS = timing.travelS + delayWithin(live.sections.filter(s=>s.source === 'crowd' || s.source === 'datagouv'), 0, Infinity);
@@ -236,8 +236,8 @@ export function worthChecking(sections, totalM, aheadM) {
  * the time they lose together ([delayS]) and the drivers' part of it ([crowdS]). Without HERE
  * (no key, or silent), the drivers' alone; without them (database down), HERE's alone.
  */
-async function liveTraffic(points, path = measure(points)) {
-  const live = await hereAlong(points, { use: 'faster' }).catch((e) => {
+async function liveTraffic(points, path = measure(points), { accountId } = {}) {
+  const live = await hereAlong(points, { use: 'faster', accountId }).catch((e) => {
     console.warn('[faster] HERE unavailable —', String(e.message || e));
     return { sections: [], flowAvailable: false, incidentsAvailable: false };
   });

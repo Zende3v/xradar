@@ -15,6 +15,10 @@ Object.assign(process.env, {
   DEVICE_TRIALS_FILE: join(dir, 'device-trials.json'),
   ORS_USAGE_FILE: join(dir, 'ors-usage.json'),
   TOMTOM_USAGE_FILE: join(dir, 'tomtom-usage.json'),
+  HERE_USAGE_FILE: join(dir, 'here-usage.json'),
+  HERE_MONTHLY_BUDGET_EUR: '0', HERE_BILLING_START: '2026-10-14',
+  HERE_ACCOUNT_DAILY_MAX: '250', HERE_TRAFFIC_FREE_MONTHLY: '5000',
+  HERE_ADVANCED_TRAFFIC_FREE_MONTHLY: '2500', HERE_IMPORT_FREE_MONTHLY: '2500',
   ADMIN_TOKEN: 'test-admin-token',
 });
 delete process.env.VALHALLA_ENABLED;
@@ -136,6 +140,19 @@ describe('/health', () => {
     assert.deepEqual(Object.keys(routing.fallbacks).sort(), ['byCause', 'last', 'since', 'total']);
     assert.deepEqual(Object.keys(routing.shadow).sort(), ['done', 'dropped', 'failed', 'max', 'queued', 'running']);
     assert.ok(r.json.traffic);
+    const here = r.json.traffic.here;
+    assert.equal(here.monthlyBudgetEUR, 0);
+    assert.equal(here.estimatedMonthEUR, 0);
+    assert.equal(here.estimatedOverageEUR, 0);
+    assert.equal(here.accountDailyMax, 250);
+    assert.equal(here.fasterAccountDailyMax, 250);
+    assert.deepEqual(here.franchises, { realTimeTraffic: 5000, advancedTraffic: 2500, routeImport: 2500 });
+    assert.equal(here.billingStart, '2026-10-14');
+    assert.ok(here.billingWindows.calendar.products);
+    assert.ok(here.billingWindows.anniversary.products);
+    assert.equal(here.history.totalRequests, 0);
+    assert.ok(here.cache);
+    assert.ok(here.quality);
     assert.doesNotMatch(JSON.stringify(routing), /osrm|8002/);
   });
 

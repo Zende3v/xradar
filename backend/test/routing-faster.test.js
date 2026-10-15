@@ -105,6 +105,25 @@ describe('faster check', () => {
     assert.equal(calm.compare, null);
     assert.equal(e.asks.length, 0);
   });
+
+  it('transmet le compte au trafic courant, variantes et Import', async () => {
+    const seen = [], first = live().traffic;
+    const result = await actualCheckFaster(POINTS, { accountId: 'owner', draw: engine('valhalla').draw,
+      traffic: async (points, path, options) => {
+        seen.push({ kind: 'traffic', ...options });
+        return first(points, path);
+      },
+      travel: async (points, options) => {
+        seen.push({ kind: 'import', ...options });
+        return { travelS: points.some(point => point[0] > 48.00001) ? 1000 : 1500 };
+      },
+    });
+    assert.ok(result.answer.better);
+    assert.deepEqual(seen, [
+      { kind: 'traffic', accountId: 'owner' }, { kind: 'import', use: 'faster', accountId: 'owner' },
+      { kind: 'traffic', accountId: 'owner' }, { kind: 'import', use: 'faster', accountId: 'owner' },
+    ]);
+  });
 });
 
 describe('shadow drawing', () => {

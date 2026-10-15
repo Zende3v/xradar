@@ -12,7 +12,8 @@ function fixture(t, { at = '2026-10-05T10:00:00Z', overrides = {}, saved } = {})
     hereUsageFile: join(directory, 'usage.json'), hereApiKey: 'offline-test', hereDailyCap: null,
     hereMonthlyBudgetEUR: 100_000, hereTrafficEURPer1000: 1, hereImportEURPer1000: 2,
     herePriceMargin: 1.2, hereDeepCoverage: false, hereAccountGapS: 60, rerouteCheckGapS: 60,
-    hereAccountDailyMax: 2, hereFasterAccountDailyMax: 1, ...overrides,
+    hereAccountDailyMax: 250, hereBillingStart: '2000-01-01',
+    hereTrafficFreeMonthly: 0, hereAdvancedTrafficFreeMonthly: 0, hereImportFreeMonthly: 0, ...overrides,
   };
   if (saved) writeFileSync(settings.hereUsageFile, JSON.stringify(saved));
   let time = Date.parse(at);
@@ -54,9 +55,9 @@ test('Historique HERE : types mensuels prioritaires, solde ancien classé import
 test('Historique HERE : réservations Paris, budget UTC et cumul après mois/redémarrage', t => {
   const f = fixture(t, { at: '2026-09-30T21:59:00Z' });
   const budget = f.make();
-  assert.equal(budget.reserve('eta', 'flow'), true);
+  assert.equal(budget.reserve('eta', 'flow', 'account-a'), true);
   f.setTime('2026-09-30T22:01:00Z');
-  assert.equal(budget.reserve('faster', 'import'), true);
+  assert.equal(budget.reserve('faster', 'import', 'account-a'), true);
   assert.equal(budget.usage().month, '2026-09');
   assert.equal(budget.usage().used, 2);
   assert.deepEqual(f.saved().history.daily, {
@@ -64,7 +65,7 @@ test('Historique HERE : réservations Paris, budget UTC et cumul après mois/red
     '2026-10-01': { flow: 0, incidents: 0, import: 1 },
   });
   f.setTime('2026-10-01T00:01:00Z');
-  assert.equal(budget.reserve('eta', 'incidents'), true);
+  assert.equal(budget.reserve('eta', 'incidents', 'account-a'), true);
   assert.equal(budget.usage().monthUsed, 1);
   assert.equal(budget.usage().history.totalRequests, 3);
   assert.equal(budget.usage().history.weekRequests, 3);
@@ -75,15 +76,15 @@ test('Historique HERE : réservations Paris, budget UTC et cumul après mois/red
 test('Historique HERE : semaine lundi Paris, sans remettre plafond UTC à zéro', t => {
   const f = fixture(t, { at: '2026-10-02T12:00:00Z' });
   const budget = f.make();
-  budget.reserve('eta', 'flow');
+  budget.reserve('eta', 'flow', 'account-a');
   f.setTime('2026-10-04T21:59:00Z');
-  budget.reserve('eta', 'incidents');
+  budget.reserve('eta', 'incidents', 'account-a');
   assert.equal(budget.usage().history.weekStart, '2026-09-28');
   assert.equal(budget.usage().history.weekRequests, 2);
   f.setTime('2026-10-04T22:00:00Z');
   assert.equal(budget.usage().history.weekRequests, 0);
   assert.equal(budget.usage().history.weekComplete, true);
-  budget.reserve('faster', 'import');
+  budget.reserve('faster', 'import', 'account-a');
   assert.equal(budget.usage().history.weekStart, '2026-10-05');
   assert.equal(budget.usage().history.weekRequests, 1);
   assert.equal(budget.usage().history.totalRequests, 3);
@@ -108,9 +109,9 @@ test('Historique HERE : passage été Paris, semaine 167 heures et jour sans tro
   assert.equal((after.startAt - before.startAt) / 3_600_000, 167);
   const f = fixture(t, { at: '2026-03-29T00:30:00Z' });
   const budget = f.make();
-  budget.reserve('eta', 'flow');
+  budget.reserve('eta', 'flow', 'account-a');
   f.setTime('2026-03-29T01:30:00Z');
-  budget.reserve('eta', 'flow');
+  budget.reserve('eta', 'flow', 'account-a');
   assert.equal(f.saved().history.daily['2026-03-29'].flow, 2);
   f.setTime('2026-03-29T22:00:00Z');
   assert.equal(budget.usage().history.weekRequests, 0);
@@ -124,9 +125,9 @@ test('Historique HERE : passage hiver Paris, semaine 169 heures et heure répét
   assert.equal((after.startAt - before.startAt) / 3_600_000, 169);
   const f = fixture(t, { at: '2026-10-25T00:30:00Z' });
   const budget = f.make();
-  budget.reserve('eta', 'flow');
+  budget.reserve('eta', 'flow', 'account-a');
   f.setTime('2026-10-25T01:30:00Z');
-  budget.reserve('eta', 'flow');
+  budget.reserve('eta', 'flow', 'account-a');
   assert.equal(f.saved().history.daily['2026-10-25'].flow, 2);
   f.setTime('2026-10-25T23:00:00Z');
   assert.equal(budget.usage().history.weekRequests, 0);
@@ -135,9 +136,9 @@ test('Historique HERE : passage hiver Paris, semaine 169 heures et heure répét
 test('Historique HERE : coût recalcule taux, marge et couverture configurés actuellement', t => {
   const f = fixture(t);
   const budget = f.make();
-  budget.reserve('eta', 'flow');
-  budget.reserve('eta', 'incidents');
-  budget.reserve('faster', 'import');
+  budget.reserve('eta', 'flow', 'account-a');
+  budget.reserve('eta', 'incidents', 'account-a');
+  budget.reserve('faster', 'import', 'account-a');
   assert.equal(budget.usage().history.totalEstimatedEUR, 0.0048);
   f.settings.hereTrafficEURPer1000 = 3;
   f.settings.hereImportEURPer1000 = 4;
@@ -148,7 +149,7 @@ test('Historique HERE : coût recalcule taux, marge et couverture configurés ac
   f.settings.hereTrafficEURPer1000 = NaN;
   assert.equal(budget.usage().history.totalEstimatedEUR, null);
   assert.equal(budget.usage().history.weekEstimatedEUR, null);
-  assert.equal(budget.reserve('eta', 'flow'), false);
+  assert.equal(budget.reserve('eta', 'flow', 'account-a'), false);
 });
 
 test('Historique HERE : fichier absent de configuration donne coût inconnu et ferme appels', t => {
@@ -157,30 +158,30 @@ test('Historique HERE : fichier absent de configuration donne coût inconnu et f
   assert.equal(budget.usage().history.totalEstimatedEUR, null);
   assert.equal(budget.usage().history.weekEstimatedEUR, null);
   assert.equal(budget.usage().history.weekComplete, false);
-  assert.equal(budget.reserve('eta', 'flow'), false);
+  assert.equal(budget.reserve('eta', 'flow', 'account-a'), false);
   assert.equal(budget.usage().blocked, 'storage unavailable');
 });
 
 test('Historique HERE : échec écriture atomique refuse appel et garde cumul précédent', t => {
   const f = fixture(t);
   const budget = f.make();
-  assert.equal(budget.reserve('eta', 'flow'), true);
+  assert.equal(budget.reserve('eta', 'flow', 'account-a'), true);
   mkdirSync(f.settings.hereUsageFile + '.tmp');
-  assert.equal(budget.reserve('eta', 'flow'), false);
+  assert.equal(budget.reserve('eta', 'flow', 'account-a'), false);
   assert.equal(budget.usage().history.totalRequests, 1);
   assert.equal(budget.usage().history.weekRequests, 1);
   assert.equal(budget.usage().blocked, 'storage unavailable');
   assert.equal(f.saved().history.totalRequests, 1);
-  assert.equal(f.make().reserve('eta', 'flow'), false);
+  assert.equal(f.make().reserve('eta', 'flow', 'account-a'), false);
   assert.equal(f.saved().history.totalRequests, 1);
 });
 
 test('Historique HERE : rétention quotidienne bornée, cumul conservé après deux ans', t => {
   const f = fixture(t, { at: '2024-01-01T12:00:00Z' });
   const budget = f.make();
-  budget.reserve('eta', 'flow');
+  budget.reserve('eta', 'flow', 'account-a');
   f.setTime('2026-10-05T12:00:00Z');
-  budget.reserve('faster', 'import');
+  budget.reserve('faster', 'import', 'account-a');
   assert.deepEqual(Object.keys(f.saved().history.daily), ['2026-10-05']);
   assert.equal(budget.usage().history.totalRequests, 2);
   assert.equal(budget.usage().history.weekRequests, 1);
@@ -189,12 +190,12 @@ test('Historique HERE : rétention quotidienne bornée, cumul conservé après d
 
 test('Historique HERE : données corrompues refusent nouvelles réservations', t => {
   const f = fixture(t);
-  f.make().reserve('eta', 'flow');
+  f.make().reserve('eta', 'flow', 'account-a');
   const saved = f.saved();
   saved.history.totalRequests = 0;
   writeFileSync(f.settings.hereUsageFile, JSON.stringify(saved));
   const budget = f.make();
-  assert.equal(budget.reserve('eta', 'flow'), false);
+  assert.equal(budget.reserve('eta', 'flow', 'account-a'), false);
   assert.equal(budget.usage().history.totalEstimatedEUR, null);
   assert.equal(budget.usage().blocked, 'storage unavailable');
 });
