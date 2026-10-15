@@ -213,6 +213,8 @@ fun DriveScreen(
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
     var following by remember { mutableStateOf(true) }
+    var mapTilted by remember { mutableStateOf(false) }
+    var tiltToggleRequest by remember { mutableStateOf(0) }
     var reportOpen by remember { mutableStateOf(false) }
     var limitReportOpen by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
@@ -296,6 +298,8 @@ fun DriveScreen(
             traffic = state.traffic,
             following = following,
             onUserGesture = { following = false },
+            tiltToggleRequest = tiltToggleRequest,
+            onTiltChange = { mapTilted = it > 5.0 },
             onReportTap = if (isAdmin) ({ id -> pendingDelete = id }) else null,
             modifier = Modifier.fillMaxSize(),
             speedLimitKmh = state.speedLimitKmh,
@@ -643,6 +647,11 @@ fun DriveScreen(
                 onLimitClick = openLimitReport.takeUnless { state.isSearchingGps },
                 hasPlus = hasPlus,
                 onLightLocked = { onBlocked(PaywallReason.Lights) },
+                hasParking = parked.isNotEmpty(),
+                onParking = {
+                    parkingFocus = null
+                    parkingOpen = true
+                },
             )
         }
 
@@ -700,21 +709,15 @@ fun DriveScreen(
                     border = BorderStroke(1.dp, colors.border),
                     size = MAP_CONTROL_SIZE,
                 )
-                // « Stationnement » hors trajet : repères posés, gérés dans la feuille.
-                if (state.trip == null) {
-                    EonaIconButton(
-                        icon = EonaIcons.Parking,
-                        contentDescription = "Stationnement",
-                        onClick = {
-                            parkingFocus = null
-                            parkingOpen = true
-                        },
-                        tint = if (parked.isNotEmpty()) ParkingBlue else colors.textSecondary,
-                        background = colors.surface.copy(alpha = 0.62f),
-                        border = BorderStroke(1.dp, colors.border),
-                        size = MAP_CONTROL_SIZE,
-                    )
-                }
+                EonaIconButton(
+                    text = if (mapTilted) "2D" else "3D",
+                    contentDescription = if (mapTilted) "Vue 2D" else "Vue 3D",
+                    onClick = { tiltToggleRequest += 1 },
+                    tint = colors.textSecondary,
+                    background = colors.surface.copy(alpha = 0.62f),
+                    border = BorderStroke(1.dp, colors.border),
+                    size = MAP_CONTROL_SIZE,
+                )
                 // Primary crowdsourcing action: signal something on the road. Neutral glass and a
                 // grey triangle, like the other controls (no orange, no glow).
                 EonaIconButton(

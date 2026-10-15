@@ -77,6 +77,7 @@ import com.eona.app.designsystem.component.EonaSwitch
 import com.eona.app.designsystem.component.EonaText
 import com.eona.app.designsystem.foundation.EonaIcons
 import com.eona.app.designsystem.theme.EonaTheme
+import com.eona.app.feature.drive.ParkingBlue
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -104,6 +105,8 @@ fun DriveDock(
     /** EONA+ : timer des feux ouvert ; sinon cadenas, tap = offres. */
     hasPlus: Boolean = true,
     onLightLocked: () -> Unit = {},
+    hasParking: Boolean = false,
+    onParking: () -> Unit = {},
 ) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
@@ -141,6 +144,21 @@ fun DriveDock(
             scope.launch { progress.snapTo((progress.value - delta / travelPx).coerceIn(0f, 1f)) }
         }
 
+        // Même geste depuis la poignée et les cartes, sans intercepter les appuis.
+        val dockDrag = Modifier.draggable(
+            state = drag,
+            orientation = Orientation.Vertical,
+            onDragStopped = { velocity ->
+                settle(
+                    when {
+                        velocity < -FLING_PX_S -> true
+                        velocity > FLING_PX_S -> false
+                        else -> progress.value > 0.4f
+                    },
+                )
+            },
+        )
+
         EonaSurface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -155,19 +173,7 @@ fun DriveDock(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .draggable(
-                        state = drag,
-                        orientation = Orientation.Vertical,
-                        onDragStopped = { velocity ->
-                            settle(
-                                when {
-                                    velocity < -FLING_PX_S -> true
-                                    velocity > FLING_PX_S -> false
-                                    else -> progress.value > 0.4f
-                                },
-                            )
-                        },
-                    )
+                    .then(dockDrag)
                     .padding(horizontal = spacing.md)
                     .padding(bottom = spacing.md),
             ) {
@@ -185,16 +191,21 @@ fun DriveDock(
                         status = status,
                         searching = searching,
                         onLimitClick = onLimitClick,
-                        modifier = Modifier.weight(1.45f),
+                        modifier = Modifier.weight(1.45f).then(dockDrag),
                     )
-                    RedLightCard(secondsLeft = redLightSeconds, locked = !hasPlus, onLocked = onLightLocked, modifier = Modifier.weight(1f))
-                    OptionsCard(open = open, onClick = { settle(progress.value < 0.5f) })
+                    RedLightCard(
+                        secondsLeft = redLightSeconds,
+                        locked = !hasPlus,
+                        onLocked = onLightLocked,
+                        modifier = Modifier.weight(1f).then(dockDrag),
+                    )
+                    OptionsCard(open = open, onClick = { settle(progress.value < 0.5f) }, modifier = dockDrag)
                 }
 
                 if (open > 0.02f) {
                     Spacer(Modifier.height(spacing.md))
                     Column(Modifier.alpha(open)) {
-                        OptionsBody()
+                        OptionsBody(hasParking = hasParking, onParking = onParking)
                     }
                 }
             }
@@ -398,10 +409,10 @@ private fun RedLightCard(secondsLeft: Int?, locked: Boolean, onLocked: () -> Uni
 
 /** Pulls the dock open onto the options. */
 @Composable
-private fun OptionsCard(open: Float, onClick: () -> Unit) {
+private fun OptionsCard(open: Float, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = EonaTheme.colors
     DockCard(
-        modifier = Modifier
+        modifier = modifier
             .size(width = 72.dp, height = DOCK_CARD_HEIGHT)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -466,7 +477,7 @@ private fun Cluster(value: String, label: String, valueColor: Color, modifier: M
  * is left), as on iOS.
  */
 @Composable
-private fun ColumnScope.OptionsBody() {
+private fun ColumnScope.OptionsBody(hasParking: Boolean, onParking: () -> Unit) {
     val colors = EonaTheme.colors
     val spacing = EonaTheme.spacing
     val prefs by AppPreferences.alerts.collectAsStateWithLifecycle()
@@ -480,6 +491,17 @@ private fun ColumnScope.OptionsBody() {
     val shown = if (unfolded) rows else FOLDED_ROWS
     val cardHeight by animateDpAsState(OPTION_ROW_HEIGHT * shown + OPTION_DIVIDER * (shown - 1), label = "alertsCard")
 
+    EonaListGroup(color = groupColor, shadowElevation = 0.dp) {
+        EonaListRow(
+            title = "Stationnement",
+            leadingIcon = EonaIcons.Parking,
+            leadingTint = if (hasParking) ParkingBlue else colors.textSecondary,
+            onClick = onParking,
+            trailing = { EonaIcon(EonaIcons.ChevronRight, contentDescription = null, size = 16.dp) },
+            modifier = Modifier.height(OPTION_ROW_HEIGHT),
+        )
+    }
+    Spacer(Modifier.height(spacing.md))
     OptionTitle("Alertes")
     Spacer(Modifier.height(spacing.sm))
     Column(

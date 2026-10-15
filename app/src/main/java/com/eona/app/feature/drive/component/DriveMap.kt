@@ -137,6 +137,9 @@ fun DriveMap(
     /** Véhicules garés : repères bleu acier ; touchés : leur fiche. */
     parking: List<com.eona.app.core.model.ParkingSpot> = emptyList(),
     onParkingTap: ((String) -> Unit)? = null,
+    /** Bascule demandée depuis le HUD ; angle réel renvoyé pendant tout mouvement. */
+    tiltToggleRequest: Int = 0,
+    onTiltChange: (Double) -> Unit = {},
 ) {
     // Compose previews have no GL context — show a plain backdrop instead.
     if (LocalInspectionMode.current) {
@@ -179,6 +182,7 @@ fun DriveMap(
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
     val latestOnGesture by rememberUpdatedState(onUserGesture)
+    val latestOnTiltChange by rememberUpdatedState(onTiltChange)
     val latestOnReportTap by rememberUpdatedState(onReportTap)
     val latestOnStopTap by rememberUpdatedState(onStopTap)
     val latestOnParkingTap by rememberUpdatedState(onParkingTap)
@@ -275,6 +279,8 @@ fun DriveMap(
                     latestOnGesture()
                 }
             }
+            ready.addOnCameraMoveListener { latestOnTiltChange(ready.cameraPosition.tilt) }
+            latestOnTiltChange(ready.cameraPosition.tilt)
             // Tapping a group member (their card), a cluster, or a report marker (admins delete it).
             ready.addOnMapClickListener { latLng ->
                 latestOnMemberTap?.let { open ->
@@ -317,6 +323,28 @@ fun DriveMap(
             }
             map = ready
         }
+    }
+
+    LaunchedEffect(map, tiltToggleRequest) {
+        val current = map ?: return@LaunchedEffect
+        if (tiltToggleRequest == 0) return@LaunchedEffect
+        val camera = current.cameraPosition
+        nav.preferredTilt = if (camera.tilt > 5.0) 0.0 else NAV_TILT
+        nav.manualCamera = false
+        val request = tiltToggleRequest
+        nav.tiltAnimationRequest = request
+        fun finish() {
+            if (nav.tiltAnimationRequest == request) nav.tiltAnimationRequest = null
+        }
+        // Le suivi attend cette animation : seuls l'angle et sa préférence changent.
+        current.animateCamera(
+            CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(camera).tilt(nav.preferredTilt).build()),
+            TILT_ANIMATION_MS,
+            object : MapLibreMap.CancelableCallback {
+                override fun onCancel() = finish()
+                override fun onFinish() = finish()
+            },
+        )
     }
 
     // Day or night as the app's theme says ("Thème général"): the map and the HUD over it
@@ -693,8 +721,6 @@ fun DriveMap(
         var camBearing = startCam.bearing
         var camZoom = if (startCam.zoom > 1.0) startCam.zoom else NAV_ZOOM
         var camTilt = startCam.tilt
-        /** Angle choisi : gardé au recentrage, hors vues d'ensemble automatiques. */
-        var preferredTilt = NAV_TILT
         var wasFollowing = followingState.value
 
         while (isActive) {
@@ -795,24 +821,24 @@ fun DriveMap(
                 val followingNow = followingState.value
                 if (followingNow && !wasFollowing) {
                     // Recentrage : l'angle choisi à la main devient celui du suivi.
-                    if (nav.manualCamera) preferredTilt = camTilt
+                    if (nav.manualCamera) nav.preferredTilt = current.cameraPosition.tilt
                     nav.manualCamera = false
                 }
                 wasFollowing = followingNow
-                if (followingNow) {
+                if (followingNow && nav.tiltAnimationRequest == null) {
                     val targetZoom = navZoom(speedLimitState.value)
                     if (firstFollow) {
                         // Snap on the very first frame so the map opens already upright.
                         firstFollow = false
                         camLat = followLat; camLon = followLon
-                        camZoom = targetZoom; camTilt = preferredTilt
+                        camZoom = targetZoom; camTilt = nav.preferredTilt
                         camBearing = followBearing.toDouble()
                     }
                     camLat += (followLat - camLat) * POS_LERP
                     camLon += (followLon - camLon) * POS_LERP
                     // The change of distance is eased like the rest: about two seconds, no jump.
                     camZoom += (targetZoom - camZoom) * EASE_LERP
-                    camTilt += (preferredTilt - camTilt) * EASE_LERP
+                    camTilt += (nav.preferredTilt - camTilt) * EASE_LERP
                     camBearing = lerpAngle(camBearing, followBearing, BEARING_LERP)
                     current.moveCamera(
                         CameraUpdateFactory.newCameraPosition(
@@ -821,6 +847,7 @@ fun DriveMap(
                         ),
                     )
                 } else {
+                    if (nav.tiltAnimationRequest != null) firstFollow = false
                     // Track the user's view so re-centering eases from where they left it.
                     val cam = current.cameraPosition
                     camLat = cam.target?.latitude ?: camLat
@@ -934,6 +961,9 @@ private class NavHolder {
     @Volatile var fixAtMs: Long = 0L
     /** Caméra déplacée par un geste du conducteur, hors aperçu et vues d'ensemble automatiques. */
     @Volatile var manualCamera: Boolean = false
+    /** Angle choisi : conservé au recentrage et au rechargement du style. */
+    var preferredTilt: Double = NAV_TILT
+    var tiltAnimationRequest: Int? = null
 }
 
 /** Fused heading: smoothed sensor azimuth realigned to the GPS travel direction. */
@@ -1439,6 +1469,7 @@ private const val TOWN_DISTANCE_M = 380.0
 private const val TOWN_KMH = 50
 private const val FAST_ROAD_KMH = 90
 private const val NAV_TILT = 45.0
+private const val TILT_ANIMATION_MS = 400
 private const val MIN_SPEED_MS = 2f
 // Smoothing factors for the follow-camera loop (0..1 per frame) + frame pacing.
 // Follow factors are tuned for the 60 fps loop below (halved from the 30 fps values).
