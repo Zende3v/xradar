@@ -226,13 +226,23 @@ Arbitrage décidé : accord ≤ max(60 s, 8 %) → moyenne ; désaccord → vale
 Fermeture ou incident d'une seule source : retenu. Données EONA ajoutent retard, ne tranchent jamais.
 Situations en table (voie × tranche × phase), jamais arbre de conditions. Valeurs de départ, puis calibrées.
 
-**Lot 1 collecte : backend déployé 15/10 ; iOS 55 et Android 37 non validés téléphone.**
+**Réponses Arthur 15/10 :** collecte TOUT, tous comptes, statistiques coupées comprises ; tracé GPS tous comptes, conservé sans limite.
+ETA prudente en cas de doute. Nouvelle clé HERE et clé TomTom Freemium fournies (installées, EXPLOITATION §3).
+Questions encore ouvertes : offre du compte HERE (Base ou Limited) ; navigation lancée voiture garée ; app fermée en fin de trajet.
+
+**Lot 1 collecte : backend déployé 15/10 ; iOS 55 lancé par Arthur ; Android 37 non validé.**
 Instantané trajet toutes les 30 s ; app fermée : repris au lancement, envoyé `interrupted`.
 File d'envoi persistée, 50 trajets max, liée au compte. Même `id` renvoyé : serveur ignore doublon.
-Fin `near` : arrêt à 300 m ou moins de destination, compte arrivé. Seuils 500 m et 60 s conservés.
+Fin `near` : arrêt à 300 m ou moins de destination, compte arrivé.
 Champs : `firstMoveAt`, `lastFixAt`, `endReason`, `endDistanceM`, `timeline` minute, `stopLog`, `etaChecks[].base/engineLeftS`.
 Historique local sans relevés minute. Rapport ETA inchangé : nouveaux champs exploités au lot 2.
-Trace GPS admin validée (90 jours) : sous-lot suivant, non codée.
+
+**Lot 1b : code présent 15/10 (iOS 56, Android 38, backend), non déployé, non validé.**
+Tout trajet part au serveur, court ou long, tous comptes. Statistiques coupées : `countInStats: false`.
+Base : `crowd.trip` (mesures, sans coordonnée) et `crowd.trip_trace` (tracé GPS par paquets). Aucune purge.
+Historique JSON et totaux du compte : trajets de 500 m et 60 s ou plus, statistiques actives.
+Tracé : un point toutes les 5 s `[t, lat, lon, kmh, précision, cap]`, paquets de 1 000, envoyé après le trajet.
+Backend écrit par Codex (bridge), relu et testé par Claude.
 
 Phases initiales 1–5 livrées. Phases 6–8 non implémentées ; trafic traité dans backend.
 Aucun accès officiel Sytadin documenté. Prochaine évolution choisie par Arthur.
@@ -290,7 +300,9 @@ Vitesses EONA anonymes : clé aléatoire trajet, mémoire trente minutes.
 Mesures routage : 90 jours ; tracés divergents admin : 30 jours ; journal admin : 365 jours.
 Signalements fermés et bugs résolus : 90 jours. Plaque voiture radar jamais exposée.
 Bugs volontaires peuvent joindre destination/tracé même statistiques désactivées.
-Compte admin : trajet et relevés envoyés même statistiques coupées (mesure ETA). Aucune coordonnée, distance de fin seulement.
+Lot 1b (non déployé) : tous trajets et tracé GPS transmis, tous comptes, statistiques coupées comprises.
+Trajets et tracés conservés sans limite de durée, supprimés avec le compte. Texte Confidentialité des apps le dit.
+**Page confidentialité web à aligner avant d'annoncer ce tracé ; conservation illimitée de positions à valider juridiquement (RGPD, limitation de conservation).**
 Capture facultative : JPEG, 1 Mio maximum, 4096 pixels/côté, huit millions pixels ; accès admin privé.
 
 Bans persistés dans `<ACCOUNTS_FILE>.bans.json`, séparément des comptes.
@@ -304,8 +316,9 @@ Réactivation signalement supprimé et rôle modérateur distinct non développ�
 ## 7. État livré et points ouverts
 
 Référence iOS fonctionnelle : `c51b834`, build **54**, version **1.0.0**.
-iOS build **55** (`7ef22c9`, lot 1 collecte) poussé ; archive et téléphone à valider.
-Android version **1.0.2**, code **37** (`6e27a2b`, lot 1) : APK release compilé, téléphone à valider.
+iOS build **55** (`7ef22c9`, lot 1) : archive et lancement confirmés par Arthur ; collecte à valider.
+iOS build **56** (`2a5d06b`, lot 1b) poussé ; archive et téléphone à valider.
+Android version **1.0.2**, code **38** (`7125da9`, lot 1b) : APK release compilé, téléphone à valider.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
 Déploiements backend consignés : `a85c6bc`, puis quatre fichiers stations `5646f45` le 08/10.
@@ -324,8 +337,8 @@ Points ouverts concrets :
 4. Mesurer ETA après nouvelle livraison ; conserver séparation pauses/embouteillages et versions d'application.
 5. Valider lecteur système sur téléphone ; titre tiers reste sans solution logicielle démontrée.
 6. Perso, feux, gabarit poids lourd et achat abonnement restent chantiers distincts, sans livraison implicite.
-7. Lot 1 : valider sur téléphone app fermée, file d'envoi, `near` ; vérifier nouveaux champs stockés après premier trajet.
-8. Arthur : facture et franchise réelles console HERE ; clé TomTom Freemium.
+7. Lot 1b : déployer après accord (schéma `crowd`, `trip-log.js`, `routes.js`, `store.js`, `server.js`) ; valider sur téléphone.
+8. Plafond HERE : supprimer seulement si compte Limited Plan (HERE bloque seul) ; Base Plan facture au-delà de la franchise.
 9. Test backend `search` « same JSON as before » échoue déjà avant lot 1 ; à corriger à part.
 
 Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.
