@@ -89,6 +89,8 @@ export function createApp() {
   app.use('/api/trips', express.json({ limit: '1mb' }));
   // A "navigation" bug report carries the trip's route too (600 points at most).
   app.use('/api/bugs', express.json({ limit: '2mb' }));
+  // Mesures et paquets GPS : limite commune, avant le parseur général.
+  app.use('/api/accounts/me/trips', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {

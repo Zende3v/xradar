@@ -12,6 +12,7 @@ import com.eona.app.core.model.TripMeasure
 import com.eona.app.core.model.TripRecord
 import com.eona.app.core.model.TripSample
 import com.eona.app.core.model.TripStop
+import com.eona.app.core.model.TracePoint
 import com.eona.app.core.model.expectedSeconds
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -61,6 +62,10 @@ class TripRecorder(
     private var stoppedAtMeters = 0.0
     private val stopLog = ArrayList<TripStop>()
     private val timeline = ArrayList<TripSample>()
+    private val tracePoints = ArrayList<TracePoint>()
+
+    /** Tracé GPS du trajet, envoyé à part des mesures. */
+    val trace: List<TracePoint> get() = tracePoints.toList()
     var distanceMeters: Double = 0.0
         private set
     private var topSpeedKmh = 0
@@ -240,6 +245,17 @@ class TripRecorder(
         topSpeedKmh = maxOf(topSpeedKmh, kmh.roundToInt())
         lastFixAt = fix.timeMs
         lastKmh = kmh
+        val lastPoint = tracePoints.lastOrNull()
+        if (tracePoints.size < TRACE_MAX && (lastPoint == null || fix.timeMs - lastPoint.t >= TRACE_EVERY_MS)) {
+            tracePoints += TracePoint(
+                t = fix.timeMs,
+                lat = Math.round(fix.latitude * 1e6) / 1e6,
+                lon = Math.round(fix.longitude * 1e6) / 1e6,
+                kmh = fix.speedMps?.let { Math.round(it * 36.0) / 10.0 },
+                accuracyM = fix.accuracyM?.let { Math.round(it * 10.0) / 10.0 },
+                course = fix.bearingDeg?.let { Math.round(it * 10.0) / 10.0 },
+            )
+        }
         // Premier mouvement réel : deux points de suite à 10 km/h, une pointe GPS seule ne compte pas.
         if (firstMoveAt == null) {
             if (kmh >= MOVING_KMH) {
@@ -295,9 +311,16 @@ class TripRecorder(
      * The history record, or null for a trip too short to keep. [arrived]: it ended at the
      * destination. A standstill still running at the end (parked at the destination) is not a stop.
      */
-    fun record(id: String, arrived: Boolean, interrupted: Boolean = false, now: Long = System.currentTimeMillis()): TripRecord? {
+    /** [keepShort] : trajet gardé même sous 500 m ou 60 s (collecte serveur, tout est envoyé). */
+    fun record(
+        id: String,
+        arrived: Boolean,
+        interrupted: Boolean = false,
+        keepShort: Boolean = false,
+        now: Long = System.currentTimeMillis(),
+    ): TripRecord? {
         val duration = (now - startedAt) / 1000.0
-        if (distanceMeters < MIN_METERS || duration < MIN_SECONDS) return null
+        if (!keepShort && (distanceMeters < MIN_METERS || duration < MIN_SECONDS)) return null
         val endDistance = endDistanceMeters
         val near = endDistance != null && endDistance <= NEAR_METERS
         val end = when {
@@ -383,6 +406,12 @@ class TripRecorder(
         private const val SAMPLE_EVERY_MS = 60_000L
         private const val TIMELINE_MAX = 240
         private const val STOP_LOG_MAX = 300
+        /** Tracé GPS : un point toutes les 5 s, 20 000 au plus (plus de 27 h). Comme iOS. */
+        private const val TRACE_EVERY_MS = 5_000L
+        private const val TRACE_MAX = 20_000
+
+        /** Trajet assez long pour l'historique et les statistiques : 500 m et 60 s. Comme le backend. */
+        fun isLongEnough(trip: TripRecord): Boolean = trip.distanceMeters >= MIN_METERS && trip.durationSeconds >= MIN_SECONDS
     }
 }
 

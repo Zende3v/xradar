@@ -169,8 +169,12 @@ object AccountRepository {
 
     suspend fun stats(): AccountStats? = token?.let { api.stats(it) }
 
-    suspend fun postTrip(trip: com.eona.app.core.model.TripRecord): Boolean =
-        token?.let { api.postTrip(it, trip) } ?: false
+    suspend fun postTrip(trip: com.eona.app.core.model.TripRecord, countInStats: Boolean = true): Boolean =
+        token?.let { api.postTrip(it, trip, countInStats) } ?: false
+
+    /** Paquet [seq] du tracé GPS du trajet [tripId]. */
+    suspend fun postTrace(tripId: String, seq: Int, points: List<com.eona.app.core.model.TracePoint>): Boolean =
+        token?.let { api.postTrace(it, tripId, seq, points) } ?: false
 
     /** The terms the driver accepted: the account keeps the version and the moment, as proof. */
     suspend fun recordTerms(version: String): Boolean = token?.let { api.recordTerms(it, version) } ?: false

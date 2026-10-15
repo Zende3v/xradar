@@ -179,9 +179,40 @@ function stopLogShape(value) {
 }
 
 /** Trajet sans relevés minute ni journal d'arrêts : réponses aux apps légères. */
-function tripSummary(trip) {
+export function tripSummary(trip) {
   const { timeline, stopLog, ...rest } = trip;
   return rest;
+}
+
+/** Trajet validé et mis en forme, sans coordonnée ni mutation. */
+export function shapeTrip(trip) {
+  const startedAt = Number(trip?.startedAt);
+  const distanceMeters = Number(trip?.distanceMeters);
+  const durationSeconds = Number(trip?.durationSeconds);
+  const alertsCount = Number(trip?.alertsCount) || 0;
+  const topSpeedKmh = Number(trip?.topSpeedKmh) || 0;
+  const plannedSeconds = trip?.plannedSeconds == null ? NaN : Number(trip.plannedSeconds);
+  const tripId = String(trip?.id || '').trim();
+  if (!tripId || !Number.isFinite(startedAt) || !Number.isFinite(distanceMeters) || !Number.isFinite(durationSeconds)) {
+    return { error: 'invalid trip' };
+  }
+  return {
+    id: tripId.slice(0, 100),
+    startedAt: Math.round(startedAt),
+    fromLabel: String(trip?.fromLabel || 'Ma position').slice(0, 160),
+    toLabel: String(trip?.toLabel || 'Destination').slice(0, 160),
+    distanceMeters: Math.max(0, Math.round(distanceMeters)),
+    durationSeconds: Math.max(0, Math.round(durationSeconds)),
+    alertsCount: Math.max(0, Math.round(alertsCount)),
+    topSpeedKmh: Math.max(0, Math.round(topSpeedKmh)),
+    // Estimation, arrêts et alertes ; anciennes apps compatibles.
+    plannedSeconds: Number.isFinite(plannedSeconds) && plannedSeconds > 0 ? Math.round(plannedSeconds) : null,
+    stops: Math.max(0, Math.round(Number(trip?.stops) || 0)),
+    stoppedSeconds: Math.max(0, Math.round(Number(trip?.stoppedSeconds) || 0)),
+    events: tripEventsShape(trip?.events),
+    // Mesures ETA et routage, sans coordonnée.
+    ...(trip && typeof trip === 'object' ? tripMeasuresShape(trip) : null),
+  };
 }
 
 /** A trip's measures (D1.7), checked one by one; null for a trip from an app before them. */
@@ -573,36 +604,11 @@ export class AccountStore {
     const account = this.get(id);
     if (!account) return { error: 'not found' };
     this.normalizeAccount(account);
-    const startedAt = Number(trip?.startedAt);
-    const distanceMeters = Number(trip?.distanceMeters);
-    const durationSeconds = Number(trip?.durationSeconds);
-    const alertsCount = Number(trip?.alertsCount) || 0;
-    const topSpeedKmh = Number(trip?.topSpeedKmh) || 0;
-    const plannedSeconds = trip?.plannedSeconds == null ? NaN : Number(trip.plannedSeconds);
+    const record = shapeTrip(trip);
+    if (record.error) return record;
     const tripId = String(trip?.id || '').trim();
-    if (!tripId || !Number.isFinite(startedAt) || !Number.isFinite(distanceMeters) || !Number.isFinite(durationSeconds)) {
-      return { error: 'invalid trip' };
-    }
     const existing = account.trips.find((item) => item.id === tripId);
     if (existing) return { trip: tripSummary(existing), stats: { ...account.stats } };
-    const record = {
-      id: tripId.slice(0, 100),
-      startedAt: Math.round(startedAt),
-      fromLabel: String(trip?.fromLabel || 'Ma position').slice(0, 160),
-      toLabel: String(trip?.toLabel || 'Destination').slice(0, 160),
-      distanceMeters: Math.max(0, Math.round(distanceMeters)),
-      durationSeconds: Math.max(0, Math.round(durationSeconds)),
-      alertsCount: Math.max(0, Math.round(alertsCount)),
-      topSpeedKmh: Math.max(0, Math.round(topSpeedKmh)),
-      // Trip details (apps from before them send none): the route's estimate, the stops of
-      // 10 s or more and their time, the alerts met by kind.
-      plannedSeconds: Number.isFinite(plannedSeconds) && plannedSeconds > 0 ? Math.round(plannedSeconds) : null,
-      stops: Math.max(0, Math.round(Number(trip?.stops) || 0)),
-      stoppedSeconds: Math.max(0, Math.round(Number(trip?.stoppedSeconds) || 0)),
-      events: tripEventsShape(trip?.events),
-      // The ETA and routing measures, when the app sends them (tripMeasuresShape). No coordinates.
-      ...(trip && typeof trip === 'object' ? tripMeasuresShape(trip) : null),
-    };
     account.trips.unshift(record);
     account.trips = account.trips.slice(0, config.accountTripHistoryMax);
     account.stats.tripCount += 1;

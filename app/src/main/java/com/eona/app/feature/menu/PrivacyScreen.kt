@@ -88,10 +88,12 @@ fun PrivacyScreen(onBack: () -> Unit) {
 
             Group(
                 "Statistiques",
-                "Statistiques de conduite : tes trajets et ton temps de conduite, enregistrés sur ton compte (Menu ▸ " +
-                    "Mon compte & Statistiques) ; désactivé, les prochains ne sont plus enregistrés. Présence et position : le serveur " +
+                "Statistiques de conduite : tes trajets et ton temps de conduite, affichés sur ton compte (Menu ▸ " +
+                    "Mon compte & Statistiques) ; désactivé, les prochains n'y apparaissent plus. Dans tous les cas, chaque " +
+                    "trajet guidé (mesures et tracé GPS) est transmis à EONA et conservé pour améliorer l'heure d'arrivée ; " +
+                    "il est supprimé avec ton compte. Présence et position : le serveur " +
                     "compte les apps ouvertes et les trajets en cours, et l'équipe EONA voit où tu es pendant que l'app " +
-                    "est ouverte ; les positions sont effacées au bout de 30 jours. Temps d'utilisation : le temps passé " +
+                    "est ouverte ; ces positions sont effacées au bout de 30 jours. Temps d'utilisation : le temps passé " +
                     "dans l'app s'ajoute à ton compte.",
             ) {
                 Switch("Statistiques de conduite", settings.drivingStats, { s, on -> s.copy(drivingStats = on) })

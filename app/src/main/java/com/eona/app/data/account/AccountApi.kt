@@ -8,8 +8,10 @@ import com.eona.app.core.model.EtaCheck
 import com.eona.app.core.model.Role
 import com.eona.app.core.model.TripMeasure
 import com.eona.app.core.model.TripRecord
+import com.eona.app.core.model.TracePoint
 import com.eona.app.core.model.TripSample
 import com.eona.app.core.model.TripStop
+import com.eona.app.data.stats.TripOutbox
 import com.eona.app.core.model.UsernameAvailability
 import com.eona.app.core.model.alertTypeFromWire
 import com.eona.app.core.model.wireName
@@ -229,7 +231,8 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
         }.getOrNull()
     }
 
-    suspend fun postTrip(token: String, trip: TripRecord): Boolean = withContext(Dispatchers.IO) {
+    /** [countInStats] false : statistiques de conduite coupées, trajet stocké hors historique. */
+    suspend fun postTrip(token: String, trip: TripRecord, countInStats: Boolean = true): Boolean = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("id", trip.id)
             .put("startedAt", trip.startedAt)
@@ -244,7 +247,15 @@ class AccountApi(private val baseUrl: String = BuildConfig.BACKEND_BASE_URL) {
             .put("events", wireEvents(trip))
             .apply { trip.plannedSeconds?.let { put("plannedSeconds", it) } }
             .apply { trip.measure?.let { putMeasure(this, it) } }
+            .apply { if (!countInStats) put("countInStats", false) }
         authedPost(token, "/api/accounts/me/trips", body)
+    }
+
+    /** Paquet [seq] du tracé GPS du trajet [tripId] : [t, lat, lon, kmh, précision, cap] par point. */
+    suspend fun postTrace(token: String, tripId: String, seq: Int, points: List<TracePoint>): Boolean = withContext(Dispatchers.IO) {
+        val wire = JSONArray()
+        points.forEach { wire.put(TripOutbox.tracePointJson(it)) }
+        authedPost(token, "/api/accounts/me/trips/$tripId/trace", JSONObject().put("seq", seq).put("points", wire))
     }
 
     /** The version of the terms accepted, and when: the backend stamps the moment itself. */

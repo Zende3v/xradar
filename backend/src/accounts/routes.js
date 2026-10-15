@@ -6,7 +6,8 @@ import { transaction } from '../crowd/schema.js';
 import { liveStore } from '../live/store.js';
 import { adminActor, authAccount, publicView } from './auth.js';
 import { adminAudit } from '../admin/audit.js';
-import { accountStore, trustOf } from './store.js';
+import { accountStore, shapeTrip, tripSummary, trustOf } from './store.js';
+import { tripLog, traceShape, TRIP_MIN_METERS, TRIP_MIN_SECONDS } from './trip-log.js';
 import { verifyGoogleToken } from './google.js';
 import { settingsStore } from './settings.js';
 import { mailer } from '../mailer.js';
@@ -306,6 +307,9 @@ async function forgetInCrowd(ids) {
       await client.query('UPDATE crowd.bug_report SET account_id = NULL WHERE account_id = $1', [id]);
       // A position says where someone was: it is deleted, never anonymised.
       await client.query('DELETE FROM crowd.position WHERE account_id = $1', [id]);
+      // Journal et GPS : supprimés avec le compte, aucune conservation anonyme.
+      await client.query('DELETE FROM crowd.trip_trace WHERE account_id = $1', [id]);
+      await client.query('DELETE FROM crowd.trip WHERE account_id = $1', [id]);
     }
   });
 }
@@ -344,16 +348,52 @@ accountRouter.get('/me/stats', (req, res) => {
  *   timeline?: [{ t, drivenM, leftM, leftS, engineLeftS, base, kmh }], stopLog?: [{ at, seconds, drivenM, jam }] }
  * etaChecks[] reçoit aussi base (here|tomtom|engine) et engineLeftS. Relevés et arrêts gardés
  * côté serveur, absents des réponses. Même id renvoyé : trajet existant, rien ajouté.
- * The second part is the ETA and routing measures (D1.7). An app before them sends none: its trip
- * is kept as before. One of them sent, all are kept (a missing one at its default), checked, and
- * come back in GET /me/stats; never a coordinate. See accounts/store.js (tripMeasuresShape).
+ * Tous trajets conservés en base, sans coordonnée. Historique et compteurs dès 500 m et 60 s,
+ * sauf countInStats: false (statistiques de conduite coupées dans l'app).
+ * Anciennes apps compatibles : résumé et totaux inchangés pour les trajets admissibles.
  */
-accountRouter.post('/me/trips', (req, res) => {
+accountRouter.post('/me/trips', async (req, res) => {
   const account = authAccount(req);
   if (!account) return res.status(401).json({ error: 'unauthorized' });
-  const result = accountStore.recordTrip(account.id, req.body || {});
-  if (result.error) return res.status(400).json({ error: result.error });
-  res.status(201).json(result);
+  let record;
+  try {
+    record = shapeTrip(req.body);
+  } catch {
+    return res.status(400).json({ error: 'invalid trip' });
+  }
+  if (record.error) return res.status(400).json({ error: record.error });
+  try {
+    await tripLog.save(account.id, record);
+  } catch {
+    // Aucun détail SQL : une erreur peut contenir des données privées.
+    console.error('[accounts] stockage trajet indisponible');
+    return res.status(503).json({ error: 'trip storage unavailable' });
+  }
+  // countInStats false (statistiques de conduite coupées) : stocké, ni historique ni totaux.
+  const counted = req.body?.countInStats !== false
+    && record.distanceMeters >= TRIP_MIN_METERS && record.durationSeconds >= TRIP_MIN_SECONDS;
+  if (counted) {
+    const result = accountStore.recordTrip(account.id, req.body);
+    if (result.error) return res.status(400).json({ error: result.error });
+    return res.status(201).json({ ...result, counted: true });
+  }
+  res.status(201).json({ trip: tripSummary(record), stats: accountStore.statsFor(account.id).totals, counted: false });
+});
+
+/** POST /api/accounts/me/trips/:id/trace { seq, points } : paquet GPS idempotent. */
+accountRouter.post('/me/trips/:id/trace', async (req, res) => {
+  const account = authAccount(req);
+  if (!account) return res.status(401).json({ error: 'unauthorized' });
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(req.params.id)) return res.status(400).json({ error: 'invalid trip id' });
+  const trace = traceShape(req.body);
+  if (trace.error) return res.status(400).json({ error: trace.error });
+  try {
+    await tripLog.saveTrace(account.id, req.params.id, trace.seq, trace.points);
+  } catch {
+    console.error('[accounts] stockage trace indisponible');
+    return res.status(503).json({ error: 'trip storage unavailable' });
+  }
+  res.status(201).json({ stored: trace.points.length });
 });
 
 /** POST /api/accounts/me/drive  { seconds, meters } — time on the road with the app. */

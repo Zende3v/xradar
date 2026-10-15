@@ -3,6 +3,7 @@ package com.eona.app.data.stats
 import android.content.Context
 import com.eona.app.core.model.TripGroupRank
 import com.eona.app.core.model.TripGroupResult
+import com.eona.app.core.model.TracePoint
 import com.eona.app.core.model.TripRecord
 import com.eona.app.data.account.AccountApi
 import org.json.JSONArray
@@ -154,8 +155,16 @@ class TripOutbox(context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences("xr_trips_outbox", Context.MODE_PRIVATE)
 
-    /** Un trajet en attente d'envoi, et le compte qui l'a roulé. */
-    data class Pending(val accountId: String, val trip: TripRecord)
+    /**
+     * Un trajet en attente d'envoi, son tracé GPS, et le compte qui l'a roulé ; [countInStats] :
+     * affiché dans les statistiques du compte.
+     */
+    data class Pending(
+        val accountId: String,
+        val trip: TripRecord,
+        val trace: List<TracePoint> = emptyList(),
+        val countInStats: Boolean = true,
+    )
 
     fun pending(): List<Pending> {
         val raw = prefs.getString(QUEUE, null) ?: return emptyList()
@@ -165,9 +174,9 @@ class TripOutbox(context: Context) {
         }.getOrDefault(emptyList())
     }
 
-    /** [trip] à envoyer pour [accountId] ; même identifiant déjà en file : remplacé. */
-    fun add(trip: TripRecord, accountId: String) {
-        save((listOf(Pending(accountId, trip)) + pending().filter { it.trip.id != trip.id }).take(LIMIT))
+    /** [item] à envoyer ; même identifiant de trajet déjà en file : remplacé. */
+    fun add(item: Pending) {
+        save((listOf(item) + pending().filter { it.trip.id != item.trip.id }).take(LIMIT))
     }
 
     /** Reçu par le serveur. */
@@ -175,13 +184,13 @@ class TripOutbox(context: Context) {
         save(pending().filter { it.trip.id != tripId })
     }
 
-    /** Instantané du trajet en cours ; null l'efface. */
-    fun keepRunning(trip: TripRecord?, accountId: String?) {
-        if (trip == null || accountId == null) {
+    /** Instantané du trajet en cours et de son tracé ; null l'efface. */
+    fun keepRunning(item: Pending?) {
+        if (item == null) {
             prefs.edit().remove(RUNNING).apply()
             return
         }
-        prefs.edit().putString(RUNNING, json(Pending(accountId, trip)).toString()).apply()
+        prefs.edit().putString(RUNNING, json(item).toString()).apply()
     }
 
     /** Instantané laissé par une app fermée en route, retiré de la mémoire du téléphone. */
@@ -197,19 +206,47 @@ class TripOutbox(context: Context) {
         prefs.edit().putString(QUEUE, array.toString()).apply()
     }
 
-    private fun json(p: Pending) = JSONObject().put("accountId", p.accountId).put("trip", TripHistoryRepository.toJson(p.trip))
+    private fun json(p: Pending) = JSONObject()
+        .put("accountId", p.accountId)
+        .put("trip", TripHistoryRepository.toJson(p.trip))
+        .put("trace", JSONArray().apply { p.trace.forEach { put(tracePointJson(it)) } })
+        .put("countInStats", p.countInStats)
 
     private fun parse(o: JSONObject?): Pending? {
         val trip = o?.optJSONObject("trip") ?: return null
         val accountId = o.optString("accountId").ifBlank { return null }
-        return runCatching { Pending(accountId, TripHistoryRepository.fromJson(trip)) }.getOrNull()
+        val points = o.optJSONArray("trace") ?: JSONArray()
+        return runCatching {
+            Pending(
+                accountId = accountId,
+                trip = TripHistoryRepository.fromJson(trip),
+                trace = (0 until points.length()).mapNotNull { i -> points.optJSONArray(i)?.let(::tracePoint) },
+                // Absent des instantanés d'avant le tracé : compté.
+                countInStats = o.optBoolean("countInStats", true),
+            )
+        }.getOrNull()
     }
 
-    private companion object {
-        const val QUEUE = "queue"
-        const val RUNNING = "running"
+    companion object {
+        private const val QUEUE = "queue"
+        private const val RUNNING = "running"
         /** File bornée : au-delà, les plus anciens partent. */
-        const val LIMIT = 50
+        private const val LIMIT = 50
+
+        /** Un point au format du backend : [t, lat, lon, kmh, précision, cap], null si inconnu. */
+        fun tracePointJson(p: TracePoint): JSONArray = JSONArray()
+            .put(p.t)
+            .put(p.lat)
+            .put(p.lon)
+            .put(p.kmh ?: JSONObject.NULL)
+            .put(p.accuracyM ?: JSONObject.NULL)
+            .put(p.course ?: JSONObject.NULL)
+
+        private fun tracePoint(a: JSONArray): TracePoint? {
+            if (a.length() < 3) return null
+            fun optional(i: Int): Double? = if (a.isNull(i)) null else a.optDouble(i).takeIf { it.isFinite() }
+            return TracePoint(t = a.optLong(0), lat = a.optDouble(1), lon = a.optDouble(2), kmh = optional(3), accuracyM = optional(4), course = optional(5))
+        }
     }
 }
 

@@ -80,6 +80,19 @@ data class TripSample(
  */
 data class TripStop(val at: Long, val seconds: Int, val drivenM: Int, val jam: Boolean)
 
+/**
+ * Point GPS du tracé d'un trajet : instant (epoch millis), position, vitesse, précision, cap.
+ * Envoyé à part (POST /api/accounts/me/trips/:id/trace), jamais dans les mesures du trajet.
+ */
+data class TracePoint(
+    val t: Long,
+    val lat: Double,
+    val lon: Double,
+    val kmh: Double?,
+    val accuracyM: Double?,
+    val course: Double?,
+)
+
 /** Fin d'un trajet. Mêmes valeurs qu'iOS et backend. */
 object TripEnd {
     /** Arrivée automatique à la destination. */

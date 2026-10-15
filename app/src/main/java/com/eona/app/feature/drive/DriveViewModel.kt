@@ -35,7 +35,6 @@ import com.eona.app.core.model.RouteOption
 import com.eona.app.core.model.RoutePreference
 import com.eona.app.core.model.ReportType
 import com.eona.app.core.model.RoadAlert
-import com.eona.app.core.model.Role
 import com.eona.app.core.model.Route
 import com.eona.app.core.model.RouteStep
 import com.eona.app.core.model.SignType
@@ -1072,36 +1071,46 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         return route.durationSeconds * EtaEstimator.baseShareLeft(route, meters, meters * (1 - remainingShare(route)))
     }
 
-    /** Collecte permise : statistiques de conduite actives, ou compte admin (mesure ETA). */
-    private val collectsTrips: Boolean
-        get() = AppPreferences.settings.value.drivingStats || AccountRepository.account.value?.role == Role.Admin
-
     /**
-     * Instantané du trajet en cours, toutes les 30 s au plus : app fermée en route, repris au
-     * lancement suivant.
+     * Instantané du trajet en cours et de son tracé, toutes les 30 s au plus : app fermée en route,
+     * repris au lancement suivant. Collecte de tous les trajets, tous comptes (Arthur, 15/10).
      */
     private fun snapshotTrip(current: TripRecorder, now: Long = System.currentTimeMillis()) {
-        if (!collectsTrips || now - lastTripSnapshotAt < TRIP_SNAPSHOT_MS) return
+        if (now - lastTripSnapshotAt < TRIP_SNAPSHOT_MS) return
         lastTripSnapshotAt = now
-        val record = current.record(current.id, arrived = false, interrupted = true, now = current.lastFixAt ?: now)
-        tripOutbox.keepRunning(record, AccountRepository.account.value?.id)
+        val record = current.record(current.id, arrived = false, interrupted = true, keepShort = true, now = current.lastFixAt ?: now)
+        val accountId = AccountRepository.account.value?.id
+        tripOutbox.keepRunning(
+            if (record != null && accountId != null) {
+                TripOutbox.Pending(accountId, record, current.trace, AppPreferences.settings.value.drivingStats)
+            } else {
+                null
+            },
+        )
     }
 
     /** Trajet laissé par une app fermée en route : gardé comme interrompu, envoyé. */
     private fun recoverInterruptedTrip() {
         val running = tripOutbox.takeRunning() ?: return
-        if (AppPreferences.settings.value.drivingStats) tripHistory.add(running.trip.withoutDetail)
-        tripOutbox.add(running.trip, running.accountId)
+        if (running.countInStats && TripRecorder.isLongEnough(running.trip)) tripHistory.add(running.trip.withoutDetail)
+        tripOutbox.add(running)
     }
 
-    /** Envoie la file d'attente. Seuls les trajets du compte connecté partent. Échec : trajet gardé, file bornée à 50. */
+    /**
+     * Envoie la file d'attente : trajet, puis tracé par paquets de 1 000 points. Seuls les trajets
+     * du compte connecté partent. Échec : gardé, renvoi sans doublon côté serveur ; file bornée à 50.
+     */
     private suspend fun sendPendingTrips() {
         val accountId = AccountRepository.account.value?.id ?: return
         if (sendingTrips) return
         sendingTrips = true
         try {
             for (pending in tripOutbox.pending()) {
-                if (pending.accountId == accountId && AccountRepository.postTrip(pending.trip)) tripOutbox.remove(pending.trip.id)
+                if (pending.accountId != accountId || !AccountRepository.postTrip(pending.trip, pending.countInStats)) continue
+                val sent = pending.trace.chunked(TRACE_POINTS_PER_POST).withIndex().all { (seq, chunk) ->
+                    AccountRepository.postTrace(pending.trip.id, seq, chunk)
+                }
+                if (sent) tripOutbox.remove(pending.trip.id)
             }
         } finally {
             sendingTrips = false
@@ -1126,18 +1135,18 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         }
         _tripUnderway.value = false
         // Trajet fini : plus d'instantané à reprendre.
-        tripOutbox.keepRunning(null, null)
-        // "Statistiques de conduite" off: the trip only served the guidance (its arrival). Compte
-        // admin : envoyé quand même, pour la mesure ETA, sans historique local.
-        val stats = AppPreferences.settings.value.drivingStats
-        val record = if (collectsTrips) finished.record(finished.id, arrived = arrivedAtDestination) else null
+        tripOutbox.keepRunning(null)
+        // Tout trajet part au serveur, court ou long, statistiques de conduite coupées comprises
+        // (Arthur, 15/10). Coupées : ni historique local ni statistiques du compte.
+        val countInStats = AppPreferences.settings.value.drivingStats
+        val record = finished.record(finished.id, arrived = arrivedAtDestination, keepShort = true)
+        val kept = record?.takeIf { countInStats && TripRecorder.isLongEnough(it) }
         // The link and the group hear the arrival, or are stopped with the trip.
-        group.onTripEnded(arrivedAtDestination, finished.distanceMeters.roundToInt(), record?.id?.takeIf { stats })
+        group.onTripEnded(arrivedAtDestination, finished.distanceMeters.roundToInt(), kept?.id)
         record ?: return
-        if (stats) tripHistory.add(record.withoutDetail)
-        // Statistics live on the server for everyone: survive a reinstall. File d'envoi : réseau
-        // absent, trajet gardé et renvoyé.
-        AccountRepository.account.value?.id?.let { tripOutbox.add(record, it) }
+        if (kept != null) tripHistory.add(kept.withoutDetail)
+        // File d'envoi : réseau absent, trajet et tracé gardés et renvoyés.
+        AccountRepository.account.value?.id?.let { tripOutbox.add(TripOutbox.Pending(it, record, finished.trace, countInStats)) }
         viewModelScope.launch { sendPendingTrips() }
     }
 
@@ -2128,6 +2137,8 @@ class DriveViewModel(application: Application) : AndroidViewModel(application) {
         const val TRIP_SNAPSHOT_MS = 30_000L
         /** Premier envoi de la file au lancement : compte chargé d'abord. */
         const val TRIP_OUTBOX_FIRST_SEND_MS = 10_000L
+        /** Tracé GPS envoyé par paquets de cette taille, comme le backend l'accepte. */
+        const val TRACE_POINTS_PER_POST = 1_000
         /** Base de l'ETA sans temps live : moteur seul. Comme iOS et backend. */
         const val ENGINE_BASE = "engine"
         /** A trip's first route: asked again after these pauses before giving up. */

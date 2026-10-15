@@ -151,6 +151,35 @@ CREATE TABLE IF NOT EXISTS crowd.position (
 CREATE INDEX IF NOT EXISTS position_account ON crowd.position (account_id, at DESC);
 CREATE INDEX IF NOT EXISTS position_recent ON crowd.position (at DESC);
 
+-- ---- Collecte trajets et traces GPS ---------------------------------------------------------
+
+-- Tous trajets, mesures sans coordonnée. Aucune purge ; supprimés avec le compte.
+CREATE TABLE IF NOT EXISTS crowd.trip (
+    account_id text NOT NULL,
+    trip_id text NOT NULL,
+    received_at timestamptz NOT NULL DEFAULT now(),
+    started_at timestamptz NOT NULL,
+    platform text,
+    app_version text,
+    distance_m integer NOT NULL,
+    duration_s integer NOT NULL,
+    arrived boolean,
+    end_reason text,
+    record jsonb NOT NULL,
+    PRIMARY KEY (account_id, trip_id)
+);
+CREATE INDEX IF NOT EXISTS trip_started ON crowd.trip (started_at);
+
+-- Paquets indépendants de l'ordre de réception. Aucune purge ; supprimés avec le compte.
+CREATE TABLE IF NOT EXISTS crowd.trip_trace (
+    account_id text NOT NULL,
+    trip_id text NOT NULL,
+    seq integer NOT NULL,
+    received_at timestamptz NOT NULL DEFAULT now(),
+    points jsonb NOT NULL,
+    PRIMARY KEY (account_id, trip_id, seq)
+);
+
 -- ---- Signalisation corrected by hand ("mapper") --------------------------------------------
 
 -- What the team fixed on top of OpenStreetMap: a sign OSM does not have (add), a sign that is
