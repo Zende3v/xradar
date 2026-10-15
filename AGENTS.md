@@ -38,7 +38,7 @@ Anciens documents restent consultables dans historique Git.
 |---|---|---|---|
 | Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `feature/mini-player-musique` ; principale `main` |
 | iOS | `C:\Users\usr\Documents\xradar_ios` | `git@github.com:Zende3v/xradar_ios.git` | `main` |
-| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `b5a1000` ; lot 1 déployé, `435837c` inclus non déployé |
+| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `47dc80f` ; lots 1 et 1b déployés, `435837c` inclus non déployé |
 
 Android : Kotlin, Jetpack Compose sur mesure, MapLibre, tuiles Stadia. Package `com.eona.app`.
 Logique métier commune dans `core/`, portée vers iOS avec mêmes règles et champs JSON.
@@ -237,7 +237,7 @@ Fin `near` : arrêt à 300 m ou moins de destination, compte arrivé.
 Champs : `firstMoveAt`, `lastFixAt`, `endReason`, `endDistanceM`, `timeline` minute, `stopLog`, `etaChecks[].base/engineLeftS`.
 Historique local sans relevés minute. Rapport ETA inchangé : nouveaux champs exploités au lot 2.
 
-**Lot 1b : code présent 15/10 (iOS 56, Android 38, backend), non déployé, non validé.**
+**Lot 1b : backend déployé 15/10 ; iOS 56 et Android 38 non validés téléphone.**
 Tout trajet part au serveur, court ou long, tous comptes. Statistiques coupées : `countInStats: false`.
 Base : `crowd.trip` (mesures, sans coordonnée) et `crowd.trip_trace` (tracé GPS par paquets). Aucune purge.
 Historique JSON et totaux du compte : trajets de 500 m et 60 s ou plus, statistiques actives.
@@ -300,7 +300,7 @@ Vitesses EONA anonymes : clé aléatoire trajet, mémoire trente minutes.
 Mesures routage : 90 jours ; tracés divergents admin : 30 jours ; journal admin : 365 jours.
 Signalements fermés et bugs résolus : 90 jours. Plaque voiture radar jamais exposée.
 Bugs volontaires peuvent joindre destination/tracé même statistiques désactivées.
-Lot 1b (non déployé) : tous trajets et tracé GPS transmis, tous comptes, statistiques coupées comprises.
+Lot 1b (déployé 15/10) : tous trajets et tracé GPS transmis, tous comptes, statistiques coupées comprises.
 Trajets et tracés conservés sans limite de durée, supprimés avec le compte. Texte Confidentialité des apps le dit.
 **Page confidentialité web à aligner avant d'annoncer ce tracé ; conservation illimitée de positions à valider juridiquement (RGPD, limitation de conservation).**
 Capture facultative : JPEG, 1 Mio maximum, 4096 pixels/côté, huit millions pixels ; accès admin privé.
@@ -324,6 +324,9 @@ Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive n
 Déploiements backend consignés : `a85c6bc`, puis quatre fichiers stations `5646f45` le 08/10.
 15/10 vers 00:45 Paris : `accounts/store.js` et `accounts/routes.js` de `6e27a2b` (lot 1). Sauvegarde `/var/backups/eona/deploy-20261015-003412-lot1` : code, `data`, base.
 Après redémarrage : service actif, santé locale et publique OK, journal sans erreur, 10 comptes. Membres reconnectés à refaire.
+15/10 vers 02:40 Paris : lot 1b (`7125da9`) : `crowd/schema.sql`, `accounts/trip-log.js`, `accounts/routes.js`, `accounts/store.js`, `server.js`.
+Sauvegarde `/var/backups/eona/deploy-20261015-023709-lot1b` : code, `data`, `crowd.dump`. Tables `crowd.trip`, `crowd.trip_trace` créées.
+Nouvelles clés HERE et TomTom chargées. Santé OK, journal sans erreur, trace sans compte : 401.
 Lecture production 14/10 : santé HTTP 200, Valhalla `all`, carte 11/10, HERE limité à 5 €.
 Empreintes 14/10, 72 fichiers `src`/`bin`, fins de ligne ignorées : code `a85c6bc`.
 Seules exceptions : `places/routes.js` et `places/store.js`, identiques `5646f45`. Fichiers production majoritairement CRLF.
@@ -337,7 +340,7 @@ Points ouverts concrets :
 4. Mesurer ETA après nouvelle livraison ; conserver séparation pauses/embouteillages et versions d'application.
 5. Valider lecteur système sur téléphone ; titre tiers reste sans solution logicielle démontrée.
 6. Perso, feux, gabarit poids lourd et achat abonnement restent chantiers distincts, sans livraison implicite.
-7. Lot 1b : déployer après accord (schéma `crowd`, `trip-log.js`, `routes.js`, `store.js`, `server.js`) ; valider sur téléphone.
+7. Lot 1b : valider sur téléphone (iOS 56, Android 38) ; vérifier trajets et tracés stockés en base après premier trajet.
 8. Plafond HERE : supprimer seulement si compte Limited Plan (HERE bloque seul) ; Base Plan facture au-delà de la franchise.
 9. Test backend `search` « same JSON as before » échoue déjà avant lot 1 ; à corriger à part.
 
