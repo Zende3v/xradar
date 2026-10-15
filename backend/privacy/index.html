@@ -13,9 +13,9 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 </head>
 <body>
 <h1>Politique de confidentialité — EONA</h1>
-<p><strong>Dernière mise à jour : </strong><strong>30/09/2026.</strong></p>
+<p><strong>Dernière mise à jour : </strong><strong>15 octobre 2026.</strong></p>
 <p>La présente politique de confidentialité explique comment EONA collecte, utilise, transmet et protège les données à caractère personnel utilisées dans le cadre de l'application et de ses services.</p>
-<p>EONA applique les principes de minimisation des données et ne conserve pas les données de localisation plus longtemps que nécessaire au fonctionnement des fonctionnalités qui les utilisent. Les informations présentées ci-dessous correspondent au fonctionnement actuellement prévu de l'application.</p>
+<p>Les informations présentées ci-dessous décrivent les traitements réalisés par l'application. Les mesures et le tracé GPS de chaque trajet guidé sont conservés avec le compte pour améliorer l'heure d'arrivée estimée et le calcul d'itinéraire, comme décrit à la section 7.</p>
 <p>Conformément aux exigences d'information du RGPD, cette politique précise notamment les données traitées, leurs finalités, les destinataires, les durées de conservation et les droits des utilisateurs.</p>
 <h2>1. Responsable du traitement</h2>
 <p>Le responsable du traitement est :</p>
@@ -38,10 +38,10 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>signalements effectués par l'utilisateur ;</li>
 <li>avis « Pas dans mon sens » donnés sur un radar fixe ;</li>
 <li>rapports de bug envoyés par l'utilisateur, avec, pour un problème de navigation, le trajet concerné ;</li>
-<li>données relatives aux trajets et statistiques de conduite lorsque cette fonctionnalité est activée ;</li>
+<li>mesures et tracé GPS de chaque trajet guidé, pour tous les comptes, y compris lorsque « Statistiques de conduite » est désactivé ;</li>
 <li>données techniques et de télémétrie limitées nécessaires au fonctionnement du service.</li>
 </ul>
-<p>EONA ne conserve pas de trace GPS ou de coordonnées correspondant à l'historique complet des déplacements, sauf lorsque l'utilisateur active lui-même la fonction « Présence et position » (section 8), qui enregistre ses positions pendant 30 jours, ou lorsqu'il joint lui-même un trajet à un rapport de bug (section 7 bis).</p>
+<p>EONA conserve les mesures et le tracé GPS des trajets guidés, rattachés au compte, tant que celui-ci existe (section 7). Cette collecte est distincte des positions de « Présence et position », conservées 30 jours (section 8), et des trajets joints volontairement aux rapports de bug (section 7 bis).</p>
 <p>Ces données sont traitées pour fournir le service demandé (compte, navigation, alertes, signalements, statistiques) et, au titre de l'intérêt légitime de EONA, pour prévenir les abus (un seul essai gratuit par téléphone, limites des comptes invités, modération) et faire fonctionner le trafic partagé.</p>
 <p>Aucune publicité, aucun pistage publicitaire, aucune vente de données.</p>
 <h2>3. Utilisation de la position</h2>
@@ -56,7 +56,7 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>la recherche de lieux et d'adresses, pour proposer d'abord les résultats proches ;</li>
 <li>certaines fonctions liées au trafic et à l'évitement des bouchons, lorsque l'utilisateur y participe.</li>
 </ul>
-<p>La position reçue par le serveur pour ces fonctions n'est pas conservée sous forme d'historique GPS. Les seuls cas où des positions sont enregistrées et rattachées au compte sont la fonction « Présence et position », désactivée par défaut, décrite à la section 8, et le trajet joint par l'utilisateur à un rapport de bug, décrit à la section 7 bis.</p>
+<p>Pendant chaque trajet guidé, la position alimente un tracé GPS transmis après le trajet et conservé avec le compte (section 7). Cette collecte se poursuit lorsque « Statistiques de conduite », « Présence et position » ou « Aide au trafic partagé » est désactivé. Les positions de présence et les trajets joints aux rapports de bug font l'objet de traitements distincts, décrits aux sections 8 et 7 bis.</p>
 <p>Les systèmes d'exploitation iOS et Android contrôlent par ailleurs l'autorisation accordée à l'application d'accéder à la localisation.</p>
 <h2>4. Suggestions de trajets</h2>
 <p>La fonctionnalité de suggestions de trajets garde les destinations choisies dans la recherche (« Récents ») afin de les proposer à nouveau. Ces destinations sont conservées uniquement sur le téléphone et ne sont jamais envoyées au serveur. Une copie est gardée dans le trousseau sécurisé du téléphone, là où se trouve déjà la session du compte, afin qu'une mise à jour ou une réinstallation de l'application ne les perde pas. Elle est activée par défaut.</p>
@@ -75,8 +75,8 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 </ul>
 <p>Ces données permettent notamment d'identifier des ralentissements et des zones de circulation perturbée à partir des informations provenant de plusieurs utilisateurs.</p>
 <p><strong>Ralentissements.</strong> Ces informations ne sont envoyées que lorsqu'un ralentissement est détecté sur une route limitée à 70 km/h ou plus (vitesse nettement inférieure à la limitation), au plus une fois toutes les cinq minutes. Elles sont conservées uniquement en mémoire pendant 30 minutes, sous un pseudonyme qui change chaque jour, sans lien avec le compte, et ne forment aucun historique GPS individuel. Lorsque plusieurs conducteurs ralentissent au même endroit, un signalement « Bouchon » anonyme peut être créé.</p>
-<p><strong>Vitesses partagées.</strong> Pendant un trajet, l'application relève environ toutes les 15 secondes la position, la direction, la vitesse, la limitation affichée et l'heure, et les envoie au serveur par lots, au plus une fois par minute. Ces relevés partent avec une clé tirée au hasard pour chaque trajet, jamais avec le compte ni l'identifiant de l'appareil. Le serveur les garde uniquement en mémoire pendant 30 minutes, puis les efface. Ils servent à mesurer le trafic sur les itinéraires des autres conducteurs : plus ils couvrent une route, moins EONA interroge son fournisseur de trafic (HERE, section 10). Ils ne forment aucun historique GPS individuel. Rien n'est envoyé lors d'un trajet simulé.</p>
-<p>Lorsque la fonctionnalité est désactivée, plus aucune de ces informations n'est envoyée (ni ralentissements, ni vitesses), les informations récentes de l'utilisateur sont retirées et la question « Ralentissement du trafic ? » n'est plus posée. Le trafic sur le trajet et l'évitement des bouchons restent disponibles.</p>
+<p><strong>Vitesses partagées.</strong> Pendant un trajet, l'application relève environ toutes les 15 secondes la position, la direction, la vitesse, la limitation affichée et l'heure, et les envoie au serveur par lots, au plus une fois par minute. Le serveur associe ces relevés à une clé tirée au hasard pour chaque trajet, sans enregistrer le compte ni l'identifiant de l'appareil avec eux. Le serveur les garde uniquement en mémoire pendant 30 minutes, puis les efface. Ils servent à mesurer le trafic sur les itinéraires des autres conducteurs et complètent les informations fournies par HERE (section 10). Ils ne forment aucun historique GPS individuel. Rien n'est envoyé lors d'un trajet simulé.</p>
+<p>Lorsque la fonctionnalité est désactivée, plus aucune de ces informations n'est envoyée (ni ralentissements, ni vitesses), les informations récentes de l'utilisateur sont retirées et la question « Ralentissement du trafic ? » n'est plus posée. Le trafic sur le trajet et l'évitement des bouchons restent disponibles. Ce réglage ne désactive pas la collecte des trajets guidés décrite à la section 7.</p>
 <p>Les paramètres de participation sont accessibles depuis :</p>
 <p><strong>Menu → Confidentialité → Aide au trafic partagé</strong></p>
 <h2>6. Signalements</h2>
@@ -91,9 +91,11 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <p>Lorsqu'un compte est supprimé, les données des signalements qui doivent être conservées sont <strong>anonymisées</strong> afin de ne plus être rattachées au compte supprimé.</p>
 <p><strong>« Pas dans mon sens ».</strong> Lorsqu'un utilisateur indique qu'un radar fixe ne contrôle pas son sens de circulation, EONA conserve son avis : le radar concerné, la direction dans laquelle il roulait, la date et son compte (un seul avis par radar et par compte, le plus récent). Lorsque plusieurs conducteurs s'accordent sur une même direction, le radar n'est plus annoncé dans ce sens. Les autres utilisateurs ne voient jamais qui a donné un avis. Les avis sont conservés <strong>365 jours</strong>.</p>
 <h2>7. Statistiques de conduite</h2>
-<p>Lorsque <strong>« Statistiques de conduite »</strong> est activé, EONA conserve certaines informations relatives aux trajets.</p>
-<p>Elle est activée par défaut. Lorsqu'elle est désactivée, les trajets suivants ne sont plus enregistrés ni envoyés ; ceux déjà enregistrés restent jusqu'à la suppression du compte.</p>
-<p>Pour chaque trajet, peuvent notamment être conservés :</p>
+<p>Chaque trajet guidé est transmis au serveur EONA à la fin du trajet, pour tous les comptes, invités compris, quelle que soit sa longueur et que <strong>« Statistiques de conduite »</strong> soit activé ou non. Les mesures et le tracé GPS sont rattachés au compte.</p>
+<p>En cas d'absence de réseau, l'envoi est différé. Si l'application a été fermée pendant le trajet, les dernières données sauvegardées sont reprises au lancement suivant et le trajet est transmis comme interrompu.</p>
+<p>Le réglage « Statistiques de conduite » est activé par défaut. Lorsqu'il est désactivé, les trajets suivants n'apparaissent plus dans l'historique ni dans les statistiques de l'utilisateur, mais leurs mesures et leur tracé restent transmis et conservés. Les données déjà enregistrées ne sont pas effacées par ce réglage.</p>
+<p>Lorsque ce réglage est actif, seuls les trajets d'au moins 500 mètres et 60 secondes sont ajoutés à l'historique et au nombre de trajets du compte. Ces seuils ne limitent pas la collecte destinée à l'amélioration de la navigation.</p>
+<p>Les informations collectées pour chaque trajet comprennent, selon les données disponibles :</p>
 <ul>
 <li>la date et l'heure de départ ;</li>
 <li>le départ sous la forme fixe « Ma position » ;</li>
@@ -104,23 +106,29 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>la vitesse maximale ;</li>
 <li>le nombre et la durée des arrêts ;</li>
 <li>le nombre d'alertes par type ;</li>
-<li>des mesures de la qualité de l'heure d'arrivée estimée et du calcul d'itinéraire : le vrai moment du départ, la longueur prévue de l'itinéraire, l'heure d'arrivée affichée au départ puis à 25, 50 et 75 % du trajet, la durée des pauses et des arrêts, le nombre de recalculs et de changements d'itinéraire, un éventuel changement de destination, le moteur de calcul et la version de la carte utilisés, la version de l'application, le système (Android ou iOS) et les sources de trafic utilisées.</li>
+<li>des mesures de la qualité de l'heure d'arrivée estimée et du calcul d'itinéraire : le vrai moment du départ, la longueur prévue de l'itinéraire, l'heure d'arrivée affichée au départ puis à 25, 50 et 75 % du trajet, la durée des pauses et des arrêts, le nombre de recalculs et de changements d'itinéraire, un éventuel changement de destination, le moteur de calcul et la version de la carte utilisés, la version de l'application, le système (Android ou iOS) et les sources de trafic utilisées ;</li>
+<li>l'heure du premier mouvement réel détecté et celle de la dernière position reçue ;</li>
+<li>la raison de fin du trajet : arrivée, arrêt près de la destination, arrêt en cours de route ou interruption après fermeture de l'application, ainsi que la distance entre la dernière position et la destination ;</li>
+<li>des relevés environ chaque minute après le départ : heure, distance parcourue, distance et durée restantes estimées, durée restante estimée par le moteur de calcul seul, source de l'estimation de l'heure d'arrivée et vitesse ;</li>
+<li>les arrêts de 10 secondes ou plus : heure de début, durée, distance parcourue au début de l'arrêt et présence d'un bouchon connu.</li>
 </ul>
-<p>Les totaux du compte peuvent également comprendre :</p>
+<p>Le <strong>tracé GPS du trajet</strong> comporte un point environ toutes les <strong>5 secondes</strong> : heure, position, vitesse, précision de la position et cap, lorsque ces informations sont disponibles. Il est envoyé après le trajet, séparément des mesures.</p>
+<p>Ces données servent à améliorer l'heure d'arrivée estimée et le calcul d'itinéraire. L'équipe EONA peut les consulter à cette fin. Chaque trajet, avec ses mesures et son tracé, est conservé <strong>tant que le compte existe</strong> et <strong>supprimé avec le compte</strong>. Aucune suppression automatique liée à son ancienneté n'est prévue.</p>
+<p>Lorsque « Statistiques de conduite » est activé, les totaux du compte peuvent également comprendre :</p>
 <ul>
 <li>nombre de trajets ;</li>
 <li>kilomètres parcourus ;</li>
 <li>temps de conduite.</li>
 </ul>
-<p>Ces données sont transmises périodiquement pendant le trajet afin de mettre à jour les statistiques.</p>
-<p>Aucune trace GPS ni coordonnée GPS historique n'est conservée dans les statistiques de conduite.</p>
+<p>Lorsque « Statistiques de conduite » est activé, les secondes et mètres parcourus sont aussi transmis périodiquement afin de mettre à jour les totaux du compte. Cet envoi est distinct de la collecte des trajets guidés.</p>
+<p>L'historique et les statistiques affichés à l'utilisateur présentent un résumé du trajet. Les relevés détaillés et le tracé GPS sont conservés séparément sur le serveur.</p>
 <p>Une copie des statistiques peut également être conservée localement sur le téléphone de l'utilisateur.</p>
 <h2>7 bis. Signaler un bug</h2>
 <p>Depuis le menu, l'utilisateur peut envoyer un rapport de bug. Il comprend la catégorie choisie, la description et les étapes qu'il a saisies, son compte, ainsi que le système, la version de l'application, la version du système et le modèle de l'appareil.</p>
 <p>Pour un problème de navigation, l'utilisateur peut y joindre le trajet concerné (celui en cours, ou le dernier depuis l'ouverture de l'application) : le moteur de calcul et la version de la carte, le nom de la destination et ses coordonnées, l'itinéraire suivi (600 points au plus), les heures de début et de départ, la distance parcourue et la longueur prévue. L'application indique clairement ce qui est joint.</p>
 <p>Les rapports ne sont visibles que des administrateurs d'EONA, dans un outil interne réservé. Ils sont conservés jusqu'à leur résolution, puis <strong>90 jours</strong> après celle-ci.</p>
 <h2>8. Présence et position</h2>
-<p>La fonction <strong>« Présence et position »</strong> est <strong>désactivée par défaut</strong>. Elle ne transmet rien tant que l'utilisateur ne l'active pas lui-même depuis Menu → Confidentialité.</p>
+<p>La fonction <strong>« Présence et position »</strong> est <strong>activée par défaut sur Android et iOS</strong>. Elle peut être désactivée depuis Menu → Confidentialité. Elle est distincte de la collecte du tracé GPS des trajets guidés décrite à la section 7.</p>
 <p>Lorsqu'elle est active, l'application transmet environ toutes les 30 secondes, tant qu'elle est affichée ou qu'un trajet est en cours :</p>
 <ul>
 <li>l'information qu'une application EONA est ouverte ;</li>
@@ -132,9 +140,9 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <p>Les positions transmises, elles, sont enregistrées dans la base de données et <strong>rattachées au compte</strong>. Elles sont conservées <strong>30 jours</strong>, puis supprimées automatiquement.</p>
 <p>Pendant cette durée, l'équipe EONA peut consulter, depuis un outil d'administration interne réservé aux administrateurs, la position actuelle des utilisateurs ayant activé la fonction ainsi que l'historique de leurs positions. Cet accès sert à l'exploitation du service : comprendre un incident signalé, vérifier la qualité de la signalisation et des alertes sur le terrain, et assister un utilisateur qui le demande.</p>
 <p>Ces positions ne sont ni vendues, ni cédées, ni transmises à un tiers, et ne sont montrées à aucun autre utilisateur de l'application.</p>
-<p>Lorsque la fonction est désactivée, aucune de ces informations n'est envoyée. Les positions déjà enregistrées restent conservées jusqu'au terme des 30 jours, et l'utilisateur peut en demander la suppression immédiate (voir la section relative à ses droits). La suppression du compte efface immédiatement toutes ses positions.</p>
+<p>Lorsque la fonction est désactivée, aucune position n'est envoyée au titre de cette fonction. Si « Temps d'utilisation » reste actif, l'application continue de transmettre une information de présence sans position. Les positions déjà enregistrées restent conservées jusqu'au terme des 30 jours, et l'utilisateur peut en demander la suppression immédiate (voir la section relative à ses droits). La suppression du compte efface ces positions. La désactivation de « Présence et position » ne désactive pas la collecte des trajets guidés décrite à la section 7.</p>
 <h2>8 bis. Temps d'utilisation</h2>
-<p>La fonction <strong>« Temps d'utilisation »</strong> est également <strong>désactivée par défaut</strong>.</p>
+<p>La fonction <strong>« Temps d'utilisation »</strong> est également <strong>activée par défaut sur Android et iOS</strong>. Elle peut être désactivée depuis Menu → Confidentialité. Lorsque « Présence et position » et « Temps d'utilisation » sont tous deux désactivés, aucun message de présence n'est envoyé ; les trajets guidés restent collectés selon la section 7.</p>
 <p>Lorsqu'elle est active, le temps passé avec l'application ouverte est cumulé sur le compte de l'utilisateur, sous la forme d'une durée totale. Aucun détail de session, aucun horaire d'ouverture et de fermeture ne sont conservés.</p>
 <p>Indépendamment de ces deux fonctions, la date de dernière activité du compte est mise à jour lorsque l'application communique avec le serveur ; elle est nécessaire à la gestion des comptes et des essais gratuits.</p>
 <h2>8 ter. Partager son trajet</h2>
@@ -169,7 +177,7 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <p>Le téléphone échange directement avec Spotify : ces informations ne passent pas par les serveurs d'EONA et n'y sont pas conservées. Les jetons d'accès sont gardés dans le trousseau sécurisé du téléphone, jusqu'à ce que l'utilisateur déconnecte Spotify depuis le lecteur ou retire l'accès depuis son compte Spotify.</p>
 <p>L'utilisation de ce service est soumise aux conditions et à la politique de confidentialité de Spotify.</p>
 <h2>9. Télémétrie</h2>
-<p>EONA utilise une télémétrie limitée destinée au fonctionnement du service.</p>
+<p>EONA utilise une télémétrie destinée au fonctionnement du service et à l'amélioration de la navigation.</p>
 <p>Elle ne comprend :</p>
 <ul>
 <li>aucune publicité ;</li>
@@ -177,15 +185,16 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <li>aucun système publicitaire ;</li>
 <li>aucun outil de rapport de crash externe.</li>
 </ul>
-<p>La télémétrie actuellement utilisée comprend le décompte des applications ouvertes et des trajets en cours, les positions et le temps d'utilisation lorsque les fonctions correspondantes sont activées, et, lorsque les statistiques de conduite sont activées, les secondes et mètres parcourus transmis périodiquement ainsi que le résumé du trajet.</p>
+<p>La télémétrie comprend le décompte des applications ouvertes et des trajets en cours, les positions et le temps d'utilisation lorsque les fonctions correspondantes sont activées. Lorsque « Statistiques de conduite » est activé, les secondes et mètres parcourus sont transmis périodiquement. Les mesures et le tracé GPS de chaque trajet guidé sont transmis indépendamment de ces réglages, selon la section 7.</p>
 <p>Le serveur tient aussi un journal technique de chaque calcul d'itinéraire (durée de calcul, moteur utilisé, distance, durée, nombre d'étapes, options d'évitement, éventuelle erreur), <strong>sans compte ni coordonnée</strong>, conservé 90 jours. Pour comparer les moteurs de calcul, chaque itinéraire peut être recalculé par un second moteur et comparé : ces mesures ne contiennent ni compte ni coordonnée et sont conservées 90 jours ; seuls les itinéraires des comptes administrateurs de l'équipe sont gardés avec leur tracé, 30 jours.</p>
-<p>Les statistiques de conduite sont activées par défaut. « Présence et position » et « Temps d'utilisation » sont désactivées par défaut. Toutes peuvent être activées ou désactivées à tout moment depuis Menu → Confidentialité.</p>
+<p>« Statistiques de conduite », « Présence et position » et « Temps d'utilisation » sont activés par défaut sur Android et iOS. Ces réglages peuvent être modifiés à tout moment depuis Menu → Confidentialité. Aucun de ces réglages ne désactive la collecte des trajets guidés décrite à la section 7.</p>
 <h2>10. Données transmises à des services externes</h2>
 <p>EONA utilise différents services externes pour fournir certaines fonctions.</p>
 <h3>Calcul des itinéraires (serveurs EONA)</h3>
 <p>Les itinéraires sont calculés sur les serveurs d'EONA, en France, par le logiciel libre Valhalla à partir d'une copie locale des données OpenStreetMap. Le départ, la destination et les options choisies ne sont transmis à aucun tiers pour ce calcul.</p>
 <h3>HERE</h3>
-<p>Pour connaître le trafic sur l'itinéraire (vitesses et incidents), le serveur EONA transmet à HERE le reste de l'itinéraire, sous forme d'un tracé simplifié (300 points au plus). Il le fait à la création de l'itinéraire puis lorsque la situation change pendant le trajet, au plus une fois par minute et 150 fois par jour pour un même compte, sauf lorsque les vitesses partagées des conducteurs EONA (section 5) couvrent déjà l'essentiel de l'itinéraire. Il le fait aussi pour évaluer les itinéraires de contournement d'un bouchon, au plus une fois par minute pour un même compte.</p>
+<p>Pour connaître le trafic sur l'itinéraire (vitesses et incidents), le serveur EONA transmet à HERE un corridor autour de l'itinéraire restant, décrit par un tracé simplifié de 300 points au plus. Pour estimer la durée de parcours, il transmet aussi le tracé simplifié de l'itinéraire restant, jusqu'à 2 000 points, avec le mode de transport « voiture » et l'heure courante comme heure de départ.</p>
+<p>Ces échanges peuvent intervenir lors du calcul d'un itinéraire, de son actualisation pendant le trajet et de l'évaluation d'un contournement. Ils dépendent de la disponibilité du service, des limites de fréquence, des quotas et du budget du service. Les vitesses partagées des conducteurs EONA complètent les informations de HERE.</p>
 <p>La requête part du serveur EONA : ni le compte, ni l'identifiant de l'appareil, ni l'adresse IP du téléphone ne sont transmis à HERE.</p>
 <h3>OpenRouteService (ORS)</h3>
 <p>ORS n'est plus utilisé qu'en secours, lorsque le calcul sur les serveurs EONA échoue, et pour comparer la qualité des deux moteurs de calcul (section 9). Dans ces cas, EONA peut transmettre à ORS :</p>
@@ -221,15 +230,16 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <h3>Cloudflare</h3>
 <p>Les connexions entre l'application et le serveur d'EONA passent par Cloudflare, qui les achemine jusqu'au serveur. Elles sont chiffrées (HTTPS). Cloudflare traite pour cela l'adresse IP du téléphone et les requêtes, conformément au fonctionnement de son service.</p>
 <h2>11. Conservation des données</h2>
-<p>EONA applique des durées de conservation limitées aux finalités concernées. Une donnée personnelle ne doit pas être conservée au-delà de la durée nécessaire à la finalité pour laquelle elle est utilisée.</p>
+<p>Les durées de conservation varient selon les données et les finalités décrites ci-dessus. Les mesures et le tracé GPS des trajets guidés sont conservés tant que le compte existe, sans suppression automatique liée à leur ancienneté.</p>
 <p>Les principales durées actuellement définies sont :</p>
 <table>
 <tr><th>Donnée / traitement</th><th>Conservation</th></tr>
-<tr><td>Position utilisée pour le fonctionnement de l'application</td><td>Pas d'historique conservé (hors « Présence et position »)</td></tr>
+<tr><td>Positions et tracés GPS</td><td>Selon le traitement : trajets guidés (section 7), rapports de bug (section 7 bis) ou « Présence et position » (section 8), détaillés ci-dessous</td></tr>
 <tr><td>Signalements</td><td>90 jours après clôture</td></tr>
 <tr><td>Journal des actions de modération (compte modifié, banni ou supprimé, signalement retiré, et par quel administrateur)</td><td>1 an, puis suppression automatique</td></tr>
 <tr><td>Présence (décompte des applications ouvertes)</td><td>90 secondes en mémoire</td></tr>
 <tr><td>Positions partagées (« Présence et position »)</td><td>30 jours, puis suppression automatique</td></tr>
+<tr><td>Trajets guidés : mesures et tracé GPS rattachés au compte, y compris lorsque « Statistiques de conduite » est désactivé</td><td>Tant que le compte existe ; supprimés avec le compte</td></tr>
 <tr><td>Trajet partagé par lien</td><td>En mémoire, jusqu'à 15 minutes après l'arrivée (6 heures au maximum)</td></tr>
 <tr><td>Trajet en groupe (positions, vitesses, avancement, classement)</td><td>En mémoire, jusqu'à 15 minutes après la fin du trajet (6 heures au maximum)</td></tr>
 <tr><td>Classement d'un trajet en groupe dans l'historique</td><td>Sur le téléphone, jusqu'à suppression du trajet ou de l'application</td></tr>
@@ -243,11 +253,11 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <tr><td>Journal des calculs d'itinéraire (sans compte ni coordonnée)</td><td>90 jours</td></tr>
 <tr><td>Comparaison des moteurs de calcul (sans compte ni coordonnée)</td><td>90 jours</td></tr>
 <tr><td>Itinéraires comparés des comptes administrateurs, avec leur tracé</td><td>30 jours</td></tr>
-<tr><td>Trafic sur l'itinéraire (HERE, data.gouv.fr)</td><td>Pas de conservation, hors décompte des requêtes par compte, en mémoire pour la journée</td></tr>
+<tr><td>Trafic HERE sur l'itinéraire</td><td>Cache partagé en mémoire, réutilisable pendant 60 secondes ; compteurs de requêtes conservés séparément</td></tr>
 <tr><td>Sauvegardes du serveur</td><td>14 jours, sur le serveur</td></tr>
 <tr><td>Statistiques de conduite</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
 <tr><td>Données de compte</td><td>Jusqu'à suppression du compte ou effacement des données</td></tr>
-<tr><td>Compte invité</td><td>Supprimé 7 jours après l'inscription</td></tr>
+<tr><td>Compte invité</td><td>Permanent, jusqu'à suppression du compte</td></tr>
 <tr><td>Identifiant d'appareil haché (essai gratuit)</td><td>Conservé pour prévenir les abus</td></tr>
 <tr><td>Destinations récentes (suggestions de trajets)</td><td>Sur le téléphone (copie dans le trousseau, conservée après une mise à jour ou une réinstallation), jusqu'à désactivation de la fonction</td></tr>
 <tr><td>Copie locale des statistiques</td><td>Jusqu'à suppression par l'utilisateur ou suppression de l'application selon le fonctionnement du terminal</td></tr>
@@ -257,7 +267,7 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #c7c7cc;padding
 <p>L'utilisateur peut demander la suppression de son compte.</p>
 <p>Lorsqu'un compte est supprimé, les données associées sont supprimées lorsqu'aucune raison technique ou légale ne justifie leur conservation.</p>
 <p>Les données de signalements qui doivent rester présentes pour le fonctionnement du service sont anonymisées afin de ne plus être rattachées à l'ancien compte.</p>
-<p>Les positions enregistrées au titre de la fonction « Présence et position » sont, elles, supprimées et non anonymisées.</p>
+<p>Les positions enregistrées au titre de la fonction « Présence et position », ainsi que les mesures et le tracé GPS des trajets guidés, sont supprimés et non anonymisés.</p>
 <p>En dehors des données ainsi anonymisées et des éventuelles obligations légales applicables, EONA ne conserve pas les données personnelles du compte après sa suppression.</p>
 <h2>13. Données de paiement</h2>
 <p>EONA ne conserve pas directement les données bancaires des utilisateurs.</p>
