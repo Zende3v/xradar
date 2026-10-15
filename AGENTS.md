@@ -38,7 +38,7 @@ Anciens documents restent consultables dans historique Git.
 |---|---|---|---|
 | Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `feature/mini-player-musique` ; principale `main` |
 | iOS | `C:\Users\usr\Documents\xradar_ios` | `git@github.com:Zende3v/xradar_ios.git` | `main` |
-| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `47dc80f` ; lots 1 et 1b déployés, `435837c` inclus non déployé |
+| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `9a8ea37` ; lots 1, 1b et budget HERE déployés |
 
 Android : Kotlin, Jetpack Compose sur mesure, MapLibre, tuiles Stadia. Package `com.eona.app`.
 Logique métier commune dans `core/`, portée vers iOS avec mêmes règles et champs JSON.
@@ -190,13 +190,13 @@ Réservation budget persistée avant appel payant ; échec écriture interdit ap
 Économie HERE ne doit jamais masquer absence de trafic mesuré.
 Validation Import par longueur ±10 % ; identité géométrique exacte non garantie. Taxi HERE reste voiture.
 
-Plafond **estimé** production : **5 €/mois**. Arthur refuse tout coût en plus (15/10) : 5 € gardés.
-Code `435837c` porte défaut 10 € : ramener à 5 € avant tout déploiement. Réponse Import sans attente du flow lent : utile, non déployée.
-Mesure 14/10 : 4,999248 € estimés, `blocked: monthly budget`. Historique depuis 05/10 20:28 UTC : zéro appel HERE.
-Remise à zéro automatique au changement de mois UTC (`traffic/budget.js:128-131`).
-Estimation utilise tarifs configurables et marge 20 %, aucune franchise supposée. Facture réelle non importée.
-Relevé tarifs 29/09 (historique Git) : Traffic 5 000 gratuites/mois. Franchise actuelle à lire dans console HERE.
-Quotas HERE par compte : ETA une/minute, 150/jour UTC ; variantes une/minute, 30/jour UTC.
+**Contrat HERE Base Plan (abonnement du 14/10/2026, carte enregistrée : HERE facture au-delà de la franchise).**
+Franchises mensuelles : Real-Time Traffic 5 000 puis 2,33 €/1 000 ; Advanced Traffic 2 500 et Route Import 2 500 puis 4,66 €/1 000.
+Budget déployé 15/10 (`9a8ea37`) : 0 € de dépassement ; comptage depuis 14/10 sur mois civil ET mois d'anniversaire (14 au 13).
+Flow et incidents = Real-Time Traffic ; Import = Route Import. Ancien usage (ancienne clé, 1 317 requêtes) hors abonnement.
+Quota par compte : 250 transactions HERE par jour UTC, tous usages ; cache non compté. Écart une/minute ETA et détours conservé.
+Production 15/10 17:05 : `blocked: null`, dépassement estimé 0 €, nouvelle clé testée HTTP 200.
+Réponse Import sans attente du flow lent (`435837c`) déployée avec ce lot.
 Historique cumulé/hebdomadaire persistant ; semaine commence lundi minuit Paris. Historique ancien incomplet indiqué.
 
 ### Mesure ETA
@@ -227,8 +227,9 @@ Fermeture ou incident d'une seule source : retenu. Données EONA ajoutent retard
 Situations en table (voie × tranche × phase), jamais arbre de conditions. Valeurs de départ, puis calibrées.
 
 **Réponses Arthur 15/10 :** collecte TOUT, tous comptes, statistiques coupées comprises ; tracé GPS tous comptes, conservé sans limite.
-ETA prudente en cas de doute. Nouvelle clé HERE et clé TomTom Freemium fournies (installées, EXPLOITATION §3).
-Questions encore ouvertes : offre du compte HERE (Base ou Limited) ; navigation lancée voiture garée ; app fermée en fin de trajet.
+ETA prudente en cas de doute. Nouvelle clé HERE (Base Plan, carte, franchise seule) et clé TomTom Freemium installées.
+HERE : 0 € de dépassement, quota 250 par compte et par jour (Arthur 15/10). Page confidentialité publiée par Codex, relue par Arthur.
+Questions encore ouvertes : navigation lancée voiture garée ; app fermée en fin de trajet (essais route d'Arthur).
 
 **Lot 1 collecte : backend déployé 15/10 ; iOS 55 lancé par Arthur ; Android 37 non validé.**
 Instantané trajet toutes les 30 s ; app fermée : repris au lancement, envoyé `interrupted`.
@@ -302,7 +303,7 @@ Signalements fermés et bugs résolus : 90 jours. Plaque voiture radar jamais ex
 Bugs volontaires peuvent joindre destination/tracé même statistiques désactivées.
 Lot 1b (déployé 15/10) : tous trajets et tracé GPS transmis, tous comptes, statistiques coupées comprises.
 Trajets et tracés conservés sans limite de durée, supprimés avec le compte. Texte Confidentialité des apps le dit.
-**Page confidentialité web à aligner avant d'annoncer ce tracé ; conservation illimitée de positions à valider juridiquement (RGPD, limitation de conservation).**
+Page confidentialité web alignée et publiée 15/10 (`8191466`). **Conservation illimitée de positions à valider juridiquement (RGPD, limitation de conservation).**
 Capture facultative : JPEG, 1 Mio maximum, 4096 pixels/côté, huit millions pixels ; accès admin privé.
 
 Bans persistés dans `<ACCOUNTS_FILE>.bans.json`, séparément des comptes.
@@ -318,7 +319,8 @@ Réactivation signalement supprimé et rôle modérateur distinct non développ�
 Référence iOS fonctionnelle : `c51b834`, build **54**, version **1.0.0**.
 iOS build **55** (`7ef22c9`, lot 1) : archive et lancement confirmés par Arthur ; collecte à valider.
 iOS build **56** (`2a5d06b`, lot 1b) poussé ; archive et téléphone à valider.
-Android version **1.0.2**, code **38** (`7125da9`, lot 1b) : APK release compilé, téléphone à valider.
+iOS build **57** (`b0d3125`) : dock glissable, Stationnement dans le dock, bouton 3D/2D ; poussé, à valider.
+Android version **1.0.2**, code **39** (`5a8dc90`, lot 1b + même UI) : APK release compilé, téléphone à valider.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
 Déploiements backend consignés : `a85c6bc`, puis quatre fichiers stations `5646f45` le 08/10.
@@ -327,21 +329,24 @@ Après redémarrage : service actif, santé locale et publique OK, journal sans 
 15/10 vers 02:40 Paris : lot 1b (`7125da9`) : `crowd/schema.sql`, `accounts/trip-log.js`, `accounts/routes.js`, `accounts/store.js`, `server.js`.
 Sauvegarde `/var/backups/eona/deploy-20261015-023709-lot1b` : code, `data`, `crowd.dump`. Tables `crowd.trip`, `crowd.trip_trace` créées.
 Nouvelles clés HERE et TomTom chargées. Santé OK, journal sans erreur, trace sans compte : 401.
+15/10 17:05 : budget HERE franchise (`9a8ea37`) : `traffic/budget.js`, `here.js`, `traffic/routes.js`, `routing/routes.js`, `routing/faster.js`, `config.js`.
+Sauvegarde `/var/backups/eona/deploy-20261015-170303-here-franchise` : code, `data`. Santé OK, journal sans erreur, HERE ouvert.
+15/10 : page confidentialité publiée (ancienne gardée dans `deploy-20261015-023709-lot1b`).
 Lecture production 14/10 : santé HTTP 200, Valhalla `all`, carte 11/10, HERE limité à 5 €.
 Empreintes 14/10, 72 fichiers `src`/`bin`, fins de ligne ignorées : code `a85c6bc`.
 Seules exceptions : `places/routes.js` et `places/store.js`, identiques `5646f45`. Fichiers production majoritairement CRLF.
-Checkout déploiement conserve correctif local `435837c`, encore distinct de production.
+Correctif `435837c` (Import sans attente du flow) déployé avec le budget HERE le 15/10.
 
 Points ouverts concrets :
 
-1. Correctif HERE `435837c` : ramener défaut à 5 €, déployer seulement après nouvel accord Arthur.
+1. Valider HERE en route : temps Import et sections trafic présents après premier trajet.
 2. Inclure registre bans dans sauvegarde quotidienne avant prochaine livraison concernée.
-3. Aligner HTML confidentialité : défaut présence et couverture HERE décrits différemment du code actuel.
+3. Page confidentialité publiée 15/10 : relecture Arthur ; durée de conservation des tracés à valider juridiquement.
 4. Mesurer ETA après nouvelle livraison ; conserver séparation pauses/embouteillages et versions d'application.
 5. Valider lecteur système sur téléphone ; titre tiers reste sans solution logicielle démontrée.
 6. Perso, feux, gabarit poids lourd et achat abonnement restent chantiers distincts, sans livraison implicite.
 7. Lot 1b : valider sur téléphone (iOS 56, Android 38) ; vérifier trajets et tracés stockés en base après premier trajet.
-8. Plafond HERE : supprimer seulement si compte Limited Plan (HERE bloque seul) ; Base Plan facture au-delà de la franchise.
+8. HERE : surveiller usage par fenêtre dans `/health` ; crédits ajoutés par Arthur plus tard, alors relever `HERE_MONTHLY_BUDGET_EUR`.
 9. Test backend `search` « same JSON as before » échoue déjà avant lot 1 ; à corriger à part.
 
 Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.
