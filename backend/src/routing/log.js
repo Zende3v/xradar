@@ -23,8 +23,8 @@ let lastPurge = 0;
  */
 export function logRoute(entry) {
   db.query(
-    `INSERT INTO routing.route_log (kind, engine, status, latency_ms, is_new, cached, distance_m, duration_s, steps, uturn_start, avoid, error, preference, stops)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    `INSERT INTO routing.route_log (kind, engine, status, latency_ms, is_new, cached, distance_m, duration_s, steps, uturn_start, avoid, error, preference, stops, engine_duration_s)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       entry.kind,
       text(entry.engine, 16),
@@ -40,6 +40,7 @@ export function logRoute(entry) {
       text(entry.error, 200),
       PREFERENCES.has(entry.preference) ? entry.preference : null,
       whole(entry.stops),
+      whole(entry.engineDurationS),
     ],
   ).catch((e) => console.warn('[route-log] not written —', String(e.message || e)));
   if (Date.now() - lastPurge > 60 * 60 * 1000) {
@@ -50,12 +51,14 @@ export function logRoute(entry) {
 }
 
 /** What the log and the bench keep of a route: its engine, its size, a U-turn among its first 2 steps. */
+// durationS : EONA ; engineDurationS : brut, y compris pour les anciennes routes.
 export function routeFacts(route) {
   const steps = Array.isArray(route?.steps) ? route.steps : [];
   return {
     engine: route?.engine ?? null,
     distanceM: route?.distanceM ?? null,
     durationS: route?.durationS ?? null,
+    engineDurationS: route?.engineDurationS ?? route?.durationS ?? null,
     steps: steps.length,
     uturnStart: steps.slice(0, 2).some((step) => step?.modifier === 'uturn'),
   };

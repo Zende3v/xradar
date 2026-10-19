@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { measure } from '../src/routing/geometry.js';
-import { corridorOf, flexiblePolyline, hereTravel as liveHereTravel, placeOnRoute } from '../src/traffic/here.js';
+import { corridorOf, flexiblePolyline, hereQuality, importNoticeCode, hereTravel as liveHereTravel, placeOnRoute } from '../src/traffic/here.js';
 import { speedStore } from '../src/traffic/speeds.js';
 
 const hereTravel = (points, options) => liveHereTravel(points, { reserve: () => true, cache: null, ...options });
@@ -90,5 +90,58 @@ describe('the drivers\' speeds', () => {
     assert.ok(coverage > 0.15 && coverage < 0.25);
     assert.equal(sections.length, 4);
     assert.ok(sections.every((s) => s.source === 'crowd' && s.kind === 'speed' && s.delayS > 0));
+  });
+});
+
+describe('Codes des rejets Route Import HERE', () => {
+  const points = ROUTE.points;
+  const fetchNotices = (routeNotices, sectionNotices) => async () => ({
+    ok: true,
+    json: async () => ({ routes: [{
+      notices: routeNotices,
+      sections: [{ summary: { duration: 900, length: ROUTE.total }, notices: sectionNotices }],
+    }] }),
+  });
+
+  it('nettoie lettres/chiffres, limite 64 caractères, ignore texte non typé', () => {
+    assert.equal(importNoticeCode('violated_Vehicle-Restriction!'), 'violatedVehicleRestriction');
+    assert.equal(importNoticeCode('a'.repeat(100)), 'a'.repeat(64));
+    for (const value of [null, undefined, 123, {}, '! / é']) assert.equal(importNoticeCode(value), '');
+  });
+
+  it('compte notice et chaque code distinct ; doublons route/section comptés une fois', async () => {
+    const before = hereQuality().import;
+    const notice = { code: 'violatedVehicleRestriction', severity: 'warning', title: 'coord-privee 48.123456 cle-privee' };
+    assert.equal(await hereTravel(points, {
+      fetchImpl: fetchNotices([notice], [notice, { code: 'route-Calculation_1', severity: 'critical' }]),
+    }), null);
+    const after = hereQuality().import;
+    assert.equal(after.lastReason, 'notice');
+    for (const code of ['notice', 'notice:violatedVehicleRestriction', 'notice:routeCalculation1']) {
+      assert.equal(after.rejected[code] - (before.rejected[code] ?? 0), 1);
+    }
+    assert.equal(after.valid, before.valid);
+    assert.equal(JSON.stringify(after).includes('coord-privee'), false);
+    assert.equal(JSON.stringify(after).includes('cle-privee'), false);
+    assert.equal(JSON.stringify(after).includes('48.123456'), false);
+  });
+
+  it('notice critique sans code : rejet générique conservé', async () => {
+    const before = hereQuality().import;
+    assert.equal(await hereTravel(points, { fetchImpl: fetchNotices([{ severity: 'critical' }], []) }), null);
+    const after = hereQuality().import;
+    assert.equal(after.rejected.notice - (before.rejected.notice ?? 0), 1);
+    assert.deepEqual(Object.keys(after.rejected), Object.keys({ ...before.rejected, notice: 0 }));
+  });
+
+  it('avertissement non bloquant accepté ; code violated reste bloquant sans severity critique', async () => {
+    const before = hereQuality().import;
+    const accepted = await hereTravel(points, { fetchImpl: fetchNotices([{ severity: 'warning', code: 'otherNotice' }], []) });
+    assert.ok(accepted?.travelS > 0);
+    assert.equal(hereQuality().import.rejected.notice ?? 0, before.rejected.notice ?? 0);
+    assert.equal(await hereTravel(points, {
+      fetchImpl: fetchNotices([], [{ severity: 'info', code: 'ViolatedTest' }]),
+    }), null);
+    assert.equal(hereQuality().import.rejected['notice:ViolatedTest'], 1);
   });
 });

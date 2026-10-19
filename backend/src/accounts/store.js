@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { config } from '../config.js';
@@ -43,7 +43,27 @@ function isReservedUsername(lower) {
 }
 
 function genCode() {
-  return String(Math.floor(100000 + Math.random() * 900000)); // 6-digit code
+  return String(randomInt(100000, 1000000)); // six chiffres, tirage cryptographique
+}
+
+/** Codes compte : noms des champs JSON, par type. */
+const CODE_FIELDS = Object.freeze({
+  verify: Object.freeze({ code: 'verifyCode', expiresAt: 'verifyExpiresAt', failures: 'verifyFailures', sentAt: 'verifySentAt' }),
+  reset: Object.freeze({ code: 'resetCode', expiresAt: 'resetExpiresAt', failures: 'resetFailures', sentAt: 'resetSentAt' }),
+});
+
+function codeMatches(given, stored) {
+  const a = Buffer.from(String(given ?? ''));
+  const b = Buffer.from(String(stored ?? ''));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function clearCode(account, kind, { keepSentAt = true } = {}) {
+  const f = CODE_FIELDS[kind];
+  delete account[f.code];
+  delete account[f.expiresAt];
+  delete account[f.failures];
+  if (!keepSentAt) delete account[f.sentAt];
 }
 
 
@@ -115,6 +135,14 @@ function knownWords(value, known) {
 }
 
 /**
+ * 'raw' si l'app déclare engineLeftS en temps moteur brut (19/10) et valeur valide.
+ * Sinon null : anciennes mesures, Android sans marqueur, temps EONA corrigé.
+ */
+function engineBasisOf(value) {
+  return value?.engineBasis === 'raw' && wholeOr(value.engineLeftS, null) != null ? 'raw' : null;
+}
+
+/**
  * The ETA shown along the trip: one complete snapshot per checkpoint (the first one given),
  * in checkpoint order — { at, shownAt, arrivalAt, pausedBefore, uncertainBefore }, and the two
  * ETAs of D2.6 when the app computed them: withDatagouvAt, withoutDatagouvAt (null otherwise).
@@ -137,6 +165,7 @@ function etaChecksShape(value) {
       withoutDatagouvAt: wholeOr(check.withoutDatagouvAt, 0) || null,
       base: TRIP_ETA_BASES.includes(check.base) ? check.base : null,
       engineLeftS: wholeOr(check.engineLeftS, null),
+      engineBasis: engineBasisOf(check),
     });
   }
   return TRIP_ETA_CHECKPOINTS.filter((at) => byAt.has(at)).map((at) => byAt.get(at));
@@ -158,6 +187,7 @@ function timelineShape(value) {
       leftM: wholeOr(point.leftM, null),
       leftS: wholeOr(point.leftS, null),
       engineLeftS: wholeOr(point.engineLeftS, null),
+      engineBasis: engineBasisOf(point),
       base: TRIP_ETA_BASES.includes(point.base) ? point.base : null,
       kmh: Math.min(wholeOr(point.kmh, 0), 300),
     });
@@ -368,6 +398,14 @@ export class AccountStore {
     account.stats = statsShape(account.stats);
     if (!Array.isArray(account.referralCodes)) account.referralCodes = [];
     if (!Array.isArray(account.providers)) account.providers = [];
+    // Codes d'avant 19/10 : sans échéance (vérification) ni compteur. Sans échéance, supprimés.
+    for (const kind of Object.keys(CODE_FIELDS)) {
+      const f = CODE_FIELDS[kind];
+      if (account[f.code] && !Number.isFinite(account[f.expiresAt])) {
+        clearCode(account, kind);
+        this.scheduleSave();
+      }
+    }
     // Names left once, held for their owner a while: the lapsed ones go.
     account.heldUsernames = (Array.isArray(account.heldUsernames) ? account.heldUsernames : [])
       .filter((held) => held?.lower && Date.parse(held.until) > Date.now());
@@ -1125,6 +1163,10 @@ export class AccountStore {
     const byEmail = email && emailVerified ? this.byEmail.get(email) : null;
     const denied = this.identityDenied({ account: known ?? byEmail, email, deviceId, providerKey: `${provider}:${subject}` });
     if (denied) return { error: denied, account: known ?? byEmail };
+    // Adresse prouvée maintenant, jamais confirmée ici : ancien ouvreur du compte ne garde rien.
+    const claimed = known ?? byEmail;
+    const proven = Boolean(email && emailVerified && claimed && !claimed.emailVerified && claimed.emailLower === email);
+    if (proven) this.secureForProvenOwner(claimed, { provider, subject, email }, now);
     if (known) {
       const binding = this.bindDevice(known, deviceId);
       if (binding?.error) return binding;
@@ -1173,6 +1215,28 @@ export class AccountStore {
     this.index(account);
     this.scheduleSave();
     return { account, created: true, linked: false };
+  }
+
+  /**
+   * Fournisseur vient de prouver [email], jamais confirmé par ce compte (audit 19/10).
+   * Compte peut-être ouvert par un tiers avec cette adresse. Propriétaire prouvé garde compte :
+   * id, droits, essai, statistiques, historique. Retirés : mot de passe, sessions, codes, autres
+   * fournisseurs. Seule identité prouvée reste ; email marqué vérifié.
+   */
+  secureForProvenOwner(account, { provider, subject, email }, now = new Date().toISOString()) {
+    this.normalizeAccount(account);
+    for (const link of account.providers) {
+      const key = `${link.provider}:${link.subject}`;
+      if (this.byProvider.get(key) === account) this.byProvider.delete(key);
+    }
+    const kept = account.providers.find((link) => link.provider === provider && link.subject === subject);
+    account.providers = [kept ?? { provider, subject, email, linkedAt: now }];
+    this.byProvider.set(`${provider}:${subject}`, account);
+    account.passwordHash = null;
+    for (const kind of Object.keys(CODE_FIELDS)) clearCode(account, kind, { keepSentAt: false });
+    account.emailVerified = true;
+    this.revokeSessions(account.id);
+    this.scheduleSave();
   }
 
   /** Ties a provider identity to an account that already exists. */
@@ -1237,51 +1301,87 @@ export class AccountStore {
 
   // ---- Email verification + password reset ----------------------------------
 
+  /**
+   * Nouveau code [kind] pour [a], ou null pendant délai après dernier envoi.
+   * Code précédent remplacé avec son compteur : seul dernier email valable.
+   */
+  issueCode(a, kind, ttlMs, now = Date.now()) {
+    const f = CODE_FIELDS[kind];
+    const sentAt = a[f.sentAt];
+    if (Number.isFinite(sentAt) && now - sentAt >= 0 && now - sentAt < config.accountCodeCooldownMs) return null;
+    a[f.code] = genCode();
+    a[f.expiresAt] = now + ttlMs;
+    a[f.failures] = 0;
+    a[f.sentAt] = now;
+    this.scheduleSave();
+    return a[f.code];
+  }
+
+  /**
+   * Compare [code] au code actif [kind] : absent, expiré ou épuisé après accountCodeMaxFailures échecs.
+   * Succès : code laissé, appelant l'efface.
+   */
+  checkCode(a, kind, code, now = Date.now()) {
+    const f = CODE_FIELDS[kind];
+    if (!a || !a[f.code]) return { error: 'invalid code' };
+    if (!Number.isFinite(a[f.expiresAt]) || now > a[f.expiresAt]) {
+      clearCode(a, kind);
+      this.scheduleSave();
+      return { error: 'code expired' };
+    }
+    if (!codeMatches(String(code ?? '').trim(), a[f.code])) {
+      a[f.failures] = (Number(a[f.failures]) || 0) + 1;
+      if (a[f.failures] >= config.accountCodeMaxFailures) clearCode(a, kind);
+      this.scheduleSave();
+      return { error: 'invalid code' };
+    }
+    return { ok: true };
+  }
+
   setVerifyCode(id) {
     const a = this.byId.get(id);
     if (!a) return null;
-    a.verifyCode = genCode();
-    this.scheduleSave();
-    return a.verifyCode;
+    return this.issueCode(a, 'verify', config.verifyCodeTtlMs);
   }
 
+  /** Null si aucun envoi (inconnu, vérifié, délai) : appelant reste vague. */
   resendVerify(email) {
     const a = this.byEmail.get(String(email || '').trim().toLowerCase());
-    if (!a) return null;
-    a.verifyCode = genCode();
-    this.scheduleSave();
-    return { code: a.verifyCode, account: a };
+    if (!a || a.emailVerified) return null;
+    const code = this.issueCode(a, 'verify', config.verifyCodeTtlMs);
+    return code ? { code, account: a } : null;
   }
 
   verifyEmail(email, code) {
     const a = this.byEmail.get(String(email || '').trim().toLowerCase());
     if (!a) return { error: 'not found' };
-    if (!a.verifyCode || String(code) !== String(a.verifyCode)) return { error: 'invalid code' };
+    const checked = this.checkCode(a, 'verify', code);
+    if (checked.error) return checked;
     a.emailVerified = true;
-    a.verifyCode = null;
+    clearCode(a, 'verify', { keepSentAt: false });
     this.scheduleSave();
     return { account: a };
   }
 
-  /** Returns the reset code to email (or null if no such account — caller stays vague). */
+  /** Code reset à envoyer, ou null si compte inconnu ou délai : appelant reste vague. */
   startReset(email) {
     const a = this.byEmail.get(String(email || '').trim().toLowerCase());
     if (!a) return null;
-    a.resetCode = genCode();
-    a.resetExpiresAt = Date.now() + config.resetCodeTtlMs;
-    this.scheduleSave();
-    return { code: a.resetCode, account: a };
+    const code = this.issueCode(a, 'reset', config.resetCodeTtlMs);
+    return code ? { code, account: a } : null;
   }
 
+  /** Nouveau mot de passe, puis toutes sessions fermées : reconnexion requise. Compte reste ouvert. */
   resetPassword(email, code, password) {
-    const a = this.byEmail.get(String(email || '').trim().toLowerCase());
-    if (!a || !a.resetCode) return { error: 'invalid code' };
-    if (String(code) !== String(a.resetCode)) return { error: 'invalid code' };
-    if (!a.resetExpiresAt || Date.now() > a.resetExpiresAt) return { error: 'code expired' };
+    // Vérifié d'abord : mot de passe refusé ne consomme ni code ni essai.
     if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
+    const a = this.byEmail.get(String(email || '').trim().toLowerCase());
+    if (!a) return { error: 'invalid code' };
+    const checked = this.checkCode(a, 'reset', code);
+    if (checked.error) return checked;
     a.passwordHash = hashPassword(password);
-    a.resetCode = null;
-    a.resetExpiresAt = null;
+    clearCode(a, 'reset', { keepSentAt: false });
+    this.revokeSessions(a.id);
     this.scheduleSave();
     return { account: a };
   }

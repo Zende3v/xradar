@@ -25,6 +25,11 @@ function rejectImport(reason) {
 }
 export const hereQuality = () => ({ import: { ...importStatus, rejected: { ...importStatus.rejected } } });
 
+/** Code seul, sans texte libre HERE. */
+export function importNoticeCode(code) {
+  return typeof code === 'string' ? code.replace(/[^A-Za-z0-9]/g, '').slice(0, 64) : '';
+}
+
 /**
  * Our own route ([points], [lat, lon], from the driver on) timed by HERE with the live traffic
  * (Route Import): { travelS, baseS, typicalS, lengthM }, or null when HERE matched another road
@@ -62,7 +67,16 @@ export async function hereTravel(points, { use = 'eta', accountId, fetchImpl = g
   catch (error) { rejectImport(error.message === 'HERE budget unavailable' ? 'budget unavailable' : 'request unavailable'); throw error; }
   const route = json.routes?.[0];
   const sections = route?.sections ?? [];
-  if ([...(route?.notices ?? []), ...sections.flatMap(s=>s.notices ?? [])].some(n=>n.severity === 'critical' || /^violated/i.test(n.code ?? ''))) return rejectImport('notice');
+  const rejectedNotices = [...(route?.notices ?? []), ...sections.flatMap(s=>s.notices ?? [])]
+    .filter(n=>n.severity === 'critical' || /^violated/i.test(n.code ?? ''));
+  if (rejectedNotices.length) {
+    // Un rejet par appel ; chaque code distinct compté une seule fois.
+    for (const code of new Set(rejectedNotices.map(n=>importNoticeCode(n.code)).filter(Boolean))) {
+      const reason = `notice:${code}`;
+      importStatus.rejected[reason] = (importStatus.rejected[reason] ?? 0) + 1;
+    }
+    return rejectImport('notice');
+  }
   if (!sections.every(s=>Number.isFinite(s.summary?.duration) && s.summary.duration > 0 && Number.isFinite(s.summary?.length) && s.summary.length > 0)) return rejectImport('invalid summary');
   if (!sections.length) return rejectImport('no sections');
   const sum = (key) => sections.reduce((total, section) => total + (Number(section.summary?.[key]) || 0), 0);

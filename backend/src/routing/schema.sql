@@ -37,6 +37,8 @@ CREATE INDEX IF NOT EXISTS route_log_at ON routing.route_log (at);
 ALTER TABLE routing.route_log ADD COLUMN IF NOT EXISTS preference text;
 -- Multi-arrêts (04/10) : nombre d'étapes demandées ; null avant.
 ALTER TABLE routing.route_log ADD COLUMN IF NOT EXISTS stops integer;
+-- Lot 4 : seconde durée indispensable au journal ; anciennes lignes inconnues.
+ALTER TABLE routing.route_log ADD COLUMN IF NOT EXISTS engine_duration_s integer;
 
 -- ---- Bench (routing/bench.js) --------------------------------------------------------------
 

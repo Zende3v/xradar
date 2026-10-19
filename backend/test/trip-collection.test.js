@@ -41,8 +41,8 @@ describe('collecte trajets lot 1', () => {
 
     const stored = accounts.get(account.id).trips[0];
     assert.deepEqual(stored.timeline, [
-      { t: 1_790_000_060_000, drivenM: 300, leftM: 3700, leftS: 540, engineLeftS: 480, base: 'engine', kmh: 32 },
-      { t: 1_790_000_120_000, drivenM: 700, leftM: null, leftS: null, engineLeftS: null, base: null, kmh: 300 },
+      { t: 1_790_000_060_000, drivenM: 300, leftM: 3700, leftS: 540, engineLeftS: 480, engineBasis: null, base: 'engine', kmh: 32 },
+      { t: 1_790_000_120_000, drivenM: 700, leftM: null, leftS: null, engineLeftS: null, engineBasis: null, base: null, kmh: 300 },
     ]);
     assert.deepEqual(stored.stopLog, [{ at: 1_790_000_200_000, seconds: 42, drivenM: 900, jam: true }]);
     assert.equal(accounts.statsFor(account.id).trips[0].timeline, undefined);

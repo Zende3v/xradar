@@ -49,20 +49,32 @@ export function inBbox(radars, minLon, minLat, maxLon, maxLat, limit) {
 
 const M_PER_DEG = 111320;
 const ROUTE_CELL_DEG = 0.02; // ~2.2 km grid for the route's segments
+// Visites de cellules permises par tracé, comptées avant allocation (audit 19/10).
+// Tracé dense de 1 000 km : très en dessous. Segment traversant un continent : refusé.
+export const ROUTE_MAX_CELLS = 400_000;
+
+/** [lon, lat] dans bornes terrestres, deux nombres réels : aucune chaîne, aucune conversion. */
+export function validLonLat(c) {
+  return Array.isArray(c) && (c.length === 2 || c.length === 3)
+    && typeof c[0] === 'number' && typeof c[1] === 'number'
+    && Number.isFinite(c[0]) && Number.isFinite(c[1])
+    && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90;
+}
 
 /**
  * Radars within [bufferM] metres of a route ([[lon, lat], ...]), in the order the route
  * meets them, each annotated with offRouteM. The route's segments are bucketed on a
  * coarse grid first, so each radar is only measured against the segments passing near it.
+ * Lève RangeError('route_too_large') si grille dépasse [maxCells] visites.
  */
-export function alongRoute(radars, coords, bufferM, limit) {
-  const pts = Array.isArray(coords)
-    ? coords.filter((c) => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]))
-    : [];
-  if (pts.length < 2) return [];
+export function alongRoute(radars, coords, bufferM, limit, { maxCells = ROUTE_MAX_CELLS } = {}) {
+  const pts = Array.isArray(coords) ? coords.filter(validLonLat) : [];
+  if (pts.length < 2 || !(bufferM >= 0)) return [];
 
   const padLat = bufferM / M_PER_DEG;
-  const grid = new Map(); // "row_col" -> segment indices
+  // Bornes de chaque segment d'abord : budget vérifié avant toute mémoire de grille.
+  const spans = [];
+  let cells = 0;
   for (let i = 0; i < pts.length - 1; i++) {
     const [lonA, latA] = pts[i];
     const [lonB, latB] = pts[i + 1];
@@ -71,9 +83,18 @@ export function alongRoute(radars, coords, bufferM, limit) {
     const r1 = Math.floor((Math.max(latA, latB) + padLat) / ROUTE_CELL_DEG);
     const c0 = Math.floor((Math.min(lonA, lonB) - padLon) / ROUTE_CELL_DEG);
     const c1 = Math.floor((Math.max(lonA, lonB) + padLon) / ROUTE_CELL_DEG);
-    for (let r = r0; r <= r1; r++) {
-      for (let c = c0; c <= c1; c++) {
-        const key = `${r}_${c}`;
+    // r++ doit avancer : aucun indice hors entiers sûrs.
+    if (![r0, r1, c0, c1].every(Number.isSafeInteger)) throw new RangeError('route_too_large');
+    cells += (r1 - r0 + 1) * (c1 - c0 + 1);
+    if (cells > maxCells) throw new RangeError('route_too_large');
+    spans.push(r0, r1, c0, c1);
+  }
+
+  const grid = new Map(); // cellKey(ligne, colonne) -> indices segments
+  for (let i = 0; i < pts.length - 1; i++) {
+    for (let r = spans[i * 4]; r <= spans[i * 4 + 1]; r++) {
+      for (let c = spans[i * 4 + 2]; c <= spans[i * 4 + 3]; c++) {
+        const key = cellKey(r, c);
         let bucket = grid.get(key);
         if (!bucket) grid.set(key, (bucket = []));
         bucket.push(i);
@@ -83,7 +104,7 @@ export function alongRoute(radars, coords, bufferM, limit) {
 
   const hits = [];
   for (const r of radars) {
-    const bucket = grid.get(`${Math.floor(r.lat / ROUTE_CELL_DEG)}_${Math.floor(r.lon / ROUTE_CELL_DEG)}`);
+    const bucket = grid.get(cellKey(Math.floor(r.lat / ROUTE_CELL_DEG), Math.floor(r.lon / ROUTE_CELL_DEG)));
     if (!bucket) continue;
     let best = Infinity;
     let segment = 0;
@@ -109,6 +130,11 @@ function distanceToSegmentM(lat, lon, a, b) {
   const px = ax + t * dx;
   const py = ay + t * dy;
   return Math.sqrt(px * px + py * py);
+}
+
+/** Clé cellule numérique : lignes et colonnes dans ±10 000, coordonnées bornées. */
+function cellKey(row, col) {
+  return (row + 10_000) * 40_000 + (col + 20_000);
 }
 
 function toRad(deg) {

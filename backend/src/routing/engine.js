@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { haversine } from '../radars/geo.js';
 import { reportStore } from '../reports/store.js';
 import { createRoutingAlert } from './alert.js';
+import { createEonaTime } from './eona-time.js';
 import {
   normalizeOrsFeature, orsBody, orsBudgetLeft, orsKeysMeta, orsMapVersion, orsUsage, postORS, square,
 } from './providers/ors.js';
@@ -132,6 +133,18 @@ export function createRoutingEngine({
   /** The last route each driver got: served by ORS for a failing Valhalla, or not. */
   const served = new Map();
   let timer = null;
+
+  const eonaTime = createEonaTime({
+    trace: valhalla?.traceAttributes ? (shape, options) => valhalla.traceAttributes(shape, options) : null,
+    available: () => !valhallaBlocked(),
+  });
+
+  // Chronométrage externe et modèle en parallèle ; les tentatives restent brutes.
+  async function appRoute(raw, options, decorate = null) {
+    const enrichment = Promise.resolve().then(() => decorate?.(raw)).catch(() => null);
+    const [route, extra] = await Promise.all([eonaTime.apply(raw, options), enrichment]);
+    return extra ? { ...route, ...extra } : route;
+  }
 
   function currentMode() {
     try {
@@ -289,8 +302,10 @@ export function createRoutingEngine({
    * distance, sur les deux moteurs ; [via] : étapes [{ lat, lon }, …] dans l'ordre ; [moped] : 50cc
    * ou sans permis (Valhalla motor_scooter ; ORS en voiture sans autoroute). Never throws: { route, engine, primary, fallback, cause,
    * attempts, polygons } — route null with { status, error, detail, thrown } when nobody could.
+   * decorate(raw) : champs additionnels calculés en parallèle du temps EONA.
    */
-  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null, preference = 'fastest', via = [], moped = false, vehicle = 'car' } = {}) {
+  async function route(from, to, avoid = [], { plan: chosen = plan(null), heading = null, preference = 'fastest', via = [], moped = false, vehicle = 'car', decorate = null } = {}) {
+    const at = now();
     const until = Date.now() + s.deadlineMs;
     const wanted = [...new Set(moped ? [...avoid, 'highways'] : avoid)];
     const bearings = headingBearings(heading);
@@ -305,7 +320,7 @@ export function createRoutingEngine({
       const tried = await valhallaRoute(from, to, exclusions, polygons, Math.min(s.valhallaTimeoutMs, until - Date.now()), bearings, shortest, via, moped, vehicle);
       attempts.valhalla = tried;
       if (tried.ok) {
-        return { route: tried.route, engine: 'valhalla', primary: 'valhalla', fallback: false, cause: null, attempts, polygons };
+        return { route: await appRoute(tried.route, { at, moped, vehicle }, decorate), engine: 'valhalla', primary: 'valhalla', fallback: false, cause: null, attempts, polygons };
       }
       cause = tried.error;
       noteFallback(cause);
@@ -313,7 +328,7 @@ export function createRoutingEngine({
     const tried = await orsRoute(from, to, wanted, polygons, until - Date.now(), bearings, preference, via);
     attempts.ors = tried;
     const outcome = { primary: chosen.primary, fallback: cause != null, cause, attempts, polygons };
-    if (tried.ok) return { ...outcome, route: tried.route, engine: 'ors' };
+    if (tried.ok) return { ...outcome, route: await appRoute(tried.route, { at, moped, vehicle }, decorate), engine: 'ors' };
     return {
       ...outcome,
       route: null,
@@ -353,6 +368,7 @@ export function createRoutingEngine({
    * [shadow]: for the shadow mode (ORS kept off the fallback's budget).
    */
   function drawer(engine, { shadow = false } = {}) {
+    const at = now();
     if (engine === 'valhalla') {
       return async (ask) => {
         const blocked = valhallaBlocked();
@@ -369,7 +385,10 @@ export function createRoutingEngine({
           ...(ask.vehicle === 'taxi' ? { vehicle: 'taxi' } : {}),
         }));
         const latencyMs = Date.now() - startedAt;
-        if (result.ok) return { engine, routes: result.value, error: null, outage: false, latencyMs };
+        if (result.ok) {
+          const routes = shadow ? result.value : await Promise.all(result.value.map((raw) => appRoute(raw, { at, moped: ask.moped, vehicle: ask.vehicle })));
+          return { engine, routes, error: null, outage: false, latencyMs };
+        }
         console.warn(`[faster] Valhalla ${ask.label} — ${result.error}`);
         return { engine, routes: [], error: result.error, outage: OUTAGES.has(result.error), latencyMs };
       };
@@ -386,8 +405,10 @@ export function createRoutingEngine({
           return { engine, routes: [], error: r.budgetSpent ? 'budget' : `http_${r.status}`, outage: false, latencyMs: Date.now() - startedAt };
         }
         const json = await r.json();
-        const routes = (json.features ?? []).map((feature) => normalizeOrsFeature(feature, orsMapVersion(json)));
-        return { engine, routes, error: null, outage: false, latencyMs: Date.now() - startedAt };
+        const raw = (json.features ?? []).map((feature) => normalizeOrsFeature(feature, orsMapVersion(json)));
+        const latencyMs = Date.now() - startedAt;
+        const routes = shadow ? raw : await Promise.all(raw.map((route) => appRoute(route, { at, moped: ask.moped, vehicle: ask.vehicle })));
+        return { engine, routes, error: null, outage: false, latencyMs };
       } catch (e) {
         console.warn(`[faster] ORS ${ask.label} —`, String(e?.message || e));
         return { engine, routes: [], error: 'unavailable', outage: false, latencyMs: Date.now() - startedAt };
@@ -483,6 +504,7 @@ export function createRoutingEngine({
         }
         : { enabled: false, state: 'disabled', cause: valhallaProblem ?? 'disabled' },
       fallbacks: { ...fallbacks, byCause: { ...fallbacks.byCause } },
+      eonaTime: eonaTime.health(),
     };
   }
 

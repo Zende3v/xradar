@@ -1468,7 +1468,7 @@ private const val FAR_DISTANCE_M = 650.0
 private const val TOWN_DISTANCE_M = 380.0
 private const val TOWN_KMH = 50
 private const val FAST_ROAD_KMH = 90
-private const val NAV_TILT = 45.0
+private const val NAV_TILT = 55.0
 private const val TILT_ANIMATION_MS = 400
 private const val MIN_SPEED_MS = 2f
 // Smoothing factors for the follow-camera loop (0..1 per frame) + frame pacing.

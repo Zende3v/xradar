@@ -104,7 +104,6 @@ fun DriveDock(
     onLimitClick: (() -> Unit)? = null,
     /** EONA+ : timer des feux ouvert ; sinon cadenas, tap = offres. */
     hasPlus: Boolean = true,
-    onLightLocked: () -> Unit = {},
     hasParking: Boolean = false,
     onParking: () -> Unit = {},
 ) {
@@ -196,7 +195,6 @@ fun DriveDock(
                     RedLightCard(
                         secondsLeft = redLightSeconds,
                         locked = !hasPlus,
-                        onLocked = onLightLocked,
                         modifier = Modifier.weight(1f).then(dockDrag),
                     )
                     OptionsCard(open = open, onClick = { settle(progress.value < 0.5f) }, modifier = dockDrag)
@@ -343,30 +341,13 @@ internal fun UnknownLimitSign(size: Dp, modifier: Modifier = Modifier) {
 
 /** "E4": how long the red light we are stopped at still has to run. Gratuit : cadenas, vitrine EONA+. */
 @Composable
-private fun RedLightCard(secondsLeft: Int?, locked: Boolean, onLocked: () -> Unit, modifier: Modifier = Modifier) {
+/** Carte d'affichage seule, jamais cliquable : le glisser du dock y passe sans conflit (Arthur, 18/10). */
+private fun RedLightCard(secondsLeft: Int?, locked: Boolean, modifier: Modifier = Modifier) {
     val colors = EonaTheme.colors
     val active = secondsLeft != null && !locked
-    var information by remember { mutableStateOf(false) }
-    if (information) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { information = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            com.eona.app.designsystem.component.EonaConfirmDialog(
-                title = "Feux en direct",
-                message = "Fonction en préparation. Aucun compte à rebours disponible actuellement.",
-                confirmLabel = "Fermer",
-                onCancel = { information = false },
-                onConfirm = { information = false },
-                destructive = false,
-                cancelLabel = null,
-            )
-        }
-    }
     DockCard(
         modifier = modifier
             .clip(EonaTheme.shapes.lg)
-            .clickable(onClickLabel = if (locked) "Voir EONA+" else null) { if (locked) onLocked() else information = true }
             .semantics { contentDescription = if (locked) "Timer feux, réservé EONA+, verrouillé" else "Timer feux" },
     ) {
         Column(

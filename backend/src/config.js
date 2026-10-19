@@ -272,6 +272,9 @@ export const config = {
   // still counts. Fixed-radar coordinates sit beside the carriageway, not on it.
   radarRouteBufferM: 150,
   radarRouteMaxBufferM: 500,
+  // Tracé refusé au-delà (19/10) : points reçus, puis cellules de grille comptées avant allocation.
+  radarRouteMaxPoints: 100_000,
+  radarRouteMaxCells: 400_000,
   // Load everything within 90 km, but shrink to 40 km where it's ultra-dense
   // (too many points around the driver) to keep the map light.
   denseRadiusM: 40000,
@@ -528,6 +531,10 @@ export const config = {
     from: process.env.SMTP_FROM || 'EONA',
   },
   resetCodeTtlMs: 30 * 60 * 1000, // 30 min
+  // Codes vérification email : même durée. Cinq échecs annulent code ; un envoi par minute.
+  verifyCodeTtlMs: 30 * 60 * 1000,
+  accountCodeMaxFailures: 5,
+  accountCodeCooldownMs: 60 * 1000,
   // A guest ("Continuer en invité": username + password, no email) is deleted this long
   // after it became a guest. Guests without a password are deleted right away.
   guestLifetimeMs: Number(process.env.GUEST_LIFETIME_MS) || 7 * D,

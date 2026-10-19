@@ -55,8 +55,8 @@ function allowedOrigin(origin) {
  * the fallbacks to ORS by cause, and the shadow's queue.
  */
 function routingHealth() {
-  const { provider, mode, valhalla, fallbacks } = routing.health();
-  return { provider, mode, ...orsHealth(), valhalla, fallbacks, shadow: shadow.stats() };
+  const { provider, mode, valhalla, fallbacks, eonaTime } = routing.health();
+  return { provider, mode, ...orsHealth(), valhalla, fallbacks, eonaTime, shadow: shadow.stats() };
 }
 
 /** Builds the Express app (kept separate from bootstrap for testability). */

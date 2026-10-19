@@ -646,7 +646,6 @@ fun DriveScreen(
                 onOpenChange = { dockOpen = it },
                 onLimitClick = openLimitReport.takeUnless { state.isSearchingGps },
                 hasPlus = hasPlus,
-                onLightLocked = { onBlocked(PaywallReason.Lights) },
                 hasParking = parked.isNotEmpty(),
                 onParking = {
                     parkingFocus = null

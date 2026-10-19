@@ -840,7 +840,14 @@ describe('client', () => {
   it('stands alone: reads no config.js, only pure helpers', () => {
     const source = readFileSync(new URL('../src/routing/providers/valhalla.js', import.meta.url), 'utf8');
     const imports = source.match(/^import .*$/gm) ?? [];
-    assert.deepEqual(imports, ["import { haversine } from '../../radars/geo.js';"]);
+    assert.deepEqual(imports, [
+      "import { traceAttributes as traceShape } from '../trace-attributes.js';",
+      "import { decodePolyline6 as decodeShape } from '../polyline.js';",
+      "import { haversine } from '../../radars/geo.js';",
+    ]);
+    for (const path of ['../src/routing/trace-attributes.js', '../src/routing/polyline.js']) {
+      assert.equal(readFileSync(new URL(path, import.meta.url), 'utf8').includes("from '../config.js'"), false);
+    }
   });
 });
 

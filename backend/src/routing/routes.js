@@ -6,6 +6,7 @@ import { hereAllows, hereAccountAllows } from '../traffic/budget.js';
 import { hereTravel } from '../traffic/here.js';
 import { routing as defaultRouting } from './engine.js';
 import { checkFaster } from './faster.js';
+import { periodAt } from './eona-time.js';
 import { MAX_STOPS } from './providers/valhalla.js';
 import { cachedRoute, keepRoute, spendRoute } from './guard.js';
 import { logRoute, routeFacts } from './log.js';
@@ -123,7 +124,7 @@ export function createRouteRouter({
     const reply = async (route) => (!preference && !timed ? route : {
       ...route,
       ...(preference ? { preference } : {}),
-      ...(timed ? { travelS: moped ? null : await timeRoute(route, account.id) } : {}),
+      ...(timed ? { travelS: moped ? null : Object.hasOwn(route, 'travelS') ? route.travelS : await timeRoute(route, account.id) } : {}),
     });
     // A guest starts a limited number of trips a day; recalculations to the same place are free.
     const preview = req.query.preview === '1';
@@ -139,6 +140,7 @@ export function createRouteRouter({
     const plan = routing.plan(account);
     const partition = [
       plan.primary,
+      'eona-v1:' + periodAt(Date.now()),
       ...(shortest ? ['shortest'] : []),
       ...(moped ? ['moped'] : []),
       ...(vehicle === 'taxi' ? ['taxi'] : []),
@@ -163,7 +165,9 @@ export function createRouteRouter({
 
     let outcome;
     try {
-      outcome = await routing.route(from, to, avoid, { plan, heading, preference: preference ?? 'fastest', via, moped, vehicle });
+      outcome = await routing.route(from, to, avoid, { plan, heading, preference: preference ?? 'fastest', via, moped, vehicle,
+        ...(timed && !moped ? { decorate: async (raw) => ({ travelS: await timeRoute(raw, account.id) }) } : {}),
+      });
     } catch (e) {
       // The façade answers its failures; this is a bug, still answered like one.
       console.warn('[route] unavailable —', String(e.message || e));
@@ -172,7 +176,9 @@ export function createRouteRouter({
     if (outcome.route) {
       if (trip.isNew && accounts.countTrip(account, to) === false) return answer(429, { error: 'daily trip limit', limit: config.guestTripsPerDay });
       const served = { engine: outcome.engine, fallback: outcome.fallback };
-      guard.keepRoute(from, to, avoid, outcome.route, { partition, served });
+      // Import lié au compte ; seul le temps EONA entre dans le cache partagé.
+      const { travelS: _travelS, ...cacheable } = outcome.route;
+      guard.keepRoute(from, to, avoid, cacheable, { partition, served });
       routing.noteServed(account.id, served);
       answer(200, await reply(outcome.route), routeFacts(outcome.route));
     } else if (outcome.thrown) {

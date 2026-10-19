@@ -35,9 +35,10 @@ const USERS = {
   driver: { id: 'driver-1', role: 'client' },
   other: { id: 'driver-2', role: 'client' },
 };
-const ROUTE_KEYS = ['coordinates', 'distanceM', 'durationS', 'engine', 'mapVersion', 'steps'];
-// Phase 1 keys, plus the motorway signs (exitNumber, towardRefs, toward), additive since 28/09.
-const STEP_KEYS = ['distanceM', 'durationS', 'exit', 'exitNumber', 'location', 'modifier', 'name', 'toward', 'towardRefs', 'type'];
+const ROUTE_KEYS = ['coordinates', 'distanceM', 'durationS', 'engine', 'engineDurationS', 'eonaTime', 'mapVersion', 'steps'].sort();
+// Phase 1 keys, plus the motorway signs (exitNumber, towardRefs, toward), additive since 28/09,
+// and the raw engine time of each step (engineDurationS), additive since 19/10.
+const STEP_KEYS = ['distanceM', 'durationS', 'engineDurationS', 'exit', 'exitNumber', 'location', 'modifier', 'name', 'toward', 'towardRefs', 'type'];
 
 const servers = [];
 after(() => Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve)))));

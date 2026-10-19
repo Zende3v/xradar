@@ -1,23 +1,34 @@
 # EONA — Projet et règles
 
-État vérifié : **15 octobre 2026**. Produit : **EONA**, ancien nom XRadar.
+État vérifié : **19 octobre 2026**. Produit : **EONA**, ancien nom XRadar.
 
 Deux références uniquement : ce fichier et [EXPLOITATION.md](EXPLOITATION.md).
 Ce fichier décrit produit, architecture, limites réelles et règles de travail.
 EXPLOITATION décrit Git, builds, production, sauvegardes et déploiement.
-Claude lit ce fichier puis EXPLOITATION à chaque session. Aucun CLAUDE.md ; rien ne se charge seul.
+Codex charge ce fichier, puis lit EXPLOITATION. `CLAUDE.md` importe les deux pour Claude, sans contenu dupliqué.
+Dépôt iOS : `AGENTS.md` de renvoi seulement (Arthur 18/10), sans état ; contexte ici. Reprise rapide : §7, point ouvert 10.
 Anciens documents restent consultables dans historique Git.
 
 ## 1. Travail avec Arthur
 
-- Arthur décide périmètre et livraison ; validation fonctionnelle sur téléphone.
-- Depuis 14/10 : Claude développeur principal backend, iOS et Android. Aucun travail dupliqué.
+- Arthur décide périmètre, arbitrages produit et livraison ; validation fonctionnelle sur téléphone.
+- Arthur seul autorise production : déploiement, installation, redémarrage, push hors règle.
 - Parité stricte Android/iOS : mêmes règles, mêmes champs JSON, logique dans `core/` et EonaCore.
-- **Mode bridge v0.4.0 (15/10) : Claude maître, Codex exécutant.** Config : EXPLOITATION §1.
-- Claude garde cadrage, décisions, intégration, revue finale, commits, push iOS, build Android, VPS, échanges Arthur.
-- Codex : lots bornés (backend, Swift, refactor mécanique), exploration large en lecture, relecture indépendante.
-- Codex ne commite jamais. Petite tâche fortement couplée : Claude la fait seul.
-- Délégation : tâche racine par chantier et dépôt ; scopes d'écriture précis et disjoints ; chaque diff contrôlé.
+- **Mode bridge v0.4.0 (19/10, demande Arthur) : ChatGPT/Codex pilote, Claude codeur exclusif.** Remplace mode 15/10. Config : EXPLOITATION §1.
+- ChatGPT : demandes, vue d'ensemble, architecture, contrats, parité Android/iOS, décisions, périmètre.
+- ChatGPT : plan, découpage, intégration par revue, vérifications proportionnées, état, réponse finale à Arthur.
+- **Toute écriture de code passe à Claude via `bridge_delegate`.** Tests, correctifs et changements minuscules compris.
+- Codex n'écrit jamais de code. Claude indisponible : tâche bloquée, aucun secours de codage par Codex.
+- Claude exécute contrat reçu. Signale ambiguïtés. Rend fichiers exacts, vérifications réelles, risques.
+- Claude ne décide aucun nouveau chantier. Aucune redélégation. Décision manquante : blocage rendu.
+- Délégation : une racine par chantier et dépôt ; scopes disjoints ; critères explicites ; chaque diff relu.
+- Aucune boucle, aucune tâche doublonnée. Interruption : reprendre même enfant, jamais remplaçant.
+- Commits, push iOS, build Android : exécutés par Claude seulement si contrat le demande.
+- Continuité début session : lire ces deux références, mémoire bridge utile, tâches bridge pertinentes.
+- Mémoire bridge : namespace `development`, `context_id` `eona`, branch, version et epoch `null` pour décisions communes.
+- Y garder demande, critères, décisions, prochain point de reprise. Aucune donnée personnelle ni secret.
+- État métier de ces références : mis à jour seulement après fait réel. Longue spec : artefact bridge.
+- Scopes bridge contractuels : aucune sandbox OS garantie. Rester dans scope déclaré.
 - Économie de tokens jamais au détriment de la qualité : code réel, cas limites, vérifications et questions utiles gardés.
 - Français, skill **caveman ultra** pour réponses, textes, commentaires, commits et documents.
 - Phrases courtes, vingt mots maximum, une idée par phrase. Termes techniques exacts.
@@ -29,16 +40,16 @@ Anciens documents restent consultables dans historique Git.
 - Revue ciblée sur contrat ou risque concret. Aucun double audit.
 - Aucun chiffre inventé. Séparer code présent, production vérifiée et validation téléphone.
 - **VPS : lecture seule libre. Chaque déploiement, installation ou redémarrage exige nouvel accord explicite d'Arthur.**
-- Root/backend : commit sans push, sauf demande. iOS : commit et push.
+- Root/backend : commit puis push `main` (Arthur 19/10) ; aucun empilement local. iOS : commit et push.
 - Ne pas commiter secrets, artefacts, `.claude/`, `.mcp.json` ou `.bridge/` sans accord.
 
 ## 2. Repos et architecture
 
 | Périmètre | Chemin Windows | Remote | Branche de référence |
 |---|---|---|---|
-| Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `feature/mini-player-musique` ; principale `main` |
+| Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `main` (Arthur 19/10) ; ancienne `feature/mini-player-musique` |
 | iOS | `C:\Users\usr\Documents\xradar_ios` | `git@github.com:Zende3v/xradar_ios.git` | `main` |
-| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `9a8ea37` ; lots 1, 1b et budget HERE déployés |
+| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `5c1627d` ; lots 1, 1b, budget HERE, 2 et 4 déployés |
 
 Android : Kotlin, Jetpack Compose sur mesure, MapLibre, tuiles Stadia. Package `com.eona.app`.
 Logique métier commune dans `core/`, portée vers iOS avec mêmes règles et champs JSON.
@@ -174,6 +185,7 @@ Modes administrables : `ors|admins|all`. Production vérifiée : `all`.
 Contrat `/api/route` conserve structure GeoJSON ; nouveaux champs uniquement additifs.
 Route : coordonnées `[lon,lat]`, distances mètres, durées secondes.
 Champs selon demande : `engine`, `mapVersion`, `roads`, `preference`, `travelS`.
+Depuis lot 4 : `durationS` et durées d'étapes = temps EONA ; `engineDurationS` brut ; `eonaTime` (§5, lot 4).
 `mapVersion` décrit publication tuiles ; ne prouve pas date exacte données OSM.
 Multi-arrêts : dix étapes maximum. Cap transmis en mouvement, marge 50 m, tolérance 45°.
 
@@ -184,7 +196,7 @@ Rapide : variantes chronométrées symétriquement, maximum deux, gain minimal t
 Après secours, recherche `/faster` désactivée. Horizon 60 km, fenêtre 85 km ; élargissement non livré.
 
 HERE Traffic v7 fournit flow/incidents. HERE Routing v8 Route Import chronomètre tracé EONA.
-Vitesses EONA et événements publics complètent HERE. TomTom retiré le 30/09 ; banc historique conservé.
+Vitesses EONA et événements publics complètent HERE. TomTom retiré le 30/09 ; banc historique conservé. Clé TomTom Freemium chargée 15/10, inutilisée avant lot 6.
 Cache trafic partagé 60 secondes, appels identiques mutualisés.
 Réservation budget persistée avant appel payant ; échec écriture interdit appel.
 Économie HERE ne doit jamais masquer absence de trafic mesuré.
@@ -229,7 +241,8 @@ Situations en table (voie × tranche × phase), jamais arbre de conditions. Vale
 **Réponses Arthur 15/10 :** collecte TOUT, tous comptes, statistiques coupées comprises ; tracé GPS tous comptes, conservé sans limite.
 ETA prudente en cas de doute. Nouvelle clé HERE (Base Plan, carte, franchise seule) et clé TomTom Freemium installées.
 HERE : 0 € de dépassement, quota 250 par compte et par jour (Arthur 15/10). Page confidentialité publiée par Codex, relue par Arthur.
-Questions encore ouvertes : navigation lancée voiture garée ; app fermée en fin de trajet (essais route d'Arthur).
+Voiture garée au lancement : confirmé 18/10, ETA mesurée depuis le mouvement. App fermée à l'arrivée : un `interrupted` à 93 m (18/10).
+**Question ouverte à reposer à Arthur :** coupe-t-il la navigation avant l'arrivée ? Deux `stopped` à 746 m et 1 253 m.
 
 **Lot 1 collecte : backend déployé 15/10 ; iOS 55 lancé par Arthur ; Android 37 non validé.**
 Instantané trajet toutes les 30 s ; app fermée : repris au lancement, envoyé `interrupted`.
@@ -238,15 +251,52 @@ Fin `near` : arrêt à 300 m ou moins de destination, compte arrivé.
 Champs : `firstMoveAt`, `lastFixAt`, `endReason`, `endDistanceM`, `timeline` minute, `stopLog`, `etaChecks[].base/engineLeftS`.
 Historique local sans relevés minute. Rapport ETA inchangé : nouveaux champs exploités au lot 2.
 
-**Lot 1b : backend déployé 15/10 ; iOS 56 et Android 38 non validés téléphone.**
+**Lot 1b : backend déployé 15/10 ; iOS 56 vu en base (trajets et tracés) ; Android jamais vu en base au 18/10.**
 Tout trajet part au serveur, court ou long, tous comptes. Statistiques coupées : `countInStats: false`.
 Base : `crowd.trip` (mesures, sans coordonnée) et `crowd.trip_trace` (tracé GPS par paquets). Aucune purge.
 Historique JSON et totaux du compte : trajets de 500 m et 60 s ou plus, statistiques actives.
 Tracé : un point toutes les 5 s `[t, lat, lon, kmh, précision, cap]`, paquets de 1 000, envoyé après le trajet.
 Backend écrit par Codex (bridge), relu et testé par Claude.
 
-Phases initiales 1–5 livrées. Phases 6–8 non implémentées ; trafic traité dans backend.
-Aucun accès officiel Sytadin documenté. Prochaine évolution choisie par Arthur.
+**Lecture production 18/10 :** 9 trajets, 9 tracés, 3 213 points. Base départ : HERE 7, moteur 2.
+Départ depuis 15/10 : erreur médiane +517 s, car attente avant premier mouvement 37–109 s (médiane 80 s).
+Navigation lancée voiture garée : confirmé. Choix Arthur 18/10 : mesurer l'ETA depuis le mouvement.
+HERE en 3 jours : 314 trafic, 167 Import, sous franchises. Import rejeté : notice 25, longueur 6, sur 189.
+Retours route Arthur 18/10 : ETA beaucoup plus réaliste.
+
+**Lot 2 rapport v2 : commit `9824a80`, déployé 18/10 03:57.** `bin/eona-eta-report-v2.js`, lecture seule `crowd.trip`.
+Départ au premier mouvement, profils d'erreur, ratios réel/affiché et réel/moteur, versions séparées.
+`--roads` : tracés recalés par Valhalla `trace_attributes`, temps par classe de route. Seuil ville ≥ 8 heuristique, remplacé au lot 4 par groupe × période.
+`here.js` compte chaque code notice rejeté par Import (`notice:<code>`). Écrit par Codex, relu par Claude.
+
+**Rapport v2 18/10 (`--since=2026-10-15 --roads`) :** 9 lus, 4 retenus (2 arrivés, 2 proches), échantillon faible.
+Exclus : `stopped` 4 (fin à 746 m, 1 253 m, 2 385 m, 12 840 m), `interrupted` 1 à 93 m de destination.
+Départ depuis mouvement : biais +370 s, 1 bonne sur 4. Attente au départ médiane 75 s.
+Base HERE (2 trajets) : 50 % biais −34 s, 75 % +1 s, 2 bonnes sur 2. Réel/affiché médian 0,79.
+Base moteur (2 trajets) : réel/moteur médian 3,10 ; un trajet < 25 km/h fini +2 039 s. Repli Valhalla très optimiste.
+Arrêts : 8,5 par trajet, 30 % du temps, durée médiane 31 s ; arrêt initial médian 79 s (3 sur 4).
+Routes (59 % du temps apparié) : primary réel/moteur 0,90, tertiary 0,81, motorway 1,48 (moteur 90 km/h).
+Feux : primary 0,95/km, tertiary 1,83/km. Densité ≥ 8 classe tout en ville : heuristique inutilisable en Île-de-France.
+Correction 18/10 : ratios ci-dessus = médianes par arête. Temps total réel ≈ 2× moteur sur autoroute (bouchons), ≈ 1,5× primary/tertiary.
+
+**Lot 4 temps EONA sans trafic : commit `5c1627d`, déployé 18/10 04:45.** `routing/eona-time.js`, appliqué dans la façade (`engine.js`).
+Toute route servie : principale, alternatives, détours, Valhalla ou ORS, voiture, taxi, 50cc. Apps inchangées.
+Arêtes via Valhalla local `trace_attributes` (edge_walk ; ORS : map_snap), découpe 200 km, délai 1 500 ms.
+Facteur sur temps de roulage, jamais < 1. Autoroute (motorway, trunk) 1,15 / pointe 1,40 ; grands axes (primary, secondary) 1,25 / 1,45 ; rues 1,20 / 1,35.
+Feux : +12 s par feu Valhalla (≈ 15 s avec ses 3 s). Pointe = isPeak v1, à l'heure de passage estimée de chaque arête.
+Pointe autoroute seulement à 90 km/h ou moins (urbaine) ; au-dessus, hors pointe. Choix Arthur : aucun gain sur autoroute.
+Repli : facteur unique selon vitesse moyenne (≥ 70 autoroute, 40–70 grands axes, < 40 rues), sans feux.
+JSON additif : `durationS` et étapes = temps EONA, `engineDurationS` brut, `eonaTime` {version, mode, signals}. Cache partitionné par période.
+`faster.js` : gain et sélection restent HERE contre HERE. `shadow`/`bench` : brut. Journal : colonne `engine_duration_s` ajoutée au démarrage.
+Contrôle Valhalla prod 18/10 (brut → EONA) : Châtelet–Versailles 34 → 44 min, pointe 50 ; République–Bastille 8 → 13–15 min ; Paris–Lyon 3 h 59 → 4 h 41. 26–150 ms.
+Valeurs de départ, non calibrées (4 trajets). Calibrage au lot 9 via rapport v2 `--json` (ratios pondérés réel/EONA par groupe et période).
+Base moteur brute (audit 19/10, non déployé) : étapes ajoutent `engineDurationS` ; relevés marqués `engineBasis: "raw"`. Relevés sans marqueur : base inconnue.
+
+Production après lot 4 (18/10, compteurs depuis redémarrage 04:45) : `eonaTime` 23 routes `edges`, 0 repli, 0 échec, 8–150 ms.
+Import HERE : 25 valides sur 26 ; 1 rejet `notice:violatedBlockedRoad`. Trajets reçus ensuite : 2, iOS 56 (`interrupted`, `stopped`).
+
+Ancien plan Valhalla : phases 1–5 livrées. Phases 6–8 (fermetures data.gouv dans `traffic.tar`, vitesses live, trafic historique prédit) non implémentées, à reprendre avec le lot 10.
+Trafic traité dans le backend. Aucun accès officiel Sytadin documenté.
 
 ## 6. Contrats API et données
 
@@ -263,6 +313,7 @@ Ne pas modifier noms JSON entre Android et iOS. Ajouter champs sans casser ancie
 | `GET /api/accounts/me` | Identité et droits actuels |
 | `GET /api/accounts/me/stats` | Cumuls et historique, maximum 200 trajets par compte |
 | `POST /api/accounts/me/trips` | Trajet terminé et relevés ETA ; fin, relevés minute, arrêts ; même `id` ignoré ; relevés absents des réponses |
+| `POST /api/accounts/me/trips/:id/trace` | `{ seq, points }` : paquet GPS ≤ 1 000 points, corps 1 Mo maximum ; même paquet ignoré |
 | `GET /api/route?preview=1` | Aperçu sans débiter trajet ; API limitée 10/minute et 120/heure/compte |
 | `POST /api/route/start` | `{to, tripId, vehicle?}` ; même identifiant compte une seule fois |
 | `/api/traffic/route`, `/api/route/faster` | Trafic/variantes selon droits, couverture et quotas |
@@ -318,9 +369,12 @@ Réactivation signalement supprimé et rôle modérateur distinct non développ�
 
 Référence iOS fonctionnelle : `c51b834`, build **54**, version **1.0.0**.
 iOS build **55** (`7ef22c9`, lot 1) : archive et lancement confirmés par Arthur ; collecte à valider.
-iOS build **56** (`2a5d06b`, lot 1b) poussé ; archive et téléphone à valider.
-iOS build **57** (`b0d3125`) : dock glissable, Stationnement dans le dock, bouton 3D/2D ; poussé, à valider.
-Android version **1.0.2**, code **39** (`5a8dc90`, lot 1b + même UI) : APK release compilé, téléphone à valider.
+iOS build **56** (`2a5d06b`, lot 1b) : utilisé en route, 10 trajets en base au 18/10.
+iOS build **57** (`b0d3125`) : dock glissable, Stationnement dans le dock, bouton 3D/2D ; 1 trajet en base.
+Collecte lot 1b vérifiée en base 18/10 : 9 trajets, 9 tracés. Essais route Arthur : ETA plus réaliste.
+iOS build **58** (`eea9704`) : Feu rouge non cliquable, vue 3D 55° ; poussé, archive et téléphone à valider.
+iOS build **59** (audit 19/10, point 11) : sources écrites, non compilées ; téléphone non validé.
+Android version **1.0.2**, code **40** (`c82a336`, mêmes correctifs) : APK release compilé, téléphone à valider. Code repris dans livraison `main`.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
 Déploiements backend consignés : `a85c6bc`, puis quatre fichiers stations `5646f45` le 08/10.
@@ -336,17 +390,47 @@ Lecture production 14/10 : santé HTTP 200, Valhalla `all`, carte 11/10, HERE li
 Empreintes 14/10, 72 fichiers `src`/`bin`, fins de ligne ignorées : code `a85c6bc`.
 Seules exceptions : `places/routes.js` et `places/store.js`, identiques `5646f45`. Fichiers production majoritairement CRLF.
 Correctif `435837c` (Import sans attente du flow) déployé avec le budget HERE le 15/10.
+18/10 03:57 : lot 2 (`9824a80`) : `traffic/here.js`, `bin/eona-eta-report-v2.js` (nouveau). Sauvegarde `/var/backups/eona/deploy-20261018-035650-lot2` : code, `bin`, `data`.
+Empreintes conformes, santé locale et publique 200, journal sans erreur. Membres reconnectés à refaire.
+18/10 04:45 : lot 4 (`5c1627d`), 12 fichiers `routing`, `server.js`, rapport v2. Sauvegarde `/var/backups/eona/deploy-20261018-044112-lot4` : code, `data`, `routing.dump`.
+Empreintes conformes, santé 200, colonne `engine_duration_s` créée, Node 20 : Châtelet–Versailles 2 058 → 2 648 s en mode `edges`, 33 ms.
 
 Points ouverts concrets :
 
-1. Valider HERE en route : temps Import et sections trafic présents après premier trajet.
-2. Inclure registre bans dans sauvegarde quotidienne avant prochaine livraison concernée.
+1. HERE en route : Import utilisé (base départ HERE 7 sur 9) ; rejets par code visibles dans `/health` `traffic.here.quality.import` depuis 18/10.
+2. Registre bans : script source l'inclut (19/10). Cron VPS `/usr/local/bin/eona-backup.sh` encore sans lui ; installation exige accord.
 3. Page confidentialité publiée 15/10 : relecture Arthur ; durée de conservation des tracés à valider juridiquement.
 4. Mesurer ETA après nouvelle livraison ; conserver séparation pauses/embouteillages et versions d'application.
 5. Valider lecteur système sur téléphone ; titre tiers reste sans solution logicielle démontrée.
 6. Perso, feux, gabarit poids lourd et achat abonnement restent chantiers distincts, sans livraison implicite.
-7. Lot 1b : valider sur téléphone (iOS 56, Android 38) ; vérifier trajets et tracés stockés en base après premier trajet.
+7. Android : aucun trajet en base au 18/10 (9 iOS : build 56 ×8, 57 ×1) ; iOS 58 et Android 40 à valider téléphone.
 8. HERE : surveiller usage par fenêtre dans `/health` ; crédits ajoutés par Arthur plus tard, alors relever `HERE_MONTHLY_BUDGET_EUR`.
-9. Test backend `search` « same JSON as before » échoue déjà avant lot 1 ; à corriger à part.
+9. Test backend `search` « same JSON as before » échoue avant lot 1 : attend 200, fixture appareil sans rôle `guest` reçoit 401. Défaut du test, à corriger à part.
+10. **Point de reprise 19/10 :** code audit 19/10 préparé (point 11). Production inchangée : `5c1627d`, lot 4.
+    - Attente : accord Arthur pour déploiement backend ; compilation iOS 59 ; essais téléphone iOS 59 et Android 40.
+    - Livraison Git autorisée par Arthur : un commit `main` (EXPLOITATION §1). Fait Git consigné après exécution.
+    - Lot 5 (ETA apps v2) non cadré. Arthur : ne rien préparer avant son retour d'essais (18/10).
+    - Au retour : remarques UI ; rapport v2 `--since=2026-10-18T02:45:00Z --roads` ; `/health` `routing.eonaTime`, `traffic.here.quality.import` ; trajets Android.
+    - Reposer la question ouverte de §5 (navigation coupée avant l'arrivée).
+11. **Audit 19/10 — neuf correctifs écrits, non déployés, non validés téléphone.**
+    - Backend : 214 tests ciblés passés sous Node 20.20.2, aucun ignoré (pilote). Aucune validation production.
+    - Radars sur tracé : coordonnées bornées, 100 000 points, budget 400 000 cellules, sinon 400. OOM reproduit avant (64 Mo, exit 134).
+    - Google : email non vérifié repris par preuve fournisseur. Mot de passe, sessions, codes, autres fournisseurs retirés.
+    - Liaison Google : session revérifiée après attente Google ; reset, récupération ou ban entre-temps : aucune liaison.
+    - Codes reset : tirage cryptographique, 30 min, cinq échecs, un envoi par 60 s.
+    - Reset réussi : toutes sessions révoquées.
+    - Codes vérification email : même règles, expiration 30 min.
+    - ETA : étapes portent `engineDurationS` brut ; relevés `engineBasis: "raw"` seulement si `engineLeftS` brut. Affichage inchangé.
+    - Rapport v2 : réel/moteur sur relevés `raw` seuls ; anciens comptés base inconnue, hors ratio.
+    - iOS 59 : URL admin parrainage interpolée ; suppression compte purge file trajets et tracés du compte supprimé.
+    - iOS 59 : envoi file trajets lié à session figée (compte, jeton, révision) ; autre compte : aucun envoi croisé.
+    - iOS 59 : sources écrites ; compilation, tests Swift et téléphone non faits (Windows). Retouches revue encore en cours.
+    - Sauvegarde : script source inclut registre bans facultatif ; cron VPS non mis à jour (point 2).
+    - `saveTrace` sans trajet parent : contrat collecte, ordre d'envoi libre. Aucun défaut démontré.
+12. **Hors lot audit 19/10, non corrigés :**
+    - Avatars par URL externe non filtrés : chargement par autres membres expose leur IP au tiers.
+    - iOS `RoutePath.match` : repassage au même endroit recale sur premier passage, orientation et progression fausses.
+    - Texte « trafic partagé » incomplet.
+    - Google `email_verified=false` peut créer compte avec email déjà existant, puis remplacer index `byEmail`.
 
 Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.

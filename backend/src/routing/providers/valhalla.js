@@ -1,3 +1,5 @@
+import { traceAttributes as traceShape } from '../trace-attributes.js';
+import { decodePolyline6 as decodeShape } from '../polyline.js';
 import { haversine } from '../../radars/geo.js';
 
 /**
@@ -273,7 +275,7 @@ export function createValhallaClient({ baseUrl, timeoutMs, searchCutoffM, maxSna
     return payload;
   }
 
-  return { routes, status };
+  return { routes, status, traceAttributes: (shape, options) => traceShape(shape, { ...options, baseUrl: base, fetchImpl }) };
 }
 
 /**
@@ -282,33 +284,8 @@ export function createValhallaClient({ baseUrl, timeoutMs, searchCutoffM, maxSna
  * point throws (invalid_response).
  */
 export function decodePolyline6(encoded) {
-  if (typeof encoded !== 'string' || !encoded) throw badAnswer('route shape missing');
-  let index = 0;
-  const next = () => {
-    let result = 0;
-    for (let shift = 0; ; shift += 5) {
-      // 7 chunks at most: already far past 180° at 6 decimals.
-      if (shift > 30) throw badAnswer('route shape unreadable');
-      if (index >= encoded.length) throw badAnswer('route shape cut short');
-      const chunk = encoded.charCodeAt(index++) - 63;
-      if (chunk < 0 || chunk > 63) throw badAnswer('route shape unreadable');
-      result += (chunk & 0x1f) * 2 ** shift;
-      if (chunk < 0x20) break;
-    }
-    return result % 2 ? -(result + 1) / 2 : result / 2;
-  };
-  const points = [];
-  let lat = 0;
-  let lon = 0;
-  while (index < encoded.length) {
-    lat += next();
-    lon += next();
-    const point = [lon / 1e6, lat / 1e6];
-    if (Math.abs(point[0]) > 180 || Math.abs(point[1]) > 90) throw badAnswer('route shape off the globe');
-    points.push(point);
-  }
-  if (points.length < 2) throw badAnswer('route shape too short');
-  return points;
+  try { return decodeShape(encoded); }
+  catch (error) { throw badAnswer(error.message); }
 }
 
 // ---- Request ----------------------------------------------------------------

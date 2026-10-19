@@ -16,7 +16,7 @@ import { ETOILE, PARIS, appRoute, call, fakeOrs, fakeValhalla, line, trapNetwork
 // les anciennes apps. Faux moteurs, aucun réseau, aucune base.
 const net = trapNetwork(before, after);
 
-const ROUTE_KEYS = ['coordinates', 'distanceM', 'durationS', 'engine', 'mapVersion', 'steps'];
+const ROUTE_KEYS = ['coordinates', 'distanceM', 'durationS', 'engine', 'engineDurationS', 'eonaTime', 'mapVersion', 'steps'].sort();
 
 describe('Éco dans les moteurs', () => {
   it('Valhalla : option auto shortest, exclusions gardées ; refuse valeur non booléenne', async () => {

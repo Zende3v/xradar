@@ -20,7 +20,8 @@ runuser -u eona -- pg_dump -d eona -Fc -n crowd -n routing > "$TEMP/crowd.dump"
 pg_restore --list "$TEMP/crowd.dump" > /dev/null
 
 FICHIERS=(accounts.json device-trials.json avatars)
-for FICHIER in settings.json ors-usage.json here-usage.json; do
+# Registre bans : absent tant qu'aucun ban ; présent, toujours archivé (audit 19/10).
+for FICHIER in settings.json ors-usage.json here-usage.json accounts.json.bans.json; do
   [[ ! -e "$DATA/$FICHIER" ]] || FICHIERS+=("$FICHIER")
 done
 tar czf "$TEMP/data.tgz" -C "$DATA" "${FICHIERS[@]}"

@@ -136,7 +136,7 @@ function engineFacts(attempt) {
     error: null,
     latencyMs: attempt.latencyMs ?? null,
     distanceM: facts.distanceM,
-    durationS: facts.durationS,
+    durationS: facts.engineDurationS,
     steps: facts.steps,
     uturnStart: facts.uturnStart,
   };

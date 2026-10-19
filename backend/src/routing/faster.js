@@ -1,3 +1,4 @@
+import { coherentSteps } from './eona-time.js';
 import { config } from '../config.js';
 import { crowdAlong, crowdExtraS, withCrowd } from '../traffic/crowd.js';
 import { hereAlong, hereTravel } from '../traffic/here.js';
@@ -61,6 +62,7 @@ export async function checkFaster(points, { accountId, avoid = [], sinceRerouteS
   const current = await traffic(points, path, { accountId });
   if (!current.reliable) return { answer: { better: null, reason: 'live traffic unavailable' }, compare: null };
   const sticky = sinceRerouteS != null && sinceRerouteS < config.rerouteStickyS;
+  // etaS fixe seulement le seuil ; le gain compare deux durées HERE.
   const thresholdS = Math.round(
     Math.max(config.rerouteMinGainS, config.rerouteMinGainRatio * (etaS > 0 ? etaS : 0)) * (sticky ? config.rerouteStickyFactor : 1),
   );
@@ -158,7 +160,7 @@ export async function checkFaster(points, { accountId, avoid = [], sinceRerouteS
   const restStops = via.filter((_, i) => stopsM[i] > rejoinM + 1);
   const route = tail ? await withRest(best.route, tail, headingAt(path, rejoinM), avoid, draw, shortest ? preference : null, restStops, moped, vehicle) : best.route;
   if (!route) return { answer: { ...result, better: null, reason: 'rest of the route unavailable' }, compare };
-  // Durée moteur conservée dans route ; prochain rafraîchissement fournit son ETA HERE.
+  // Temps EONA dans route ; gain et sélection restent HERE contre HERE.
   return { answer: { ...result, better: { gainS: Math.max(0, gainS), closed, route } }, compare };
 }
 
@@ -194,7 +196,7 @@ function sift(plan, routes) {
     const samples = samplesBetween(measure(line), 0, Infinity);
     const same = (other) => share(other.samples, grid) >= SAME_ROUTE_SHARE && share(samples, other.grid) >= SAME_ROUTE_SHARE;
     if (same({ samples: plan.windowSamples, grid: plan.windowGrid })) {
-      baselineS = Math.min(baselineS ?? Infinity, route.durationS);
+      baselineS = Math.min(baselineS ?? Infinity, route.engineDurationS ?? route.durationS);
       continue;
     }
     if (plan.closureSamples.some((closure) => share(closure, grid) >= THROUGH_CLOSURE_SHARE)) continue;
@@ -284,12 +286,25 @@ async function withRest(detour, rest, heading, avoid, draw, preference = null, v
   const returned = route.coordinates.map(([lon, lat])=>[lat, lon]);
   if (share(samplesBetween(measure(rest), 0, Infinity), gridOf(returned)) < 0.995
       || share(samplesBetween(measure(returned), 0, Infinity), gridOf(rest)) < 0.995) return null;
+  const durationS = detour.durationS + route.durationS;
+  // Garder le temps du départ de la suite, sous une instruction continue.
+  const steps = detour.steps.filter((step) => step.type !== 'arrive')
+    .concat(route.steps.map((step) => step.type === 'depart' ? { ...step, type: 'continue' } : step));
+  const timing = detour.eonaTime && route.eonaTime ? {
+    version: 1,
+    mode: detour.eonaTime.mode === 'edges' && route.eonaTime.mode === 'edges' ? 'edges' : 'fallback',
+    signals: detour.eonaTime.signals + route.eonaTime.signals,
+    ...((detour.eonaTime.skipped ?? 0) + (route.eonaTime.skipped ?? 0)
+      ? { skipped: (detour.eonaTime.skipped ?? 0) + (route.eonaTime.skipped ?? 0) } : {}),
+  } : null;
   return {
     distanceM: detour.distanceM + route.distanceM,
-    durationS: detour.durationS + route.durationS,
+    durationS,
+    engineDurationS: (detour.engineDurationS ?? detour.durationS) + (route.engineDurationS ?? route.durationS),
+    ...(timing ? { eonaTime: timing } : {}),
     coordinates: detour.coordinates.concat(route.coordinates.slice(1)),
     // One trip: no "arrive" at the rejoin point, no "depart" from it.
-    steps: detour.steps.filter((step) => step.type !== 'arrive').concat(route.steps.filter((step) => step.type !== 'depart')),
+    steps: coherentSteps(steps, steps.map((step) => step.durationS), durationS),
     // The detour is what changes: its engine and map describe the answer (spec §1).
     engine: detour.engine,
     mapVersion: detour.mapVersion ?? route.mapVersion ?? null,

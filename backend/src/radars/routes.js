@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { authAccount } from '../accounts/auth.js';
-import { alongRoute, inBbox, near } from './geo.js';
+import { alongRoute, inBbox, near, validLonLat } from './geo.js';
 import { radarStore } from './store.js';
 import { radarVoteStore } from './votes.js';
 
@@ -58,8 +58,25 @@ radarRouter.post('/route', (req, res) => {
   if (!Array.isArray(coords) || coords.length < 2) {
     return res.status(400).json({ error: 'coordinates [[lon,lat],...] required' });
   }
-  const buffer = clamp(Number(req.body?.buffer) || config.radarRouteBufferM, 1, config.radarRouteMaxBufferM);
-  const radars = alongRoute(radarStore.all(), coords, buffer, config.maxResults);
+  if (coords.length > config.radarRouteMaxPoints) {
+    return res.status(400).json({ error: 'too many coordinates' });
+  }
+  // Chaque point contrôlé : un point invalide refuse tracé, sans le déformer.
+  if (!coords.every(validLonLat)) {
+    return res.status(400).json({ error: 'coordinates must be [lon,lat] numbers within bounds' });
+  }
+  const asked = req.body?.buffer;
+  if (asked != null && (typeof asked !== 'number' || !Number.isFinite(asked))) {
+    return res.status(400).json({ error: 'buffer must be a number' });
+  }
+  const buffer = clamp(asked || config.radarRouteBufferM, 1, config.radarRouteMaxBufferM);
+  let radars;
+  try {
+    radars = alongRoute(radarStore.all(), coords, buffer, config.maxResults, { maxCells: config.radarRouteMaxCells });
+  } catch (e) {
+    if (e instanceof RangeError) return res.status(400).json({ error: 'route too large' });
+    throw e;
+  }
   res.json({ count: radars.length, bufferM: buffer, radars });
 });
 

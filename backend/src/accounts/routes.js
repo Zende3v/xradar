@@ -23,12 +23,15 @@ function accountError(res, result, fallback = 400) {
   });
 }
 
+function blockedFor(req, account) {
+  const token = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') || '')?.[1];
+  return accountStore.blockedForToken(token) ?? (account && accountStore.blockReason(account) ? account : null);
+}
+
 // Ancien Bearer désormais suspendu : état restreint renvoyé, sans réautoriser session.
 accountRouter.use((req, res, next) => {
   if (!req.path.startsWith('/me')) return next();
-  const account = authAccount(req);
-  const token = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') || '')?.[1];
-  const blocked = accountStore.blockedForToken(token) ?? (account && accountStore.blockReason(account) ? account : null);
+  const blocked = blockedFor(req, authAccount(req));
   if (blocked) return accountError(res, { error: accountStore.blockReason(blocked), account: blocked });
   next();
 });
@@ -216,6 +219,11 @@ accountRouter.post('/me/link/google', async (req, res) => {
   const account = authAccount(req);
   if (!account) return res.status(401).json({ error: 'unauthorized' });
   const checked = await verifyGoogleToken(req.body?.idToken);
+  // Session revérifiée après attente Google. Récupération, reset ou ban entre-temps : aucune liaison.
+  const current = authAccount(req);
+  const blocked = blockedFor(req, current);
+  if (blocked) return accountError(res, { error: accountStore.blockReason(blocked), account: blocked });
+  if (current?.id !== account.id) return res.status(401).json({ error: 'unauthorized' });
   if (checked.error) return res.status(401).json({ error: checked.error });
   const result = accountStore.linkProvider(account.id, checked.identity);
   if (result.error) return res.status(409).json({ error: result.error });
