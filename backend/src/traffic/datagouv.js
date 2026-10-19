@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { db } from '../db.js';
 import { angleDiff, gridOf, headingAt, project } from '../routing/geometry.js';
+import { fuseDelays } from './delay-fusion.js';
 
 /**
  * data.gouv traffic (D3.2, Licence Ouverte 2.0): the DIR's open feeds on the non-conceded national
@@ -298,20 +299,9 @@ function stationSlowdown(station, speedKmh, lengthM) {
 }
 
 /**
- * data.gouv added last to what the other sources say (D2.6, D3.4): only for the time it costs
- * beyond them where they overlap, so leaving it out gives exactly the ETA without it. A closure
- * always shows.
+ * data.gouv ajouté en dernier (D2.6, D3.4) : seulement temps au-delà des autres sources superposées.
+ * Son retrait rétablit l’ETA des autres sources. Fermeture et événement sans retard toujours affichés, à 0 s (traffic/delay-fusion.js).
  */
 export function withDatagouv(sections, datagouv) {
-  const extra = [];
-  for (const zone of datagouv) {
-    const known = sections.reduce((sum, s) => {
-      const overlap = Math.min(s.toM, zone.toM) - Math.max(s.fromM, zone.fromM);
-      return overlap > 0 && s.toM > s.fromM ? sum + ((s.delayS ?? 0) * overlap) / (s.toM - s.fromM) : sum;
-    }, 0);
-    const delayS = Math.round((zone.delayS ?? 0) - known);
-    if (delayS > 0) extra.push({ ...zone, delayS });
-    else if (zone.level === 'closed' || zone.delayS === 0) extra.push({ ...zone, delayS: 0 });
-  }
-  return sections.concat(extra).sort((a, b) => a.fromM - b.fromM);
+  return fuseDelays(sections, datagouv, { keepFree: true });
 }

@@ -84,4 +84,16 @@ describe('data.gouv on a route', () => {
     ]);
     assert.deepEqual(merged.map((s) => [s.source, s.delayS]), [['tomtom', 100], ['datagouv', 60], ['datagouv', 0]]);
   });
+
+  it('deux stations sur même portion : la pire, jamais leur somme ; fermeture dessous toujours affichée', () => {
+    const known = [{ fromM: 0, toM: 500, delayS: 100, source: 'here' }];
+    const merged = withDatagouv(known, [
+      { fromM: 0, toM: 500, delayS: 140, level: 'jam', source: 'datagouv', kind: 'speed' },
+      { fromM: 0, toM: 500, delayS: 180, level: 'heavy', source: 'datagouv', kind: 'speed' },
+      { fromM: 100, toM: 200, delayS: 0, level: 'closed', source: 'datagouv', kind: 'closed' },
+    ]);
+    assert.deepEqual(merged.map((s) => [s.source, s.level ?? null, s.delayS]), [
+      ['here', null, 100], ['datagouv', 'heavy', 80], ['datagouv', 'closed', 0],
+    ]);
+  });
 });

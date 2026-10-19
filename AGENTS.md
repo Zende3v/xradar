@@ -1,6 +1,6 @@
 # EONA — Projet et règles
 
-État vérifié : **19 octobre 2026**. Produit : **EONA**, ancien nom XRadar.
+État vérifié : **20 octobre 2026**. Produit : **EONA**, ancien nom XRadar.
 
 Deux références uniquement : ce fichier et [EXPLOITATION.md](EXPLOITATION.md).
 Ce fichier décrit produit, architecture, limites réelles et règles de travail.
@@ -237,6 +237,11 @@ Lots courts, feu vert Arthur à chaque lot. Aucun coût API en plus.
 1. Collecte totale · 2. Rapport v2 · 3. Franchise HERE comptée · 4. Modèle EONA sans trafic.
 5. ETA apps v2 · 6. Hub trafic + TomTom Freemium · 7. Arbitrage HERE/TomTom · 8. ETA dynamique.
 9. Mémoire trafic + calibrage · 10. Vitesses EONA injectées dans Valhalla, plus tard.
+**Séquence ajustée 20/10 (Arthur) : priorité heure d'arrivée fiable.** Lots 1–4 historiques ; 5–10 futurs, non achevés.
+Ordre : fusion fiable des retards, puis mesures séparées par base et version, puis ETA apps v2, avant tout nouveau fournisseur.
+Coefficients lot 4 provisoires. Aucune calibration sur un seul trajet.
+Avant arbitrage : même tracé, fraîcheur comparable ; référence du plafond +25 % à préciser avant codage.
+Avant TomTom : contrat réel de la clé et quotas vérifiés, aucun coût en plus. TomTom non activé.
 Arbitrage décidé : accord ≤ max(60 s, 8 %) → moyenne ; désaccord → valeur lente, plafond +25 %.
 Fermeture ou incident d'une seule source : retenu. Données EONA ajoutent retard, ne tranchent jamais.
 Situations en table (voie × tranche × phase), jamais arbre de conditions. Valeurs de départ, puis calibrées.
@@ -298,6 +303,17 @@ Base moteur brute (audit 19/10, non déployé) : étapes ajoutent `engineDuratio
 Production après lot 4 (18/10, compteurs depuis redémarrage 04:45) : `eonaTime` 23 routes `edges`, 0 repli, 0 échec, 8–150 ms.
 Import HERE : 25 valides sur 26 ; 1 rejet `notice:violatedBlockedRoad`. Trajets reçus ensuite : 2, iOS 56 (`interrupted`, `stopped`).
 
+**Fusion des retards (sources 20/10, non déployée) :** `traffic/delay-fusion.js`, utilisé par `withCrowd` et `withDatagouv`.
+Défaut corrigé : HERE soustrait de chaque zone séparément ; HERE 100 s, signalement 180 s, vitesses 140 s → 220 s, au lieu de 180 s.
+Règle : sections connues intactes. Par intervalle : complément = max(0, densité max observations − somme densités connues).
+Observations superposées : la pire, jamais leur somme. Zones disjointes additionnées. Complément limité à sa portion réelle.
+Champs de l'observation dominante conservés. Arrondi cumulé : total exact arrondi.
+Rang commun : densité décroissante, puis début, fin, retard croissants, source, niveau, nature absente d'abord.
+Calcul : largeur finie positive et densité finie exigées. Complément exact ≤ 1e-9 s ignoré.
+Marqueurs 0 s : fermeture toujours ; avec `keepFree`, retard absent, null ou zéro. Bornes finies, fin ≥ début.
+Fermeture à retard positif : marqueur entier à 0 s, plus compléments localisés. Intervalle inversé rejeté, jamais retourné.
+Entrées invalides : aucun temps ajouté. iOS `TrafficParts.extra` : même contrat, mêmes cas de test (build 61, point 14).
+Android : écart de parité restant, non traité.
 Ancien plan Valhalla : phases 1–5 livrées. Phases 6–8 (fermetures data.gouv dans `traffic.tar`, vitesses live, trafic historique prédit) non implémentées, à reprendre avec le lot 10.
 Trafic traité dans le backend. Aucun accès officiel Sytadin documenté.
 
@@ -388,7 +404,8 @@ iOS build **57** (`b0d3125`) : dock glissable, Stationnement dans le dock, bouto
 Collecte lot 1b vérifiée en base 18/10 : 9 trajets, 9 tracés. Essais route Arthur : ETA plus réaliste.
 iOS build **58** (`eea9704`) : Feu rouge non cliquable, vue 3D 55° ; poussé, archive et téléphone à valider.
 iOS build **59** (`f833a6b`, audit 19/10) : poussé, compilation confirmée par Arthur. Téléphone non validé.
-iOS build **60** : quatre correctifs supplémentaires, point 13. Compilation et téléphone restent à valider.
+iOS build **60** : quatre correctifs supplémentaires, point 13. Compilé et testé selon Arthur (20/10). Aucun gain ETA mesuré.
+iOS build **61** : fusion des retards `TrafficParts.extra`, point 14. Sources écrites, non compilées, non validées téléphone.
 Android version **1.0.2**, code **40** (`c82a336`, mêmes correctifs) : APK release compilé, téléphone à valider. Code repris dans livraison `main`.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
@@ -423,9 +440,8 @@ Points ouverts concrets :
 9. Ancien test recherche corrigé : vrai compte invité, aucune identité factice ; contrat HTTP testé sans réseau tiers.
 10. **Point de reprise 19/10 :** audit initial poussé, compilation iOS 59 confirmée. Quatre correctifs supplémentaires : point 13.
     - Production inchangée : `5c1627d`, lot 4. Déploiement backend et cron attendent accord explicite Arthur.
-    - iOS 60 : compilation et validation téléphone à faire par Arthur. Android inchangé.
-    - Après retour Claude : expliquer fonctionnement réel Valhalla/HERE avec schéma simple, puis examiner ancien chantier ETA.
-    - Arthur envisage nouveau plan Valhalla après cet examen. Aucun lot ETA supplémentaire autorisé maintenant.
+    - iOS 60 : compilé et testé selon Arthur (20/10). Android inchangé.
+    - 20/10 : Arthur valide la suite du plan ETA ajusté (§5). Premier lot : fusion des retards, point 14.
     - Question §5 conservée : navigation coupée avant arrivée ? À reprendre pendant examen ETA.
 11. **Audit 19/10 — neuf correctifs écrits, non déployés, non validés téléphone.**
     - Backend : 214 tests ciblés passés sous Node 20.20.2, aucun ignoré (pilote). Aucune validation production.
@@ -451,7 +467,15 @@ Points ouverts concrets :
     - Conversion invité : même compte, session, statistiques et trajets. Annulation ne supprime rien.
     - Google inconnu non vérifié refusé ; index email ne remplace plus compte existant par doublon non vérifié.
     - Test recherche : authentification invité réelle. Backend : 368 tests passés sous Node 20.20.2, aucun ignoré.
-    - iOS 60 : tests Swift ajoutés, non exécutés sous Windows. Aucun build distant lancé, aucune validation téléphone.
+    - iOS 60 : tests Swift ajoutés, jamais exécutés sous Windows. Compilé et testé selon Arthur (20/10).
     - Avant utilisation du nouveau parcours iOS : déployer backend compatible après accord Arthur. SMTP doit fonctionner.
+14. **Fusion des retards, lot backend + iOS build 61, sources 20/10 (§5).** Préparé, non déployé.
+    - Backend : `src/traffic/delay-fusion.js` (nouveau), `crowd.js`, `datagouv.js` ; tests `traffic-delay-fusion`, `traffic-crowd`, `traffic-datagouv`.
+    - Revue parité 20/10 : rang, seuils, marqueurs et densité alignés Swift ; fixtures communes ajoutées.
+    - Backend : 393 tests passés sous Node 20.20.2, aucun ignoré. Aucune validation production.
+    - iOS build 61 : `TrafficParts.extra`, mêmes règles et fixtures. Sources écrites ; non compilées, tests Swift non exécutés.
+    - iOS 60 reste dernier build compilé et testé selon Arthur (20/10).
+    - Android : inchangé. Parité future à traiter dans lot distinct.
+    - Effet attendu : moins de retard compté deux fois. Aucun gain d'ETA démontré avant trajets mesurés.
 
 Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.

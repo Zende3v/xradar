@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { reportStore } from '../reports/store.js';
 import { angleDiff, gridOf, headingAt, project, samplesBetween } from '../routing/geometry.js';
+import { fuseDelays } from './delay-fusion.js';
 import { probeStore } from './probes.js';
 
 // Probes this far apart along the route (and no farther) belong to one slowdown...
@@ -100,20 +101,11 @@ export async function crowdAlong(path) {
 }
 
 /**
- * The live traffic's stretches (HERE's) with the drivers' jams added where they cost more than it says: the
- * extra time only (the worst of the two, never both), as 'crowd' stretches.
+ * Sections trafic direct (HERE) plus bouchons conducteurs, seulement au-delà de HERE.
+ * Superposés : le pire, jamais leur somme. Sections 'crowd' limitées à leur portion (traffic/delay-fusion.js).
  */
 export function withCrowd(sections, crowd) {
-  const extra = [];
-  for (const zone of crowd) {
-    const known = sections.reduce((sum, s) => {
-      const overlap = Math.min(s.toM, zone.toM) - Math.max(s.fromM, zone.fromM);
-      return overlap > 0 && s.toM > s.fromM ? sum + ((s.delayS ?? 0) * overlap) / (s.toM - s.fromM) : sum;
-    }, 0);
-    const delayS = Math.round(zone.delayS - known);
-    if (delayS > 0) extra.push({ ...zone, delayS });
-  }
-  return sections.concat(extra).sort((a, b) => a.fromM - b.fromM);
+  return fuseDelays(sections, crowd);
 }
 
 /** The time the drivers' jams add to the live traffic's on a route (withCrowd's stretches). */
