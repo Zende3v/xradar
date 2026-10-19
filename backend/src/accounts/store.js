@@ -6,6 +6,7 @@ import { haversine } from '../radars/geo.js';
 import { settingsStore } from './settings.js';
 import { BanRegistry, normalizedDevice, normalizedEmail } from './bans.js';
 import { liveStore } from '../live/store.js';
+import { safeAvatarUrl } from './avatar-url.js';
 
 export const ROLES = ['guest', 'client', 'admin'];
 
@@ -356,6 +357,7 @@ export class AccountStore {
     this.heldUsernames = new Map(); // lowercase -> { accountId, until } (names just left)
     this.sessions = new Map(); // token -> { accountId, expiresAt }
     this.byProvider = new Map(); // "google:123…" -> account
+    this.registrations = new Map(); // email -> inscription temporaire, aucun compte ni session
     this.saveTimer = null;
   }
 
@@ -377,6 +379,20 @@ export class AccountStore {
     } catch (e) {
       if (e.code !== 'ENOENT') console.error('[accounts] load failed:', e.message);
     } finally { this.loading = false; }
+    try {
+      const pending = JSON.parse(await readFile(`${this.accountsFile}.registrations.json`, 'utf8'));
+      if (Array.isArray(pending)) {
+        for (const draft of pending.slice(0, 1000)) {
+          if (typeof draft?.email === 'string' && typeof draft.token === 'string'
+            && typeof draft.passwordHash === 'string' && /^\d{6}$/.test(draft.code)
+            && Number.isFinite(draft.sentAt) && Number.isFinite(draft.expiresAt) && draft.expiresAt > Date.now()) {
+            this.registrations.set(draft.email, draft);
+          }
+        }
+      }
+    } catch (e) {
+      if (e.code !== 'ENOENT') console.error('[accounts] pending registration load failed');
+    }
     this.bans.save();
   }
 
@@ -388,9 +404,15 @@ export class AccountStore {
     account.suspended = account.suspended === true;
     account.revoked = account.revoked === true;
     // A photo stored under an earlier public address (Tailscale Funnel) now points to the current one.
-    const legacy = config.legacyPublicBaseUrls.find((base) => account.avatarUrl?.startsWith(base + '/'));
+    const legacy = typeof account.avatarUrl === 'string'
+      && config.legacyPublicBaseUrls.find((base) => account.avatarUrl.startsWith(base + '/'));
     if (legacy) {
       account.avatarUrl = config.publicBaseUrl + account.avatarUrl.slice(legacy.length);
+      this.scheduleSave();
+    }
+    const avatar = safeAvatarUrl(account.avatarUrl, account.id);
+    if (account.avatarUrl != null && avatar !== account.avatarUrl) {
+      account.avatarUrl = avatar;
       this.scheduleSave();
     }
     if (!Array.isArray(account.trips)) account.trips = [];
@@ -424,7 +446,12 @@ export class AccountStore {
     this.byId.set(account.id, account);
     if (account.deviceId) this.byDevice.set(account.deviceId, account);
     if (account.usernameLower) this.byUsername.set(account.usernameLower, account);
-    if (account.emailLower) this.byEmail.set(account.emailLower, account);
+    if (account.emailLower) {
+      const prior = this.byEmail.get(account.emailLower);
+      if (!prior || prior === account || (account.emailVerified && !prior.emailVerified)) {
+        this.byEmail.set(account.emailLower, account);
+      }
+    }
     for (const link of account.providers ?? []) this.byProvider.set(`${link.provider}:${link.subject}`, account);
     for (const held of account.heldUsernames) this.heldUsernames.set(held.lower, { accountId: account.id, until: held.until });
   }
@@ -433,7 +460,7 @@ export class AccountStore {
     this.byId.delete(account.id);
     if (account.deviceId && this.byDevice.get(account.deviceId) === account) this.byDevice.delete(account.deviceId);
     if (account.usernameLower) this.byUsername.delete(account.usernameLower);
-    if (account.emailLower) this.byEmail.delete(account.emailLower);
+    if (account.emailLower && this.byEmail.get(account.emailLower) === account) this.byEmail.delete(account.emailLower);
     for (const link of account.providers ?? []) this.byProvider.delete(`${link.provider}:${link.subject}`);
     for (const held of account.heldUsernames ?? []) {
       if (this.heldUsernames.get(held.lower)?.accountId === account.id) this.heldUsernames.delete(held.lower);
@@ -451,14 +478,20 @@ export class AccountStore {
 
   async save() {
     const contents = JSON.stringify([...this.byId.values()], null, 2);
-    const write = async () => {
+    this.pruneRegistrations();
+    const registrations = JSON.stringify([...this.registrations.values()]);
+    const writeFileAtomically = async (file, value) => {
       await mkdir(dirname(this.accountsFile), { recursive: true });
-      const temporary = `${this.accountsFile}.${randomUUID()}.tmp`;
-      await writeFile(temporary, contents, { encoding: 'utf8', mode: 0o600 });
-      try { await rename(temporary, this.accountsFile); } catch (error) {
+      const temporary = `${file}.${randomUUID()}.tmp`;
+      await writeFile(temporary, value, { encoding: 'utf8', mode: 0o600 });
+      try { await rename(temporary, file); } catch (error) {
         await unlink(temporary).catch(() => {});
         throw error;
       }
+    };
+    const write = async () => {
+      await writeFileAtomically(this.accountsFile, contents);
+      await writeFileAtomically(`${this.accountsFile}.registrations.json`, registrations);
     };
     this.saveChain = this.saveChain.catch(() => {}).then(write);
     await this.saveChain;
@@ -943,7 +976,15 @@ export class AccountStore {
     if (this.isLastActiveAdmin(account)) return { error: 'cannot delete last admin' };
     if (account.banned) this.bans.ban(account);
     this.revokeSessions(id);
+    for (const [email, draft] of this.registrations) {
+      if (draft.guestId === id || email === account.emailLower) this.registrations.delete(email);
+    }
     this.unindex(account);
+    if (account.emailLower && !this.byEmail.has(account.emailLower)) {
+      const remaining = [...this.byId.values()].filter((other) => other.emailLower === account.emailLower);
+      const replacement = remaining.find((other) => other.emailVerified) ?? remaining[0];
+      if (replacement) this.byEmail.set(account.emailLower, replacement);
+    }
     this.scheduleSave();
     return { removed: true, id };
   }
@@ -1082,21 +1123,31 @@ export class AccountStore {
     return { account };
   }
 
-  register({ email, password, username, referralCode = null, app = null, method = 'email', guest = null, deviceId = null }) {
+  registrationInput({ email, password, passwordHash = null, username, referralCode = null, guest = null, deviceId = null }) {
     const e = String(email || '').trim().toLowerCase();
     deviceId = normalizedDevice(deviceId);
     const denied = this.identityDenied({ email: e, deviceId, account: guest });
     if (denied) return { error: denied, account: guest };
     if (!e.includes('@') || e.length > 190) return { error: 'invalid email' };
-    if (String(password || '').length < 8) return { error: 'password too short (min 8)' };
+    if (!passwordHash && String(password || '').length < 8) return { error: 'password too short (min 8)' };
     if (guest && (guest.banned || guest.role !== 'guest' || guest.emailLower || guest.providers?.length)) {
       return { error: 'guest account required' };
     }
     const check = this.usernameAvailable(username, { accountId: guest?.id });
     if (!check.ok) return { error: `username ${check.error}` };
     if (this.byEmail.has(e)) return { error: 'email already registered' };
-    const now = new Date().toISOString();
     if (referralCode && !this.findReferral(referralCode)) return { error: 'invalid referral code' };
+    return { email: e, deviceId };
+  }
+
+  /** Appelé après preuve email par HTTP ; les anciens comptes gardent leur fonctionnement. */
+  register({ email, password, passwordHash = null, emailVerified = false, username,
+    referralCode = null, app = null, method = 'email', guest = null, deviceId = null }) {
+    const checked = this.registrationInput({ email, password, passwordHash, username, referralCode, guest, deviceId });
+    if (checked.error) return checked;
+    const e = checked.email;
+    deviceId = checked.deviceId;
+    const now = new Date().toISOString();
     const account = {
       ...guest,
       id: guest?.id ?? randomUUID(),
@@ -1107,8 +1158,8 @@ export class AccountStore {
       displayName: username,
       email: e,
       emailLower: e,
-      passwordHash: hashPassword(password),
-      emailVerified: false,
+      passwordHash: passwordHash ?? hashPassword(password),
+      emailVerified,
       avatarUrl: null,
       platform: app?.platform ?? null,
       app: appInfo(app),
@@ -1136,6 +1187,78 @@ export class AccountStore {
     return { account: registered };
   }
 
+  /** Brouillons bornés, valables trente minutes. Aucun pseudo ni email réservé dans les comptes. */
+  pruneRegistrations(now = Date.now()) {
+    for (const [email, draft] of this.registrations) {
+      if (draft.expiresAt <= now) this.registrations.delete(email);
+    }
+  }
+
+  registrationView(draft) {
+    return { email: draft.email, registrationToken: draft.token, guestId: draft.guestId,
+      expiresAt: new Date(draft.expiresAt).toISOString(), resendAt: new Date(draft.sentAt + config.accountCodeCooldownMs).toISOString() };
+  }
+
+  beginRegistration(input, now = Date.now()) {
+    const checked = this.registrationInput(input);
+    if (checked.error) return checked;
+    this.pruneRegistrations(now);
+    const previous = this.registrations.get(checked.email);
+    if (previous && now - previous.sentAt < config.accountCodeCooldownMs) {
+      return { error: 'verification code recently sent', retryAfterS: Math.ceil((previous.sentAt + config.accountCodeCooldownMs - now) / 1000) };
+    }
+    if (!previous && this.registrations.size >= 1000) return { error: 'registration temporarily unavailable' };
+    const draft = {
+      email: checked.email, username: input.username, passwordHash: hashPassword(input.password),
+      referralCode: input.referralCode ?? null, app: appInfo(input.app),
+      guestId: input.guest?.id ?? null, deviceId: checked.deviceId,
+      token: randomBytes(32).toString('hex'), code: genCode(),
+      expiresAt: now + config.verifyCodeTtlMs, sentAt: now, failures: 0,
+    };
+    this.registrations.set(draft.email, draft);
+    this.scheduleSave();
+    return { draft, registration: this.registrationView(draft), code: draft.code };
+  }
+
+  discardRegistration(email, token) {
+    const draft = this.registrations.get(normalizedEmail(email));
+    if (draft && codeMatches(token, draft.token)) {
+      this.registrations.delete(draft.email);
+      this.scheduleSave();
+    }
+  }
+
+  resendRegistration(email, token, now = Date.now()) {
+    this.pruneRegistrations(now);
+    const draft = this.registrations.get(normalizedEmail(email));
+    if (!draft || !codeMatches(token, draft.token)) return { error: 'registration expired' };
+    if (now - draft.sentAt < config.accountCodeCooldownMs) return { error: 'verification code recently sent' };
+    draft.code = genCode();
+    draft.failures = 0;
+    draft.sentAt = now;
+    draft.expiresAt = now + config.verifyCodeTtlMs;
+    this.scheduleSave();
+    return { draft, registration: this.registrationView(draft), code: draft.code };
+  }
+
+  completeRegistration(email, token, code, guest = null, now = Date.now()) {
+    this.pruneRegistrations(now);
+    const draft = this.registrations.get(normalizedEmail(email));
+    if (!draft || !codeMatches(token, draft.token)) return { error: 'registration expired' };
+    if (draft.guestId && draft.guestId !== guest?.id) return { error: 'guest session required' };
+    if (!codeMatches(String(code ?? '').trim(), draft.code)) {
+      draft.failures = (Number(draft.failures) || 0) + 1;
+      if (draft.failures >= config.accountCodeMaxFailures) this.registrations.delete(draft.email);
+      this.scheduleSave();
+      return { error: 'invalid code' };
+    }
+    const result = this.register({ ...draft, emailVerified: true, guest: draft.guestId ? guest : null });
+    if (result.error) return result;
+    this.registrations.delete(draft.email);
+    this.scheduleSave();
+    return { ...result, converted: Boolean(draft.guestId) };
+  }
+
   // ---- Providers (Google) ---------------------------------------------------
 
   /** The account already tied to this provider identity, or null. */
@@ -1160,6 +1283,7 @@ export class AccountStore {
     const now = new Date().toISOString();
 
     const known = this.byProviderIdentity(provider, subject);
+    if (!known && (!email || !emailVerified)) return { error: 'verified email required' };
     const byEmail = email && emailVerified ? this.byEmail.get(email) : null;
     const denied = this.identityDenied({ account: known ?? byEmail, email, deviceId, providerKey: `${provider}:${subject}` });
     if (denied) return { error: denied, account: known ?? byEmail };
@@ -1240,19 +1364,27 @@ export class AccountStore {
   }
 
   /** Ties a provider identity to an account that already exists. */
-  linkProvider(id, { provider, subject, email }) {
+  linkProvider(id, { provider, subject, email, emailVerified = false }) {
     const account = this.get(id);
     if (!account) return { error: 'not found' };
     email = normalizedEmail(email) || null;
+    if (account.role === 'guest' && (!email || !emailVerified)) return { error: 'verified email required' };
     const denied = this.identityDenied({ account, email, providerKey: `${provider}:${subject}` });
     if (denied) return { error: denied, account };
     this.normalizeAccount(account);
     const taken = this.byProviderIdentity(provider, subject);
     if (taken && taken.id !== account.id) return { error: 'already linked to another account' };
+    if (account.role === 'guest' && this.byEmail.has(email) && this.byEmail.get(email) !== account) {
+      return { error: 'email already registered' };
+    }
     if (!account.providers.some((link) => link.provider === provider && link.subject === subject)) {
       if (account.role === 'guest') {
         const now = new Date().toISOString();
         account.role = 'client';
+        account.email = email;
+        account.emailLower = email;
+        account.emailVerified = true;
+        this.byEmail.set(email, account);
         account.trialStartedAt = now;
         account.trialEndsAt = trialEndsAt(now);
       }
@@ -1431,8 +1563,9 @@ export class AccountStore {
   setProfile(id, { avatarUrl, displayName }) {
     const account = this.byId.get(id);
     if (!account) return { error: 'not found' };
+    if (avatarUrl != null && !safeAvatarUrl(avatarUrl, account.id)) return { error: 'avatar must be uploaded to EONA' };
     if (displayName !== undefined) account.displayName = displayName;
-    if (avatarUrl !== undefined) account.avatarUrl = avatarUrl;
+    if (avatarUrl !== undefined) account.avatarUrl = safeAvatarUrl(avatarUrl, account.id);
     this.scheduleSave();
     return { account };
   }

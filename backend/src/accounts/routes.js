@@ -11,6 +11,7 @@ import { tripLog, traceShape, TRIP_MIN_METERS, TRIP_MIN_SECONDS } from './trip-l
 import { verifyGoogleToken } from './google.js';
 import { settingsStore } from './settings.js';
 import { mailer } from '../mailer.js';
+import { safeAvatarUrl } from './avatar-url.js';
 
 export const accountRouter = Router();
 
@@ -107,11 +108,27 @@ accountRouter.post('/guest', (req, res) => {
 
 /**
  * POST /api/accounts/register  { email, password, username, referralCode? }
- * Sept jours EONA+ offerts sans code. Parrainage existant : six mois offerts.
+ * 202 : code email envoyé, aucun compte ni session. Création seulement après /verify avec registrationToken.
  */
-accountRouter.post('/register', (req, res) => {
+async function sendRegistrationCode(res, result) {
+  if (result.error) return accountError(res, result, result.error === 'verification code recently sent' ? 429 : 400);
+  try {
+    await accountStore.save();
+    if (!await mailer.sendVerify(result.draft.email, result.code)) {
+      accountStore.discardRegistration(result.draft.email, result.draft.token);
+      await accountStore.save();
+      return res.status(503).json({ error: 'email delivery unavailable' });
+    }
+    return res.status(202).json({ verificationRequired: true, registration: result.registration });
+  } catch {
+    accountStore.discardRegistration(result.draft.email, result.draft.token);
+    return res.status(503).json({ error: 'registration temporarily unavailable' });
+  }
+}
+
+accountRouter.post(['/register', '/registration'], (req, res) => {
   const referral = String(req.body?.referralCode || '').trim();
-  const result = accountStore.register({
+  const result = accountStore.beginRegistration({
     email: req.body?.email,
     password: req.body?.password,
     username: String(req.body?.username || '').trim(),
@@ -120,19 +137,15 @@ accountRouter.post('/register', (req, res) => {
     app: req.body?.app ?? null,
     deviceId: req.body?.deviceId ? String(req.body.deviceId).trim() : null,
   });
-  if (result.error) return accountError(res, result);
-  const token = accountStore.issueToken(result.account.id);
-  const code = accountStore.setVerifyCode(result.account.id);
-  if (code) mailer.sendVerify(result.account.email, code);
-  res.status(201).json({ account: selfView(result.account), token });
+  return sendRegistrationCode(res, result);
 });
 
 /** Conversion invité authentifiée : conserve identité et statistiques, ouvre sept jours EONA+. */
-accountRouter.post('/me/register', (req, res) => {
+accountRouter.post(['/me/register', '/me/registration'], (req, res) => {
   const token = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '')?.[1];
   const guest = token ? accountStore.resolveToken(token) : null;
   if (!guest) return res.status(401).json({ error: 'unauthorized' });
-  const result = accountStore.register({
+  const result = accountStore.beginRegistration({
     guest,
     email: req.body?.email,
     password: req.body?.password,
@@ -140,14 +153,28 @@ accountRouter.post('/me/register', (req, res) => {
     referralCode: String(req.body?.referralCode || '').trim() || null,
     app: req.body?.app ?? null,
   });
-  if (result.error) return accountError(res, result);
-  const code = accountStore.setVerifyCode(result.account.id);
-  if (code) mailer.sendVerify(result.account.email, code);
-  res.json({ account: selfView(result.account), token });
+  return sendRegistrationCode(res, result);
 });
 
 /** POST /api/accounts/verify  { email, code } — confirm the email. */
-accountRouter.post('/verify', (req, res) => {
+accountRouter.post('/verify', async (req, res) => {
+  if (req.body?.registrationToken !== undefined) {
+    const bearer = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') || '')?.[1];
+    const guest = bearer ? accountStore.resolveToken(bearer) : null;
+    const result = accountStore.completeRegistration(req.body?.email, req.body.registrationToken, req.body?.code, guest);
+    if (result.error) return accountError(res, result, result.error === 'guest session required' ? 401 : 400);
+    try {
+      await accountStore.save();
+      const denied = accountStore.blockReason(result.account);
+      if (denied) return accountError(res, { error: denied, account: result.account });
+      if (accountStore.get(result.account.id) !== result.account
+        || (result.converted && accountStore.resolveToken(bearer)?.id !== result.account.id)) {
+        return res.status(401).json({ error: 'unauthorized' });
+      }
+      const token = result.converted ? bearer : accountStore.issueToken(result.account.id);
+      return res.status(result.converted ? 200 : 201).json({ account: selfView(result.account), token });
+    } catch { return res.status(503).json({ error: 'registration temporarily unavailable' }); }
+  }
   const result = accountStore.verifyEmail(req.body?.email, req.body?.code);
   if (result.error) return res.status(400).json({ error: result.error });
   res.json({ account: selfView(result.account) });
@@ -155,6 +182,9 @@ accountRouter.post('/verify', (req, res) => {
 
 /** POST /api/accounts/resend-verify  { email } — send a fresh code. */
 accountRouter.post('/resend-verify', (req, res) => {
+  if (req.body?.registrationToken !== undefined) {
+    return sendRegistrationCode(res, accountStore.resendRegistration(req.body?.email, req.body.registrationToken));
+  }
   const r = accountStore.resendVerify(req.body?.email);
   if (r) mailer.sendVerify(r.account.email, r.code);
   res.json({ ok: true }); // vague on purpose
@@ -256,6 +286,9 @@ accountRouter.patch('/me', (req, res) => {
   if (!account) return res.status(401).json({ error: 'unauthorized' });
   if (account.role === 'guest') {
     return res.status(403).json({ error: 'profile edits require a client account' });
+  }
+  if (req.body?.avatarUrl != null && !safeAvatarUrl(req.body.avatarUrl, account.id)) {
+    return res.status(400).json({ error: 'avatar must be uploaded to EONA' });
   }
   if (req.body?.username !== undefined) {
     const changed = accountStore.changeUsername(account.id, String(req.body.username).trim());

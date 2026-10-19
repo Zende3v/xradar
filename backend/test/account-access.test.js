@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtempSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve, sep } from 'node:path';
 import { get as httpGet } from 'node:http';
 import { after, before, describe, it } from 'node:test';
 import express from 'express';
@@ -9,9 +13,21 @@ import { createRouteRouter } from '../src/routing/routes.js';
 import { createRoutingEngine } from '../src/routing/engine.js';
 import { tripRouter } from '../src/trips/routes.js';
 import { groupStore } from '../src/trips/groups.js';
+import { mailer } from '../src/mailer.js';
 import { call, fakeOrs, fakeValhalla, trapNetwork } from './helpers/routing.js';
 
 trapNetwork(before, after);
+const directory = mkdtempSync(join(tmpdir(), 'eona-account-access-'));
+accountStore.accountsFile = join(directory, 'http.json');
+const sendVerify = mailer.sendVerify;
+mailer.sendVerify = async () => true;
+after(async () => {
+  mailer.sendVerify = sendVerify;
+  await accountStore.saveChain;
+  const target = resolve(directory);
+  assert.ok(target.startsWith(`${resolve(tmpdir())}${sep}`));
+  await rm(target, { recursive: true, force: true });
+});
 const store = () => {
   const result = new AccountStore();
   result.scheduleSave = () => {};
@@ -87,7 +103,7 @@ describe('statuts invité, gratuit, EONA+', () => {
     assert.equal(accounts.accessFor(fresh).status, 'trial');
     const guest = accounts.claimGuest('phone-link').account;
     guest.createdAt = '2020-01-01T00:00:00Z';
-    accounts.linkProvider(guest.id, { ...identity, subject: 'g2' });
+    accounts.linkProvider(guest.id, { ...identity, email: 'guest-google@example.test', subject: 'g2' });
     assert.equal(accounts.hasPlus(guest), true);
   });
 
@@ -179,7 +195,12 @@ describe('droits serveur', () => {
     const body = { username: 'HttpConvert', email: 'owner@example.test', password: 'pass12345', deviceId: ctx.guest.deviceId };
     assert.equal((await call(ctx.server, 'POST', '/api/accounts/me/register', { body })).status, 401);
     const token = accountStore.issueToken(ctx.guest.id);
-    const response = await call(ctx.server, 'POST', '/api/accounts/me/register', { body, headers: { Authorization: `Bearer ${token}` } });
+    const pending = await call(ctx.server, 'POST', '/api/accounts/me/register', { body, headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(pending.status, 202);
+    assert.equal(ctx.guest.role, 'guest');
+    const draft = accountStore.registrations.get(body.email);
+    const response = await call(ctx.server, 'POST', '/api/accounts/verify', { body: { email: body.email,
+      code: draft.code, registrationToken: pending.json.registration.registrationToken }, headers: { Authorization: `Bearer ${token}` } });
     assert.equal(response.status, 200);
     assert.equal(response.json.account.id, ctx.guest.id);
     assert.equal(response.json.account.access, 'trial');

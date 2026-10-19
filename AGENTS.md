@@ -19,6 +19,7 @@ Anciens documents restent consultables dans historique Git.
 - ChatGPT : plan, découpage, intégration par revue, vérifications proportionnées, état, réponse finale à Arthur.
 - **Toute écriture de code passe à Claude via `bridge_delegate`.** Tests, correctifs et changements minuscules compris.
 - Codex n'écrit jamais de code. Claude indisponible : tâche bloquée, aucun secours de codage par Codex.
+- Exception Arthur 19/10 : Codex solo pour avatars, descriptions confidentialité, inscription vérifiée et ancien test recherche. Retour Claude après ce lot.
 - Claude exécute contrat reçu. Signale ambiguïtés. Rend fichiers exacts, vérifications réelles, risques.
 - Claude ne décide aucun nouveau chantier. Aucune redélégation. Décision manquante : blocage rendu.
 - Délégation : une racine par chantier et dépôt ; scopes disjoints ; critères explicites ; chaque diff relu.
@@ -113,6 +114,8 @@ Rôle `client` ne prouve pas abonnement ; vérifier `hasPlus` et échéances.
 Dans statistiques admin : Gratuit = invités + membres gratuits ; Client = EONA+ ; Admin séparé.
 
 - Invité permanent : pseudo aléatoire, aucun mot de passe, aucune purge après sept jours.
+- Nouvelles inscriptions email : membre créé après code validé. Anciens comptes non vérifiés gardent leur accès.
+- Inscription en attente : invité utilisable, identité et données conservées. Conversion après preuve email ou Google vérifié.
 - Création membre ou conversion invité : sept jours EONA+ offerts, même sans parrainage.
 - Conversion conserve identifiant, trajets, statistiques et session.
 - Expiration conserve compte ; retour gratuit automatique.
@@ -307,8 +310,10 @@ Ne pas modifier noms JSON entre Android et iOS. Ajouter champs sans casser ancie
 |---|---|
 | `GET /health` | Public ; disponibilité, moteurs, carte, budgets, compteurs et index |
 | `POST /api/accounts/guest` | `{deviceId, platform?}` ; invité permanent |
-| `POST /api/accounts/register` | `{email, password, username, referralCode?}` ; essai automatique |
-| `POST /api/accounts/me/register` | Conversion invité authentifié, conservation identité et statistiques |
+| `POST /api/accounts/register` | `{email, password, username, referralCode?}` ; 202, brouillon et code email, aucun compte ni jeton |
+| `POST /api/accounts/me/register` | Même attente, Bearer invité exigé ; invité reste utilisable avant validation |
+| `POST /api/accounts/verify` | `{email, code, registrationToken}` ; création vérifiée, session ; conversion conserve Bearer et identité invité |
+| `POST /api/accounts/resend-verify` | `{email, registrationToken}` ; renvoi après 60 s ; ancien code remplacé |
 | `POST /api/accounts/login` | `{identifier ou email, password, deviceId?}` ; compte et Bearer |
 | `GET /api/accounts/me` | Identité et droits actuels |
 | `GET /api/accounts/me/stats` | Cumuls et historique, maximum 200 trajets par compte |
@@ -335,6 +340,14 @@ Membres exigent Bearer valide ; secours `deviceId` réservé invités. Bearer in
 Sessions mobiles : 90 jours ; `web:true` : douze heures. Redémarrage nécessite reconnexion membres.
 Admin : session administrateur valide. `ADMIN_TOKEN` réservé scripts, jamais embarqué dans application.
 
+Inscription vérifiée, sources 19/10 : brouillon privé `<ACCOUNTS_FILE>.registrations.json`, maximum 1 000, expiration 30 minutes, cinq erreurs maximum.
+Mot de passe haché seulement. Aucun compte, essai ou parrainage consommé avant validation. Échec livraison email : 503.
+Réponse 202 : `verificationRequired`, `registration` avec email, jeton temporaire, `guestId`, `expiresAt`, `resendAt`.
+Entrées iOS 60 : `/registration` et `/me/registration`, mêmes règles. Ancien serveur répond 404 sans créer de membre non vérifié.
+Conversion `/verify` : même Bearer invité exigé. Ancien `/verify` sans `registrationToken` reste disponible pour comptes existants.
+Google inconnu exige email vérifié. Identités fournisseurs déjà connues gardent leur accès.
+Ancien client sans nouveau parcours : inscription bloquée ; invités et connexions existantes conservés. Android hors périmètre de ce lot.
+
 Recherche : trigrammes, proximité 60 km, lieux notables France, enseigne et commune.
 Corrections manuelles : [backend/search/extra.sql](backend/search/extra.sql), rejouées au rebuild.
 Fitness Park Orly : position approchée ; adresse exacte reste à confirmer.
@@ -356,6 +369,7 @@ Lot 1b (déployé 15/10) : tous trajets et tracé GPS transmis, tous comptes, st
 Trajets et tracés conservés sans limite de durée, supprimés avec le compte. Texte Confidentialité des apps le dit.
 Page confidentialité web alignée et publiée 15/10 (`8191466`). **Conservation illimitée de positions à valider juridiquement (RGPD, limitation de conservation).**
 Capture facultative : JPEG, 1 Mio maximum, 4096 pixels/côté, huit millions pixels ; accès admin privé.
+Avatars, sources 19/10 : photos EONA seulement. Anciennes URLs externes retirées ; iOS filtre aussi avant chargement.
 
 Bans persistés dans `<ACCOUNTS_FILE>.bans.json`, séparément des comptes.
 Ban bloque compte, emails normalisés, appareils EONA connus et identités fournisseurs connues.
@@ -373,7 +387,8 @@ iOS build **56** (`2a5d06b`, lot 1b) : utilisé en route, 10 trajets en base au 
 iOS build **57** (`b0d3125`) : dock glissable, Stationnement dans le dock, bouton 3D/2D ; 1 trajet en base.
 Collecte lot 1b vérifiée en base 18/10 : 9 trajets, 9 tracés. Essais route Arthur : ETA plus réaliste.
 iOS build **58** (`eea9704`) : Feu rouge non cliquable, vue 3D 55° ; poussé, archive et téléphone à valider.
-iOS build **59** (audit 19/10, point 11) : sources écrites, non compilées ; téléphone non validé.
+iOS build **59** (`f833a6b`, audit 19/10) : poussé, compilation confirmée par Arthur. Téléphone non validé.
+iOS build **60** : quatre correctifs supplémentaires, point 13. Compilation et téléphone restent à valider.
 Android version **1.0.2**, code **40** (`c82a336`, mêmes correctifs) : APK release compilé, téléphone à valider. Code repris dans livraison `main`.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
@@ -405,13 +420,13 @@ Points ouverts concrets :
 6. Perso, feux, gabarit poids lourd et achat abonnement restent chantiers distincts, sans livraison implicite.
 7. Android : aucun trajet en base au 18/10 (9 iOS : build 56 ×8, 57 ×1) ; iOS 58 et Android 40 à valider téléphone.
 8. HERE : surveiller usage par fenêtre dans `/health` ; crédits ajoutés par Arthur plus tard, alors relever `HERE_MONTHLY_BUDGET_EUR`.
-9. Test backend `search` « same JSON as before » échoue avant lot 1 : attend 200, fixture appareil sans rôle `guest` reçoit 401. Défaut du test, à corriger à part.
-10. **Point de reprise 19/10 :** code audit 19/10 préparé (point 11). Production inchangée : `5c1627d`, lot 4.
-    - Attente : accord Arthur pour déploiement backend ; compilation iOS 59 ; essais téléphone iOS 59 et Android 40.
-    - Livraison Git autorisée par Arthur : un commit `main` (EXPLOITATION §1). Fait Git consigné après exécution.
-    - Lot 5 (ETA apps v2) non cadré. Arthur : ne rien préparer avant son retour d'essais (18/10).
-    - Au retour : remarques UI ; rapport v2 `--since=2026-10-18T02:45:00Z --roads` ; `/health` `routing.eonaTime`, `traffic.here.quality.import` ; trajets Android.
-    - Reposer la question ouverte de §5 (navigation coupée avant l'arrivée).
+9. Ancien test recherche corrigé : vrai compte invité, aucune identité factice ; contrat HTTP testé sans réseau tiers.
+10. **Point de reprise 19/10 :** audit initial poussé, compilation iOS 59 confirmée. Quatre correctifs supplémentaires : point 13.
+    - Production inchangée : `5c1627d`, lot 4. Déploiement backend et cron attendent accord explicite Arthur.
+    - iOS 60 : compilation et validation téléphone à faire par Arthur. Android inchangé.
+    - Après retour Claude : expliquer fonctionnement réel Valhalla/HERE avec schéma simple, puis examiner ancien chantier ETA.
+    - Arthur envisage nouveau plan Valhalla après cet examen. Aucun lot ETA supplémentaire autorisé maintenant.
+    - Question §5 conservée : navigation coupée avant arrivée ? À reprendre pendant examen ETA.
 11. **Audit 19/10 — neuf correctifs écrits, non déployés, non validés téléphone.**
     - Backend : 214 tests ciblés passés sous Node 20.20.2, aucun ignoré (pilote). Aucune validation production.
     - Radars sur tracé : coordonnées bornées, 100 000 points, budget 400 000 cellules, sinon 400. OOM reproduit avant (64 Mo, exit 134).
@@ -424,13 +439,19 @@ Points ouverts concrets :
     - Rapport v2 : réel/moteur sur relevés `raw` seuls ; anciens comptés base inconnue, hors ratio.
     - iOS 59 : URL admin parrainage interpolée ; suppression compte purge file trajets et tracés du compte supprimé.
     - iOS 59 : envoi file trajets lié à session figée (compte, jeton, révision) ; autre compte : aucun envoi croisé.
-    - iOS 59 : sources écrites ; compilation, tests Swift et téléphone non faits (Windows). Retouches revue encore en cours.
+    - Git : backend `04ad8d7`, iOS `f833a6b`, poussés sur `main`. iOS 59 compilé selon Arthur ; téléphone non validé.
     - Sauvegarde : script source inclut registre bans facultatif ; cron VPS non mis à jour (point 2).
     - `saveTrace` sans trajet parent : contrat collecte, ordre d'envoi libre. Aucun défaut démontré.
-12. **Hors lot audit 19/10, non corrigés :**
-    - Avatars par URL externe non filtrés : chargement par autres membres expose leur IP au tiers.
+12. **Défaut restant hors lot :**
     - iOS `RoutePath.match` : repassage au même endroit recale sur premier passage, orientation et progression fausses.
-    - Texte « trafic partagé » incomplet.
-    - Google `email_verified=false` peut créer compte avec email déjà existant, puis remplacer index `byEmail`.
+13. **Quatre correctifs supplémentaires, sources 19/10, Codex solo autorisé par Arthur.**
+    - Avatars : origine EONA et fichier propriétaire exigés ; anciennes URLs filtrées dans comptes et groupes, puis avant chargement iOS.
+    - Confidentialité iOS : descriptions raccourcies ; vitesses guidées, ralentissements hors guidage et collecte GPS permanente explicités.
+    - Email : nouveau parcours avec code avant création membre. Invités et anciens comptes non vérifiés gardés.
+    - Conversion invité : même compte, session, statistiques et trajets. Annulation ne supprime rien.
+    - Google inconnu non vérifié refusé ; index email ne remplace plus compte existant par doublon non vérifié.
+    - Test recherche : authentification invité réelle. Backend : 368 tests passés sous Node 20.20.2, aucun ignoré.
+    - iOS 60 : tests Swift ajoutés, non exécutés sous Windows. Aucun build distant lancé, aucune validation téléphone.
+    - Avant utilisation du nouveau parcours iOS : déployer backend compatible après accord Arthur. SMTP doit fonctionner.
 
 Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.

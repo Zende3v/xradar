@@ -87,7 +87,10 @@ describe('search', () => {
   it('answers the apps in the same JSON as before, not to be stored', async () => {
     const { default: express } = await import('express');
     const { accountStore } = await import('../src/accounts/store.js');
-    accountStore.byDevice.set('device-search-test', { id: 'account-search-test' });
+    const scheduleSave = accountStore.scheduleSave;
+    accountStore.scheduleSave = () => {};
+    const guest = accountStore.auth('device-search-test');
+    assert.equal(guest.role, 'guest');
     const app = express();
     app.use('/api/search', searchRouter);
     const server = app.listen(0, '127.0.0.1');
@@ -109,6 +112,8 @@ describe('search', () => {
       for (const place of json.results) assert.deepEqual(Object.keys(place), CONTRACT);
     } finally {
       server.close();
+      accountStore.unindex(guest);
+      accountStore.scheduleSave = scheduleSave;
     }
   });
 

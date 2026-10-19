@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { accountStore } from './store.js';
+import { safeAvatarUrl } from './avatar-url.js';
 
 /** Bearer invalide ferme accès. Compatibilité deviceId limitée aux invités. */
 export function authAccount(req) {
@@ -50,7 +51,7 @@ export function publicView(account) {
     role: account.role,
     username: account.username ?? null,
     displayName: account.displayName ?? null,
-    avatarUrl: account.avatarUrl ?? null,
+    avatarUrl: safeAvatarUrl(account.avatarUrl, account.id),
     banned: accountStore.blockReason(account) === 'banned',
     suspended: Boolean(account.suspended),
     revoked: Boolean(account.revoked),

@@ -118,10 +118,11 @@ describe('Google : préinscription non vérifiée (audit 19/10)', () => {
     assert.equal(accounts.signInWithProvider(google('g-real', 'real@example.test')).account, ok);
     assert.equal(accounts.resolveToken(token), ok);
 
-    // Email Google non vérifié : aucun rattachement, aucun nettoyage.
+    // Email Google non vérifié : aucun doublon, aucun rattachement, aucun nettoyage.
     const pre = accounts.register({ email: 'unproven@example.test', password: 'pre-password', username: 'Unproven' }).account;
     const other = accounts.signInWithProvider(google('g-x', 'unproven@example.test', false));
-    assert.notEqual(other.account.id, pre.id);
+    assert.equal(other.error, 'verified email required');
+    assert.equal(accounts.byEmail.get(pre.email), pre);
     assert.ok(pre.passwordHash);
     assert.deepEqual(pre.providers, []);
     assert.equal(pre.emailVerified, false);
@@ -225,8 +226,9 @@ describe('codes compte : crypto, durée, échecs, usage unique (audit 19/10)', (
 
   it('HTTP : forgot et resend restent vagues ; reset puis reconnexion', async () => {
     const accounts = accountStore;
-    const reg = await call(server, 'POST', '/api/accounts/register', { body: { email: 'h@example.test', password: 'old-password', username: 'HttpUser' } });
-    assert.equal(reg.status, 201);
+    // Compte ancien, conservé sans vérification obligatoire.
+    const legacy = accounts.register({ email: 'h@example.test', password: 'old-password', username: 'HttpUser' }).account;
+    const reg = { json: { token: accounts.issueToken(legacy.id) } };
     for (const email of ['h@example.test', 'none@example.test']) {
       for (const path of ['/api/accounts/forgot', '/api/accounts/forgot', '/api/accounts/resend-verify']) {
         const res = await call(server, 'POST', path, { body: { email } });

@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { config } from '../config.js';
+import { safeAvatarUrl } from '../accounts/avatar-url.js';
 
 /**
  * Trip in a group: up to config.groupMaxMembers drivers head for one destination, each from their
@@ -399,7 +400,7 @@ function member(account, { route } = {}) {
     accountId: account.id,
     name: account.username ?? account.displayName ?? 'Un conducteur',
     // The profile picture, as the account shows it everywhere else.
-    avatarUrl: account.avatarUrl ?? null,
+    avatarUrl: safeAvatarUrl(account.avatarUrl, account.id),
     leftAt: null,
     // Sharing is a choice, made in the app before joining and changed at any moment.
     sharing: true,
@@ -455,7 +456,7 @@ function memberView(m, { withRoute = false } = {}) {
     sharing: m.sharing,
     online: online(m),
     rank: m.rank,
-    avatarUrl: m.avatarUrl ?? null,
+    avatarUrl: safeAvatarUrl(m.avatarUrl, m.accountId),
     joinedAt: new Date(m.joinedAt).toISOString(),
     leftAt: m.leftAt ? new Date(m.leftAt).toISOString() : null,
   };
