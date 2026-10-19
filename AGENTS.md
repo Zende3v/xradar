@@ -50,7 +50,7 @@ Anciens documents restent consultables dans historique Git.
 |---|---|---|---|
 | Android + backend | `C:\Users\usr\Documents\x_radar` | `git@github.com:Zende3v/xradar.git` | `main` (Arthur 19/10) ; ancienne `feature/mini-player-musique` |
 | iOS | `C:\Users\usr\Documents\xradar_ios` | `git@github.com:Zende3v/xradar_ios.git` | `main` |
-| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `5c1627d` ; lots 1, 1b, budget HERE, 2 et 4 déployés |
+| Déploiement backend | `C:\Users\usr\Documents\x_radar_eco` | même dépôt backend | HEAD détaché `5c1627d` ; lots 1, 1b, budget HERE, 2 et 4 déployés. Trafic `270d0b2` déployé depuis `x_radar`, pas ce worktree |
 
 Android : Kotlin, Jetpack Compose sur mesure, MapLibre, tuiles Stadia. Package `com.eona.app`.
 Logique métier commune dans `core/`, portée vers iOS avec mêmes règles et champs JSON.
@@ -303,7 +303,7 @@ Base moteur brute (audit 19/10, non déployé) : étapes ajoutent `engineDuratio
 Production après lot 4 (18/10, compteurs depuis redémarrage 04:45) : `eonaTime` 23 routes `edges`, 0 repli, 0 échec, 8–150 ms.
 Import HERE : 25 valides sur 26 ; 1 rejet `notice:violatedBlockedRoad`. Trajets reçus ensuite : 2, iOS 56 (`interrupted`, `stopped`).
 
-**Fusion des retards (sources 20/10, non déployée) :** `traffic/delay-fusion.js`, utilisé par `withCrowd` et `withDatagouv`.
+**Fusion des retards (`270d0b2`, backend déployé 20/10 01:35, §7 point 14) :** `traffic/delay-fusion.js`, utilisé par `withCrowd` et `withDatagouv`.
 Défaut corrigé : HERE soustrait de chaque zone séparément ; HERE 100 s, signalement 180 s, vitesses 140 s → 220 s, au lieu de 180 s.
 Règle : sections connues intactes. Par intervalle : complément = max(0, densité max observations − somme densités connues).
 Observations superposées : la pire, jamais leur somme. Zones disjointes additionnées. Complément limité à sa portion réelle.
@@ -426,6 +426,12 @@ Correctif `435837c` (Import sans attente du flow) déployé avec le budget HERE 
 Empreintes conformes, santé locale et publique 200, journal sans erreur. Membres reconnectés à refaire.
 18/10 04:45 : lot 4 (`5c1627d`), 12 fichiers `routing`, `server.js`, rapport v2. Sauvegarde `/var/backups/eona/deploy-20261018-044112-lot4` : code, `data`, `routing.dump`.
 Empreintes conformes, santé 200, colonne `engine_duration_s` créée, Node 20 : Châtelet–Versailles 2 058 → 2 648 s en mode `edges`, 33 ms.
+20/10 01:35 Paris : fusion des retards (`270d0b2`, depuis `x_radar` par `git archive`). Trois fichiers `src/traffic` : `delay-fusion.js` (nouveau), `crowd.js`, `datagouv.js`.
+Sauvegarde `/var/backups/eona/deploy-20261020-013518-traffic-fusion` : `code.tgz` (`src`, `package.json`, `package-lock.json`), manifestes `src` avant/après.
+Avant : `crowd.js`, `datagouv.js` = `38f9af5` (CRLF ignorées), helper absent. Après : empreintes conformes à l’archive exportée. Sources identiques à `270d0b2`, fins de ligne ignorées. Propriétaire `eona:eona`, mode 644.
+Manifeste `src` complet : deux fichiers changés, un ajouté, rien d'autre. Test pur fusion sur VPS, Node 20.20.2 : 21/21.
+Redémarrage unique 01:35:47 : service actif, santé locale et publique 200, journal sans erreur. Membres reconnectés à refaire.
+Production = lot 4 `5c1627d` + correctif trafic. Lots comptes, radars, rapport, sauvegarde : toujours non déployés.
 
 Points ouverts concrets :
 
@@ -439,7 +445,7 @@ Points ouverts concrets :
 8. HERE : surveiller usage par fenêtre dans `/health` ; crédits ajoutés par Arthur plus tard, alors relever `HERE_MONTHLY_BUDGET_EUR`.
 9. Ancien test recherche corrigé : vrai compte invité, aucune identité factice ; contrat HTTP testé sans réseau tiers.
 10. **Point de reprise 19/10 :** audit initial poussé, compilation iOS 59 confirmée. Quatre correctifs supplémentaires : point 13.
-    - Production inchangée : `5c1627d`, lot 4. Déploiement backend et cron attendent accord explicite Arthur.
+    - Production : lot 4 `5c1627d` + fusion des retards `270d0b2` (20/10, point 14). Autres lots backend et cron attendent accord Arthur.
     - iOS 60 : compilé et testé selon Arthur (20/10). Android inchangé.
     - 20/10 : Arthur valide la suite du plan ETA ajusté (§5). Premier lot : fusion des retards, point 14.
     - Question §5 conservée : navigation coupée avant arrivée ? À reprendre pendant examen ETA.
@@ -469,10 +475,12 @@ Points ouverts concrets :
     - Test recherche : authentification invité réelle. Backend : 368 tests passés sous Node 20.20.2, aucun ignoré.
     - iOS 60 : tests Swift ajoutés, jamais exécutés sous Windows. Compilé et testé selon Arthur (20/10).
     - Avant utilisation du nouveau parcours iOS : déployer backend compatible après accord Arthur. SMTP doit fonctionner.
-14. **Fusion des retards, lot backend + iOS build 61, sources 20/10 (§5).** Préparé, non déployé.
+14. **Fusion des retards, lot backend + iOS build 61, sources 20/10 (§5).** Backend déployé 20/10 01:35 ; iOS 61 non compilé.
     - Backend : `src/traffic/delay-fusion.js` (nouveau), `crowd.js`, `datagouv.js` ; tests `traffic-delay-fusion`, `traffic-crowd`, `traffic-datagouv`.
     - Revue parité 20/10 : rang, seuils, marqueurs et densité alignés Swift ; fixtures communes ajoutées.
-    - Backend : 393 tests passés sous Node 20.20.2, aucun ignoré. Aucune validation production.
+    - Backend : 393 tests passés sous Node 20.20.2, aucun ignoré (local).
+    - Production 20/10 : trois fichiers `270d0b2` installés, santé 200, journal sans erreur. Détail : déploiements ci-dessus.
+    - Aucun appel route ou HERE après déploiement : effet en route non observé.
     - iOS build 61 : `TrafficParts.extra`, mêmes règles et fixtures. Sources écrites ; non compilées, tests Swift non exécutés.
     - iOS 60 reste dernier build compilé et testé selon Arthur (20/10).
     - Android : inchangé. Parité future à traiter dans lot distinct.
