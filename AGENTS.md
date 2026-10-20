@@ -90,6 +90,7 @@ Partir composants existants et thème choisi. Réorganiser ergonomie ne change j
 - Aucun style Material, carte générique centrée, ombre lourde ou rayon uniforme `16`.
 - Aucun dégradé violet/bleu générique, remplissage marketing ou explication permanente inutile.
 - Réutiliser surfaces, boutons, lignes et espacements EONA. Ne pas inventer palette locale.
+- Arrivée : conserver le dock et les commandes principales ; bilan intégré au HUD, sans remplacement d'écran.
 - Options réservées restent visibles. Interaction présente offre EONA+, sans masquer fonction.
 
 **EONA+ : référence Telegram Premium validée sur iPhone le 05/10/2026.**
@@ -407,7 +408,8 @@ iOS build **58** (`eea9704`) : Feu rouge non cliquable, vue 3D 55° ; poussé, a
 iOS build **59** (`f833a6b`, audit 19/10) : poussé, compilation confirmée par Arthur. Téléphone non validé.
 iOS build **60** : quatre correctifs supplémentaires, point 13. Compilé et testé selon Arthur (20/10). Aucun gain ETA mesuré.
 iOS build **61** : fusion des retards `TrafficParts.extra`, point 14. Sources écrites, non compilées, non validées téléphone.
-iOS build **62** (`7d46c08`) : panneau arrivée, point 15. Poussé ; compilation et téléphone à valider.
+iOS build **62** (`7d46c08`) : design arrivée validé par Arthur ; masquage du dock refusé, corrigé en 63.
+iOS build **63** (`ed64675`) : bilan réintégré au HUD, point 15. Poussé ; compilation et téléphone à valider.
 Android version **1.0.2**, code **40** (`c82a336`, mêmes correctifs) : APK release compilé, téléphone à valider. Code repris dans livraison `main`.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
@@ -488,12 +490,16 @@ Points ouverts concrets :
     - Android : inchangé. Parité future à traiter dans lot distinct.
     - Effet attendu : moins de retard compté deux fois. Aucun gain d'ETA démontré avant trajets mesurés.
 
-15. **Panneau arrivée iOS, Codex solo demandé par Arthur, build 62 (`7d46c08`).** Poussé sur `main` le 20/10.
+15. **Panneau arrivée iOS, Codex solo demandé par Arthur, build 63 (`ed64675`).** Poussé sur `main` le 20/10.
+    - Design du 62 (`7d46c08`) validé par Arthur ; disparition du dock et apparition refusées, corrigées en 63.
     - Destination prioritaire, heure de fin figée, durée totale et distance parcourue ; alertes traversées secondaires.
     - Bilan, historique éventuel et file utilisent le même `TripRecord`. Arrêt manuel distingué de l'arrivée automatique.
     - Verre, couleurs et bouton primaire réutilisent le thème EONA observable. Aucun vert imposé ni rebond décoratif.
-    - Dock masqué pendant le bilan. « Terminé » reste hors défilement ; grands caractères disposent les mesures verticalement.
-    - Diff relu, `git diff --check` réussi. Aucun Xcode sous Windows : compilation et rendu téléphone non vérifiés.
+    - Bilan au-dessus du dock, commandes carte/audio et recherche conservées. Classement groupe après fermeture du bilan.
+    - « Terminé » reste hors défilement ; grands caractères disposent les mesures verticalement.
     - Backend, détection arrivée, calcul ETA et contrats JSON inchangés. Aucun déploiement ni workflow lancé.
+    - Espace réservé aux commandes latérales et barre haute ; dock et « Terminé » prioritaires, contenu défilant si nécessaire.
+    - Apparition douce, mouvement réduit respecté. Design, thème et données du 62 conservés.
+    - Diff relu, `git diff --check` réussi ; build 63 non compilé localement, rendu téléphone à valider.
 
 Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.
