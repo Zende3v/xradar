@@ -20,6 +20,7 @@ Anciens documents restent consultables dans historique Git.
 - **Toute écriture de code passe à Claude via `bridge_delegate`.** Tests, correctifs et changements minuscules compris.
 - Codex n'écrit jamais de code. Claude indisponible : tâche bloquée, aucun secours de codage par Codex.
 - Exception Arthur 19/10 : Codex solo pour avatars, descriptions confidentialité, inscription vérifiée et ancien test recherche. Retour Claude après ce lot.
+- Exception Arthur 20/10 : Codex solo pour panneau arrivée iOS (DAD), code et livraison Git. Retour Claude après ce lot.
 - Claude exécute contrat reçu. Signale ambiguïtés. Rend fichiers exacts, vérifications réelles, risques.
 - Claude ne décide aucun nouveau chantier. Aucune redélégation. Décision manquante : blocage rendu.
 - Délégation : une racine par chantier et dépôt ; scopes disjoints ; critères explicites ; chaque diff relu.
@@ -406,6 +407,7 @@ iOS build **58** (`eea9704`) : Feu rouge non cliquable, vue 3D 55° ; poussé, a
 iOS build **59** (`f833a6b`, audit 19/10) : poussé, compilation confirmée par Arthur. Téléphone non validé.
 iOS build **60** : quatre correctifs supplémentaires, point 13. Compilé et testé selon Arthur (20/10). Aucun gain ETA mesuré.
 iOS build **61** : fusion des retards `TrafficParts.extra`, point 14. Sources écrites, non compilées, non validées téléphone.
+iOS build **62** (`7d46c08`) : panneau arrivée, point 15. Poussé ; compilation et téléphone à valider.
 Android version **1.0.2**, code **40** (`c82a336`, mêmes correctifs) : APK release compilé, téléphone à valider. Code repris dans livraison `main`.
 Build iOS Windows impossible. Présence code ou workflow ne prouve pas archive ni validation téléphone.
 
@@ -485,5 +487,13 @@ Points ouverts concrets :
     - iOS 60 reste dernier build compilé et testé selon Arthur (20/10).
     - Android : inchangé. Parité future à traiter dans lot distinct.
     - Effet attendu : moins de retard compté deux fois. Aucun gain d'ETA démontré avant trajets mesurés.
+
+15. **Panneau arrivée iOS, Codex solo demandé par Arthur, build 62 (`7d46c08`).** Poussé sur `main` le 20/10.
+    - Destination prioritaire, heure de fin figée, durée totale et distance parcourue ; alertes traversées secondaires.
+    - Bilan, historique éventuel et file utilisent le même `TripRecord`. Arrêt manuel distingué de l'arrivée automatique.
+    - Verre, couleurs et bouton primaire réutilisent le thème EONA observable. Aucun vert imposé ni rebond décoratif.
+    - Dock masqué pendant le bilan. « Terminé » reste hors défilement ; grands caractères disposent les mesures verticalement.
+    - Diff relu, `git diff --check` réussi. Aucun Xcode sous Windows : compilation et rendu téléphone non vérifiés.
+    - Backend, détection arrivée, calcul ETA et contrats JSON inchangés. Aucun déploiement ni workflow lancé.
 
 Mettre à jour ces deux références après changement réel. Ne pas recréer journal Markdown séparé.
